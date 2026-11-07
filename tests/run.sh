@@ -4,7 +4,11 @@
 #
 #   tests/run.sh                 # alle Tests
 #   tests/run.sh tests/x.test.mjs
+#   tests/run.sh --e2e           # zusätzlich Browser-Durchlauf (headless Chrome, tests/e2e.mjs)
 set -euo pipefail
+
+E2E=0
+if [ "${1:-}" = "--e2e" ]; then E2E=1; shift; fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d -t bestellverwaltung-test.XXXXXX)"   # bewusst außerhalb von Dropbox
@@ -54,6 +58,10 @@ if [ "$#" -gt 0 ]; then FILES=("$@"); else FILES=("$ROOT"/tests/*.test.mjs); fi
 
 status=0
 node --test --test-concurrency=1 "${FILES[@]}" || status=$?
+if [ "$status" -eq 0 ] && [ "$E2E" -eq 1 ]; then
+  echo "--- Browser-Durchlauf ---"
+  node "$ROOT/tests/e2e.mjs" || status=$?
+fi
 if [ "$status" -ne 0 ]; then
   echo "--- pocketbase.log (letzte 40 Zeilen) ---" >&2
   tail -n 40 "$WORK/pocketbase.log" >&2
