@@ -453,7 +453,9 @@
         "hidden": false
       }
     ],
-    "indexes": [],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_orders_one_open_cart` ON `orders` (`supplier`, `supplier_custom_name` COLLATE NOCASE) WHERE `status` = 'angefragt'"
+    ],
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": "@request.auth.id != \"\"",

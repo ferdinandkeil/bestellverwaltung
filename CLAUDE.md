@@ -26,3 +26,6 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 - **PocketBase-Version:** aktuelles PocketBase (≥ v0.23, wegen Email-OTP). `pb_schema.json` liegt im aktuellen Import-Format vor (getestet mit v0.40.6, Import über Admin-UI → Settings → Import collections). Die Auth-Einstellungen der `users` (OTP an, Passwort-Login aus, Token-Dauer 30 Tage) sind im JSON enthalten.
 - **CDN-Abhängigkeiten:** immer mit fester Version einbinden, nie `@latest`.
 - **Lieferant `other`:** pro `supplier_custom_name` ein eigener offener Sammel-Warenkorb (statt eines gemeinsamen `other`-Korbs).
+- **Ein offener Korb – DB-seitig abgesichert:** Unique-Index `idx_orders_one_open_cart` auf `orders (supplier, supplier_custom_name COLLATE NOCASE) WHERE status = 'angefragt'`. `api.js` fängt den Konflikt ab und verwendet den vorhandenen Korb. Bei Lieferanten außer `other` ist `supplier_custom_name` leer.
+- **Auto-Lieferstatus:** `recalculateOrderStatus` rechnet bei `bestellt`, `teilgeliefert` **und** `geliefert` neu (nachträgliche Korrekturen nach unten werden berücksichtigt). Ab `geprueft` keine automatische Änderung mehr.
+- **Status zurück:** Button „Einen Schritt zurück“ mit Sicherheitsabfrage. Ein Zurücksetzen auf `angefragt` wird verweigert, wenn für den Lieferanten bereits ein anderer offener Korb existiert.
