@@ -17,8 +17,21 @@ const template = /* html */ `
     <button type="button" class="btn btn-primary" @click="showForm = true">+ Position erfassen</button>
   </div>
 
-  <!-- Filter -->
-  <div class="card mb-4 grid grid-cols-1 gap-3 p-3 sm:grid-cols-3">
+  <!-- Filter: auf dem Smartphone eingeklappt, aktive Filter als Chips -->
+  <div class="mb-3 flex flex-wrap items-center gap-2 sm:hidden">
+    <button type="button" class="btn btn-secondary btn-sm" @click="filtersOpen = !filtersOpen" :aria-expanded="filtersOpen">
+      Filter
+      <span x-show="activeFilters().length" class="rounded-full bg-blue-600 px-1.5 text-[10px] text-white" x-text="activeFilters().length"></span>
+      <span x-text="filtersOpen ? '▴' : '▾'"></span>
+    </button>
+    <template x-for="f in activeFilters()" :key="f.key">
+      <button type="button" class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-800 ring-1 ring-blue-200"
+              @click="clearFilter(f.key)" :aria-label="'Filter ' + f.label + ' entfernen'">
+        <span x-text="f.label"></span><span aria-hidden="true">✕</span>
+      </button>
+    </template>
+  </div>
+  <div class="card mb-4 grid-cols-1 gap-3 p-3 sm:grid sm:grid-cols-3" :class="filtersOpen ? 'grid' : 'hidden'">
     <div>
       <label class="label">Status</label>
       <select class="input" x-model="filters.status" @change="filtersChanged()">
@@ -116,6 +129,7 @@ function component() {
     loading: false,
     error: '',
     showForm: false,
+    filtersOpen: false,
     unsubscribe: null,
 
     async init() {
@@ -143,6 +157,19 @@ function component() {
       } catch (err) {
         toast.error(errorMessage(err));
       }
+    },
+
+    activeFilters() {
+      const list = [];
+      if (this.filters.status) list.push({ key: 'status', label: STATUSES.find((s) => s.value === this.filters.status)?.label ?? this.filters.status });
+      if (this.filters.supplier) list.push({ key: 'supplier', label: SUPPLIERS.find((s) => s.value === this.filters.supplier)?.label ?? this.filters.supplier });
+      if (this.filters.group) list.push({ key: 'group', label: this.groups.find((g) => g.id === this.filters.group)?.name ?? 'Gruppe' });
+      return list;
+    },
+
+    clearFilter(key) {
+      this.filters[key] = '';
+      this.filtersChanged();
     },
 
     filtersChanged() {

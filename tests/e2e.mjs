@@ -174,12 +174,17 @@ try {
   ok('Login → Dashboard mit 2 Bestellungen');
   await b.screenshot('02-dashboard');
 
+  if (await b.evaluate(`!!document.querySelector('#view select')?.offsetParent`)) throw new Error('Filter sollten mobil eingeklappt sein');
+  await b.clickText('#view button', 'Filter');
+  await b.waitFor(`document.querySelector('#view select')?.offsetParent`, 'Filter aufgeklappt');
   const groupSelect = `[...document.querySelectorAll('#view select')][2]`;
   await b.evaluate(`(() => { const s = ${groupSelect}; s.value = ${JSON.stringify(groupA)}; s.dispatchEvent(new Event('change')); })()`);
   await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Gruppenfilter');
+  await b.waitFor(`[...document.querySelectorAll('#view button')].some((e) => e.innerText.includes('Gruppe A') && e.innerText.includes('✕'))`, 'Filter-Chip');
+  await b.screenshot('02b-filter');
   await b.evaluate(`(() => { const s = ${groupSelect}; s.value = ''; s.dispatchEvent(new Event('change')); })()`);
   await b.waitFor(`${ORDER_LINKS}.length === 2`, 'Filter zurücksetzen');
-  ok('Gruppenfilter');
+  ok('Filter mobil eingeklappt, Gruppenfilter mit Chip');
 
   await b.clickText('button', '+ Position erfassen');
   await b.waitFor(`document.querySelector('.modal-panel input[placeholder^="z. B. 595"]')?.offsetParent`, 'Formular');
