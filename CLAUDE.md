@@ -23,6 +23,6 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 
 ## Getroffene Entscheidungen
 
-- **PocketBase-Version:** aktuelles PocketBase (≥ v0.23, wegen Email-OTP). `pb_schema.json` wird ins aktuelle Import-Format konvertiert; Auth-Einstellungen (OTP an, Passwort-Login aus, Token-Dauer 30 Tage) werden im Admin-UI gesetzt und dokumentiert.
+- **PocketBase-Version:** aktuelles PocketBase (≥ v0.23, wegen Email-OTP). `pb_schema.json` liegt im aktuellen Import-Format vor (getestet mit v0.40.6, Import über Admin-UI → Settings → Import collections). Die Auth-Einstellungen der `users` (OTP an, Passwort-Login aus, Token-Dauer 30 Tage) sind im JSON enthalten.
 - **CDN-Abhängigkeiten:** immer mit fester Version einbinden, nie `@latest`.
 - **Lieferant `other`:** pro `supplier_custom_name` ein eigener offener Sammel-Warenkorb (statt eines gemeinsamen `other`-Korbs).
