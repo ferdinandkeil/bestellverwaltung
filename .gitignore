@@ -9,3 +9,6 @@ pocketbase.exe
 *.swp
 .vscode/
 .idea/
+
+# Echte Belege (Lieferscheine, Etiketten) – enthalten Kundendaten, nie committen
+samples/
