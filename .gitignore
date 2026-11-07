@@ -1,0 +1,11 @@
+# PocketBase Laufzeitdaten & Binary
+pb_data/
+pocketbase
+pocketbase.exe
+*.zip
+
+# Lokale Test-/Editor-Artefakte
+.DS_Store
+*.swp
+.vscode/
+.idea/
