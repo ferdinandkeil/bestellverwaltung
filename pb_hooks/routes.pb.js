@@ -39,7 +39,7 @@ routerAdd("POST", "/api/lab/orders/{id}/status", (e) => {
  * Body (JSON oder multipart/form-data):
  *   lines: [{ item, qty }]   (bei multipart als JSON-String)
  *   note?: string
- *   receipt?: eine oder mehrere Dateien (nur multipart, max. 10, z. B. eine pro Seite)
+ *   receipt?: eine Datei (nur multipart; Bild oder PDF, mehrseitige Belege als PDF)
  * Antwort: { delivery, status }
  */
 routerAdd("POST", "/api/lab/orders/{id}/deliveries", (e) => {
