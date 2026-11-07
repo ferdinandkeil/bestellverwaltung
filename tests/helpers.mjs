@@ -86,8 +86,10 @@ export async function createUser(name = 'Tester') {
   return { user, email, token: auth.token };
 }
 
-export async function createGroup(name) {
-  return http('POST', '/api/collections/groups/records', { token: await admin(), json: { name, is_active: true } });
+export async function createGroup(name, course = 'Elektronik-Projekt', semester = 'WS 2026/27') {
+  return http('POST', '/api/collections/groups/records', {
+    token: await admin(), json: { name, course, semester, is_active: true },
+  });
 }
 
 export function addItem(token, data) {

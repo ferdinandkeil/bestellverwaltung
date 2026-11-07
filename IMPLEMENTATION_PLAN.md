@@ -21,7 +21,7 @@
    * **Login:** zweistufig (E-Mail → Code), Hinweis bei fehlendem Code.
    * **Dashboard:** Bestellungen mit Filter nach Status, Lieferant, Gruppe; Fortschritt je Bestellung; Position manuell erfassen (Hinweis „Shop-Bestellnummer“); Slot `dashboard-actions`; Realtime-Aktualisierung.
    * **Bestell-Detail:** Positionen mit `group_allocation_note`, Bestellt / Geliefert / Storniert / Rückstand; Lieferbuchung (Eingabe, „+1“, „Rest komplett“); Lieferhistorie; Storno-Menge; Positionen bearbeiten laut ARCHITECTURE 4.3; Status-Buttons inkl. „Einen Schritt zurück“; Versandkosten, Netto/Brutto, Rechnungsbetrag; Anhänge hochladen/löschen; Slot `order-detail-actions`.
-   * **Gruppen/Projekte:** Gruppen anlegen/bearbeiten/aktiv schalten; je Gruppe ihre Positionen mit Bestellstatus und Rückstand.
+   * **Gruppen/Projekte:** Gruppen je Veranstaltung + Semester anlegen/bearbeiten/aktiv schalten (Vorschläge für die Veranstaltung, Semesterauswahl WS/SS + Jahr); je Gruppe ihre Positionen mit Bestellstatus und Rückstand.
 
 ### 1c – Doku
 `docs/DEPLOYMENT.md`: Uberspace-Dienst (supervisord), Deploy von `pb_public/` + `pb_hooks/`, Schema-Import, SMTP, Backups von `pb_data`, Update-Vorgehen.
@@ -30,19 +30,33 @@
 
 ---
 
-## Phase 2: Modul `shop-export` (Branch `phase-2-shop-export`)
+## Meilenstein: Go-Live (nach Phase 1)
+1. Uberspace nach `docs/DEPLOYMENT.md` einrichten (Dienst, Domain, SMTP, Admin mit 2FA, Backups).
+2. Schema importieren, erste Labor-Nutzer und Gruppen anlegen, Probebetrieb.
+3. Erfahrungen aus dem Probebetrieb als Rückmeldung für die folgenden Phasen sammeln.
+
+---
+
+## Phase 2: Lieferschein-Erfassung (Branch `phase-2-delivery-scanner`)
+1. Vorab: echte Lieferscheine und Beutel-Etiketten der vier Lieferanten sammeln; Ansatz (OCR / Barcode-DataMatrix / PDF) evaluieren und mit dem Nutzer entscheiden.
+2. `modules/delivery-scanner/` im Slot `order-detail-actions` (ggf. zusätzlich `dashboard-actions`): Erfassen → Abgleich mit den offenen Positionen → editierbare Review-Tabelle (Bestellt | Bisher geliefert | Neu erkannt | Rückstand | Gruppen-Info).
+3. Buchung immer über die Lieferbuchungs-Route mit Beleg als `receipt`.
+
+## Phase 3: Shop-Export (Branch `phase-3-shop-export`)
 1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
 2. `modules/shop-export/shop-exporter.js` im Slot `order-detail-actions`: Modal mit Copy-to-Clipboard und CSV-Download (Menge = `qty_ordered − qty_cancelled`).
 3. Button „Exportiert & auf ‚Bestellt‘ setzen“ (optional mit `supplier_order_no`) über die Status-Route.
 
-## Phase 3: Modul `moodle-import` (Branch `phase-3-moodle-import`)
+## Phase 4: Moodle-Import (Branch `phase-4-moodle-import`)
 1. Vorab: Beispiel-CSV aus Moodle beschaffen (Spalten, Lieferantenangabe, Gruppen-Schreibweisen).
-2. `modules/moodle-import/moodle-importer.js` (PapaParse aus `vendor/`) im Slot `dashboard-actions`: Drag & Drop, Spalten-Mapping, Vorschau mit **Warnung**, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen; unbekannte Gruppen anlegen/zuordnen; Buchen über `POST /api/lab/cart-items`.
+2. `modules/moodle-import/moodle-importer.js` (PapaParse aus `vendor/`) im Slot `dashboard-actions`: Drag & Drop, Spalten-Mapping, Vorschau.
+3. **Interaktive Gruppenzuweisung:** Für jede Gruppenbezeichnung aus der CSV wählt der Nutzer eine bestehende Gruppe (Veranstaltung/Semester) oder legt sie neu an. Keine automatische Zuordnung.
+4. Warnung, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen; Buchen über `POST /api/lab/cart-items`.
 
-## Phase 4: Modul `word-export` (Branch `phase-4-word-export`)
+## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
 2. `modules/word-export/docx-generator.js` (PizZip + docxtemplater aus `vendor/`) im Slot `order-detail-actions`; Zusatzfelder in `orders.custom_fields`; Platzhalter u. a. `{supplier}`, `{total_net}`, `{total_gross}`, `{shipping_cost}`, Loop `{#items}…{/items}`.
 
-## Phase 5: Modul `delivery-scanner` (Branch `phase-5-delivery-scanner`)
-1. Vorab: echte Lieferscheine und Beutel-Etiketten der vier Lieferanten sammeln; Ansatz (OCR / Barcode-DataMatrix / PDF) evaluieren und mit dem Nutzer entscheiden.
-2. Umsetzung nach Entscheidung; Buchung immer über die Lieferbuchungs-Route mit Beleg als `receipt`.
+## Phase 6: Prüfung der Bestellnummern (Branch `phase-6-part-number-check`)
+1. Vorab: Formatregeln der Shop-Bestellnummern zusammentragen und mit dem Nutzer abstimmen (z. B. Mouser `NNN-…`); klären, ob Online-Abfragen bei den Shops gewünscht/zulässig sind.
+2. `modules/part-number-check/` im Slot `order-detail-actions` (und als Prüfschritt im Moodle-Import nutzbar): auffällige Nummern markieren, Korrekturvorschläge interaktiv bestätigen.

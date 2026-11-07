@@ -1,7 +1,7 @@
 // Formular „Position erfassen“ – gemeinsam genutzt von Dashboard und Bestell-Detail.
 // Einbinden: <div x-data="itemForm({ supplier, supplierCustomName, lockSupplier })"> ${itemFormFields} </div>
 // Nach erfolgreicher Buchung wird das Event `item-added` mit { order, item, merged } ausgelöst.
-import { SUPPLIERS } from '../core/config.js';
+import { SUPPLIERS, groupsByCourse } from '../core/config.js';
 import { addItemToSupplierCart, listGroups, errorMessage } from '../core/api.js';
 import { toast, numberOrNull } from '../core/ui.js';
 
@@ -50,8 +50,12 @@ export const itemFormFields = /* html */ `
     <label class="label">Gruppe / Projekt (optional)</label>
     <select class="input" x-model="form.group">
       <option value="">– ohne Gruppe –</option>
-      <template x-for="g in groups" :key="g.id">
-        <option :value="g.id" x-text="g.semester ? g.name + ' (' + g.semester + ')' : g.name"></option>
+      <template x-for="c in courses" :key="c.label">
+        <optgroup :label="c.label">
+          <template x-for="g in c.groups" :key="g.id">
+            <option :value="g.id" x-text="g.name"></option>
+          </template>
+        </optgroup>
       </template>
     </select>
   </div>
@@ -74,7 +78,7 @@ export const itemFormFields = /* html */ `
 export function registerItemForm(Alpine) {
   Alpine.data('itemForm', (opts = {}) => ({
     suppliers: SUPPLIERS,
-    groups: [],
+    courses: [],
     lockSupplier: !!opts.lockSupplier,
     busy: false,
     error: '',
@@ -91,7 +95,7 @@ export function registerItemForm(Alpine) {
 
     async init() {
       try {
-        this.groups = await listGroups({ onlyActive: true });
+        this.courses = groupsByCourse(await listGroups({ onlyActive: true }));
       } catch (err) {
         this.error = errorMessage(err);
       }

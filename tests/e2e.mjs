@@ -230,10 +230,28 @@ try {
   const groupItems = await b.evaluate(`document.querySelectorAll('#view section:nth-of-type(2) li').length`);
   if (groupItems !== 2) throw new Error(`Gruppe B: ${groupItems} statt 2 Positionen`);
   ok('Projekt-Status Gruppe B');
+
+  // Gruppe über die Oberfläche anlegen: Vorschlag der Veranstaltung, aktuelles Semester vorausgewählt
+  await b.clickText('#view button', '+ Gruppe');
+  await b.waitFor(`document.querySelector('#group-course')?.offsetParent`, 'Gruppenformular');
+  const suggestions = await b.evaluate(`[...document.querySelectorAll('#known-courses option')].map((o) => o.value)`);
+  if (!suggestions.includes('Elektronik-Projekt')) throw new Error('Veranstaltung wird nicht vorgeschlagen: ' + suggestions);
+  const year = await b.evaluate(`document.querySelectorAll('.modal-panel select')[1].value`);
+  if (!year) throw new Error('Semesterjahr nicht vorausgewählt');
+  await b.fill('#group-course', 'Elektronik-Projekt');
+  await b.fill('#group-name', 'gruppe a');
+  await b.evaluate(`(() => { const s = document.querySelectorAll('.modal-panel select'); s[0].value = 'WS'; s[0].dispatchEvent(new Event('change')); s[1].value = '2026'; s[1].dispatchEvent(new Event('change')); })()`);
+  await b.clickText('.modal-panel button', 'Speichern');
+  await b.waitFor(`document.body.innerText.includes('existiert bereits')`, 'Dublette abgelehnt');
+  await b.fill('#group-name', 'Gruppe C');
+  await b.clickText('.modal-panel button', 'Speichern');
+  await b.waitFor(`[...document.querySelectorAll('#view h2')].some((h) => h.innerText === 'Elektronik-Projekt (WS 2026/27)') && document.body.innerText.includes('Gruppe C')`, 'neue Gruppe in Liste');
+  ok('Gruppe anlegen: Vorschlag, Semesterauswahl, Dublette abgelehnt');
   await b.screenshot('05-gruppen');
 
-  // Erwartet ist nur die 400er-Antwort des absichtlich falschen Codes.
-  const unexpected = b.problems.filter((p) => !/auth-with-otp/.test(p));
+  // Erwartet sind nur die 400er-Antworten auf den absichtlich falschen Code und die absichtliche Dublette.
+  const expected = [/status of 400.*auth-with-otp/, /status of 400.*collections\/groups\/records/];
+  const unexpected = b.problems.filter((p) => !expected.some((re) => re.test(p)));
   if (unexpected.length) throw new Error('Fehler in der Browser-Konsole:\n  ' + unexpected.join('\n  '));
   ok('keine Fehler in der Browser-Konsole');
 } catch (err) {

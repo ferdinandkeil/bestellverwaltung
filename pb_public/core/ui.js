@@ -6,7 +6,8 @@ export function initUiStore() {
     items: [],
     push(message, type = 'info', timeoutMs = 4000) {
       const id = Math.random().toString(36).slice(2);
-      this.items.push({ id, message, type });
+      // Höchstens drei Meldungen gleichzeitig, damit der Inhalt sichtbar bleibt.
+      this.items = [...this.items.slice(-2), { id, message, type }];
       if (timeoutMs) setTimeout(() => this.dismiss(id), timeoutMs);
     },
     dismiss(id) {

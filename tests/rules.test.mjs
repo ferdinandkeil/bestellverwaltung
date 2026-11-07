@@ -63,7 +63,7 @@ test('ab geprueft sind Positionen gesperrt', async () => {
 });
 
 test('Gruppen: alle eingeloggten Nutzer dürfen verwalten, Gäste nichts sehen', async () => {
-  const g = await http('POST', '/api/collections/groups/records', { token: u.token, json: { name: 'Neu' } });
+  const g = await http('POST', '/api/collections/groups/records', { token: u.token, json: { name: 'Neu', course: 'Kurs', semester: 'WS 2026/27' } });
   await patch('groups', g.id, { is_active: true });
   await expectHttpError(http('GET', `/api/collections/groups/records/${g.id}`), 404);
   const list = await http('GET', '/api/collections/orders/records');

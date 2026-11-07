@@ -19,7 +19,7 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 ## Git
 
 - **Repository:** lokales Git-Repo im Projektordner. `pb_data/`, die PocketBase-Binary und lokale Testartefakte stehen in `.gitignore` und werden nie committet.
-- **Branches:** pro Phase ein Feature-Branch (`phase-1-core`, `phase-2-shop-export`, `phase-3-moodle-import`, `phase-4-word-export`, `phase-5-delivery-scanner`). In `main` wird erst nach Freigabe der Phase durch den Nutzer gemergt.
+- **Branches:** pro Phase ein Feature-Branch (`phase-1-core`, `phase-2-delivery-scanner`, `phase-3-shop-export`, `phase-4-moodle-import`, `phase-5-word-export`, `phase-6-part-number-check`). In `main` wird erst nach Freigabe der Phase durch den Nutzer gemergt.
 - **Commits:** selbstständig und kleinschrittig, nach jedem sinnvollen, in sich abgeschlossenen Schritt. Commit-Nachrichten auf Deutsch, kurz und aussagekräftig (was und warum).
 - **Remote / Push:** gepusht wird nur auf ausdrückliche Anweisung. Keine History-Umschreibungen (force-push, rebase veröffentlichter Commits) ohne Rückfrage.
 
@@ -41,6 +41,9 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 - **Gruppennamen in Allokationen:** Momentaufnahme, Umbenennungen werden nicht nachgezogen.
 - **Kosten:** `orders.shipping_cost`, MwSt. 19 % berechnet, `orders.invoice_total` von Hand. Kein Backorder-Feld.
 - **Login:** OTP-Mail deutsch, Gültigkeit 10 min, Hinweis in der Login-Maske; keine Selbstregistrierung.
-- **Phasen-Reihenfolge:** Lieferschein-Scanner wird Phase 5 (nach Word-Export) und erst mit echten Belegen konzipiert.
+- **Phasen-Reihenfolge:** 1 Kern → Go-Live → 2 Lieferschein-Erfassung (erst mit echten Belegen konzipieren) → 3 Shop-Export → 4 Moodle-Import → 5 Word-Export → 6 Prüfung der Bestellnummern.
 - **Test-Mailserver:** Mailpit lokal.
 - **Komplett storniert ohne Lieferung:** Status wird automatisch `geliefert` (bestätigt).
+- **Gruppen:** gebunden an Veranstaltung (`course`, Freitext mit Vorschlägen aus bestehenden Gruppen) und Semester (Auswahl WS/SS + Jahr, Format `WS 2026/27` / `SS 2027`); Name eindeutig je Veranstaltung + Semester. In Positions-Hinweisen und Exporten nur der Gruppenname.
+- **Moodle-Import:** Gruppen werden interaktiv zugewiesen (bestehende wählen oder neu anlegen), keine automatische Zuordnung.
+- **Dashboard mobil:** Filter einklappbar, aktive Filter als Chips. Höchstens drei Toasts gleichzeitig.

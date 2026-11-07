@@ -227,16 +227,30 @@
         "primaryKey": false
       },
       {
+        "id": "grp_course",
+        "name": "course",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "hidden": false,
+        "min": 1,
+        "max": 150,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
         "id": "grp_semester",
         "name": "semester",
         "type": "text",
         "system": false,
-        "required": false,
+        "required": true,
         "presentable": false,
         "hidden": false,
         "min": 0,
         "max": 50,
-        "pattern": "",
+        "pattern": "^(WS [0-9]{4}/[0-9]{2}|SS [0-9]{4})$",
         "autogeneratePattern": "",
         "primaryKey": false
       },
@@ -284,7 +298,9 @@
         "hidden": false
       }
     ],
-    "indexes": [],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_groups_unique_name` ON `groups` (`course` COLLATE NOCASE, `semester`, `name` COLLATE NOCASE)"
+    ],
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": "@request.auth.id != \"\"",

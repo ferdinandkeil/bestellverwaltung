@@ -13,7 +13,11 @@ export function errorMessage(err) {
   if (err.isAbort) return 'Anfrage abgebrochen.';
   if (err.status === 0) return 'Keine Verbindung zum Server.';
   const res = err.response ?? {};
-  const fields = Object.entries(res.data ?? {})
+  const data = res.data ?? {};
+  if (Object.values(data).some((e) => e?.code === 'validation_not_unique')) {
+    return 'Ein Eintrag mit diesen Angaben existiert bereits.';
+  }
+  const fields = Object.entries(data)
     .map(([field, e]) => `${field}: ${e?.message ?? e}`)
     .join(', ');
   if (err.status === 404 && err.url && /\/records\//.test(err.url)) {
@@ -166,7 +170,7 @@ export function listDeliveries(orderId) {
 export function listGroups({ onlyActive = false } = {}) {
   return pb.collection('groups').getFullList({
     filter: onlyActive ? 'is_active = true' : '',
-    sort: '-is_active,name',
+    sort: 'course,name',
   });
 }
 

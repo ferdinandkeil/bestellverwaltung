@@ -58,7 +58,8 @@ Projekt/
 │       ├── shop-export/
 │       ├── moodle-import/
 │       ├── word-export/
-│       └── delivery-scanner/       # Spätere Phase, Ansatz offen (Kap. 6)
+│       ├── delivery-scanner/       # Lieferschein-Erfassung, Ansatz offen (Kap. 6)
+│       └── part-number-check/      # Prüfung der Bestellnummern (Kap. 6)
 ├── tailwind/app.src.css            # Tailwind-Quelle
 ├── scripts/
 │   ├── build-css.sh                # Tailwind Standalone CLI → pb_public/assets/app.css
@@ -71,7 +72,7 @@ Projekt/
 ## 4. Datenmodell & Kern-Geschäftslogik
 
 ### 4.1 Collections (Details: `pb_schema.json`)
-* **`groups`:** `name`, `semester`, `contact_info`, `is_active`.
+* **`groups`:** `name`, **`course`** (Veranstaltung, Pflicht), `semester` (Pflicht, Format `WS 2026/27` bzw. `SS 2027`), `contact_info`, `is_active`. Der Gruppenname ist nur **innerhalb von Veranstaltung + Semester eindeutig** (Unique-Index `idx_groups_unique_name`, Groß-/Kleinschreibung egal). Bei der Eingabe werden bestehende Veranstaltungen vorgeschlagen; in Auswahllisten erscheinen Gruppen nach Veranstaltung/Semester gegliedert.
 * **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|other`), `supplier_custom_name` (nur bei `other`, sonst leer), `supplier_order_no`, `status`, `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
 * **`order_items`:** `order`, `part_number`, `name`, `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
 * **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (Beleg-Datei, optional), `created`.
@@ -79,7 +80,7 @@ Projekt/
 
 **Artikelnummer-Regel:** `part_number` ist **immer die Shop-Bestellnummer** des jeweiligen Lieferanten (z. B. `595-SN74HC595N` bei Mouser), nicht die Herstellernummer. Eingabemaske und Moodle-Formular weisen darauf hin. Gespeichert wird normalisiert (Trim + Großbuchstaben). Eine spätere Prüf-/Korrektur-Erweiterung ist als Modul denkbar.
 
-**Gruppennamen in `group_allocations`/`group_allocation_note`** sind eine Momentaufnahme zum Zeitpunkt der Erfassung; Umbenennungen werden nicht nachgezogen.
+**Gruppennamen in `group_allocations`/`group_allocation_note`** enthalten nur den Gruppennamen (ohne Veranstaltung) und sind eine Momentaufnahme zum Zeitpunkt der Erfassung; Umbenennungen werden nicht nachgezogen.
 
 **Kosten:** Netto = Σ (`qty_ordered − qty_cancelled`) × `price_unit` + `shipping_cost`; Brutto = Netto × 1,19 (Satz in `core/config.js`). `invoice_total` hält den tatsächlichen Betrag laut Rechnung.
 
@@ -129,9 +130,10 @@ registerPlugin({
 
 ## 6. Module (Überblick)
 * **shop-export:** Copy&Paste-Text und CSV je Lieferant. Die Formate werden vor der Umsetzung an den echten Schnellbestell-/Upload-Masken der Shops verifiziert.
-* **moodle-import:** CSV per Drag & Drop (PapaParse), Spalten-Mapping, Vorschau. **Kein gespeicherter Import-Bezug:** Nach dem Buchen ist die Zuordnung zu Moodle-Einträgen nicht mehr vorhanden. Die Vorschau **warnt**, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen. Unbekannte Gruppen können angelegt oder zugeordnet werden. Gebucht wird über `POST /api/lab/cart-items`. Benötigt eine Beispiel-CSV.
+* **moodle-import:** CSV per Drag & Drop (PapaParse), Spalten-Mapping, Vorschau. **Gruppen werden interaktiv zugewiesen:** Für jede in der CSV vorkommende Gruppenbezeichnung wählt der Nutzer eine bestehende Gruppe (mit Veranstaltung/Semester) oder legt sie neu an – es gibt keine stillschweigende automatische Zuordnung. **Kein gespeicherter Import-Bezug:** Nach dem Buchen ist die Zuordnung zu Moodle-Einträgen nicht mehr vorhanden. Die Vorschau **warnt**, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen. Gebucht wird über `POST /api/lab/cart-items`. Benötigt eine Beispiel-CSV.
 * **word-export:** PizZip + docxtemplater, Zusatzfelder in `orders.custom_fields`. Benötigt die `.docx`-Vorlage.
-* **delivery-scanner (spätere Phase):** Ansatz (OCR des Lieferscheins, Barcode/DataMatrix der Beutel-Etiketten, PDF-Lieferschein) wird erst anhand echter Belege entschieden. Ergebnis wird immer über die Lieferbuchungs-Route gebucht (Beleg als `receipt`).
+* **delivery-scanner:** Ansatz (OCR des Lieferscheins, Barcode/DataMatrix der Beutel-Etiketten, PDF-Lieferschein) wird erst anhand echter Belege entschieden. Ergebnis wird immer über die Lieferbuchungs-Route gebucht (Beleg als `receipt`).
+* **part-number-check:** Prüft Bestellnummern auf das Format des jeweiligen Shops und schlägt Korrekturen vor (z. B. Herstellernummer statt Shop-Nummer erkannt). Korrekturen werden interaktiv bestätigt.
 
 ## 7. Betrieb
 * `pb_data/` liegt **nie** in Dropbox (SQLite/WAL kann durch Sync beschädigt werden). Lokale Test-Instanzen liegen außerhalb des Projektordners.

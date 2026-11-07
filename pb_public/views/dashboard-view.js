@@ -1,5 +1,5 @@
 // Übersicht aller Bestellungen mit Filtern, Erfassung neuer Positionen und Plugin-Slot.
-import { SUPPLIERS, STATUSES, supplierLabel, statusMeta } from '../core/config.js';
+import { SUPPLIERS, STATUSES, supplierLabel, statusMeta, groupsByCourse, groupLabel } from '../core/config.js';
 import { listOrders, listGroups, orderTotals, subscribe, errorMessage } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast } from '../core/ui.js';
@@ -50,7 +50,11 @@ const template = /* html */ `
       <label class="label">Gruppe</label>
       <select class="input" x-model="filters.group" @change="filtersChanged()">
         <option value="">Alle</option>
-        <template x-for="g in groups" :key="g.id"><option :value="g.id" x-text="g.name"></option></template>
+        <template x-for="c in groupsByCourse(groups)" :key="c.label">
+          <optgroup :label="c.label">
+            <template x-for="g in c.groups" :key="g.id"><option :value="g.id" x-text="g.name"></option></template>
+          </optgroup>
+        </template>
       </select>
     </div>
   </div>
@@ -122,6 +126,7 @@ function component() {
     suppliers: SUPPLIERS,
     supplierLabel,
     statusMeta,
+    groupsByCourse,
     fmt,
     filters: loadFilters(),
     groups: [],
@@ -163,7 +168,7 @@ function component() {
       const list = [];
       if (this.filters.status) list.push({ key: 'status', label: STATUSES.find((s) => s.value === this.filters.status)?.label ?? this.filters.status });
       if (this.filters.supplier) list.push({ key: 'supplier', label: SUPPLIERS.find((s) => s.value === this.filters.supplier)?.label ?? this.filters.supplier });
-      if (this.filters.group) list.push({ key: 'group', label: this.groups.find((g) => g.id === this.filters.group)?.name ?? 'Gruppe' });
+      if (this.filters.group) list.push({ key: 'group', label: groupLabel(this.groups.find((g) => g.id === this.filters.group)) || 'Gruppe' });
       return list;
     },
 
