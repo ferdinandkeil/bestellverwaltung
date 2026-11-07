@@ -11,21 +11,35 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 ## Arbeitsweise laut Implementierungsplan
 
 - Strikt phasenweise arbeiten; nach jeder Phase Feedback einholen, bevor die nächste beginnt.
-- Kein Build-Prozess (kein `package.json`, kein npm/Vite/Webpack). Alle Frontend-Dateien als native ES6-Module unter `pb_public/`.
+- Kein JS-Build (kein `package.json`, kein npm/Vite/Webpack). Alle Frontend-JS-Dateien als native ES6-Module unter `pb_public/`. Einzige Ausnahme: CSS-Build mit dem Tailwind Standalone CLI (`scripts/build-css.sh`); das erzeugte `pb_public/assets/app.css` wird mitcommittet.
+- Geschäftslogik, die mehrere Datensätze konsistent ändert, gehört in `pb_hooks/` (transaktional), nicht ins Frontend.
+- Nach Änderungen an `pb_hooks/` oder Schema: `node --test tests/` gegen die Test-Instanz ausführen.
 - Feldnamen exakt wie in `pb_schema.json`.
 
 ## Git
 
 - **Repository:** lokales Git-Repo im Projektordner. `pb_data/`, die PocketBase-Binary und lokale Testartefakte stehen in `.gitignore` und werden nie committet.
-- **Branches:** pro Phase ein Feature-Branch (`phase-1-core`, `phase-2-shop-export`, `phase-3-moodle-import`, `phase-4-delivery-scanner`, `phase-5-word-export`). In `main` wird erst nach Freigabe der Phase durch den Nutzer gemergt.
+- **Branches:** pro Phase ein Feature-Branch (`phase-1-core`, `phase-2-shop-export`, `phase-3-moodle-import`, `phase-4-word-export`, `phase-5-delivery-scanner`). In `main` wird erst nach Freigabe der Phase durch den Nutzer gemergt.
 - **Commits:** selbstständig und kleinschrittig, nach jedem sinnvollen, in sich abgeschlossenen Schritt. Commit-Nachrichten auf Deutsch, kurz und aussagekräftig (was und warum).
 - **Remote / Push:** gepusht wird nur auf ausdrückliche Anweisung. Keine History-Umschreibungen (force-push, rebase veröffentlichter Commits) ohne Rückfrage.
 
 ## Getroffene Entscheidungen
 
 - **PocketBase-Version:** aktuelles PocketBase (≥ v0.23, wegen Email-OTP). `pb_schema.json` liegt im aktuellen Import-Format vor (getestet mit v0.40.6, Import über Admin-UI → Settings → Import collections). Die Auth-Einstellungen der `users` (OTP an, Passwort-Login aus, Token-Dauer 30 Tage) sind im JSON enthalten.
-- **CDN-Abhängigkeiten:** immer mit fester Version einbinden, nie `@latest`.
+- **Bibliotheken:** selbst gehostet unter `pb_public/vendor/<name>@<version>/`, immer feste Version, nie `@latest`, keine CDN-Aufrufe zur Laufzeit.
 - **Lieferant `other`:** pro `supplier_custom_name` ein eigener offener Sammel-Warenkorb (statt eines gemeinsamen `other`-Korbs).
 - **Ein offener Korb – DB-seitig abgesichert:** Unique-Index `idx_orders_one_open_cart` auf `orders (supplier, supplier_custom_name COLLATE NOCASE) WHERE status = 'angefragt'`. `api.js` fängt den Konflikt ab und verwendet den vorhandenen Korb. Bei Lieferanten außer `other` ist `supplier_custom_name` leer.
 - **Auto-Lieferstatus:** `recalculateOrderStatus` rechnet bei `bestellt`, `teilgeliefert` **und** `geliefert` neu (nachträgliche Korrekturen nach unten werden berücksichtigt). Ab `geprueft` keine automatische Änderung mehr.
 - **Status zurück:** Button „Einen Schritt zurück“ mit Sicherheitsabfrage. Ein Zurücksetzen auf `angefragt` wird verweigert, wenn für den Lieferanten bereits ein anderer offener Korb existiert.
+- **Kernlogik serverseitig** in PocketBase-Hooks (Merge, Status, Lieferbuchungen); `core/api.js` ist nur ein Client.
+- **Lieferhistorie:** Collections `deliveries` + `delivery_items`; `qty_delivered` = Summe der Buchungen (nur Hook). Korrekturen per Gegenbuchung.
+- **Storno:** `order_items.qty_cancelled`; Position erledigt, wenn geliefert + storniert ≥ bestellt.
+- **Ab `bestellt` änderbar:** Mengen, Ersatzteil-Daten, Storno. Neue Positionen nur im offenen Korb.
+- **Löschen von Bestellungen** nur im Status `angefragt` (sonst Admin).
+- **Moodle-Import:** kein gespeicherter Import-Bezug (`moodle_entry_ids` entfällt); nur Warnung, wenn Artikelnummer + Gruppe schon im offenen Korb stehen.
+- **Artikelnummer:** ein Feld, immer Shop-Bestellnummer. Ggf. später Prüf-/Korrektur-Plugin.
+- **Gruppennamen in Allokationen:** Momentaufnahme, Umbenennungen werden nicht nachgezogen.
+- **Kosten:** `orders.shipping_cost`, MwSt. 19 % berechnet, `orders.invoice_total` von Hand. Kein Backorder-Feld.
+- **Login:** OTP-Mail deutsch, Gültigkeit 10 min, Hinweis in der Login-Maske; keine Selbstregistrierung.
+- **Phasen-Reihenfolge:** Lieferschein-Scanner wird Phase 5 (nach Word-Export) und erst mit echten Belegen konzipiert.
+- **Test-Mailserver:** Mailpit lokal.
