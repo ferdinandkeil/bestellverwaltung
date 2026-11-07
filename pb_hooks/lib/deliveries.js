@@ -14,9 +14,9 @@ function sumDelivered(app, itemId) {
 /**
  * Lieferung buchen. Muss innerhalb einer Transaktion aufgerufen werden.
  * lines: [{ item, qty }]  (qty ≠ 0, negativ = Korrektur)
- * receipt: optionale Datei (filesystem.File)
+ * receipts: optionale Belegdateien (filesystem.File[], z. B. eine pro Seite, max. 10)
  */
-function bookDelivery(app, orderId, lines, note, receipt, userId) {
+function bookDelivery(app, orderId, lines, note, receipts, userId) {
   const order = app.findRecordById("orders", orderId);
   if (DELIVERY_STATUSES.indexOf(order.getString("status")) === -1) {
     throw new BadRequestError(
@@ -59,7 +59,10 @@ function bookDelivery(app, orderId, lines, note, receipt, userId) {
   delivery.set("order", order.id);
   if (userId) delivery.set("booked_by", userId);
   delivery.set("note", String(note || "").trim());
-  if (receipt) delivery.set("receipt", receipt);
+  if (receipts && receipts.length) {
+    if (receipts.length > 10) throw new BadRequestError("Höchstens 10 Belegseiten je Lieferung.");
+    delivery.set("receipt", receipts);
+  }
   app.save(delivery);
 
   const lineCol = app.findCollectionByNameOrId("delivery_items");

@@ -756,7 +756,7 @@
         "required": false,
         "presentable": false,
         "hidden": false,
-        "maxSelect": 1,
+        "maxSelect": 10,
         "maxSize": 15728640,
         "mimeTypes": [
           "image/jpeg",

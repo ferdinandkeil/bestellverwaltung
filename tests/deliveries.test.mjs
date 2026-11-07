@@ -60,6 +60,23 @@ test('Buchung mit Beleg (multipart)', async () => {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
   form.append('receipt', new Blob([png], { type: 'image/png' }), 'lieferschein.png');
   const r = await http('POST', `/api/lab/orders/${orderId}/deliveries`, { token: u.token, form });
-  assert.match(r.delivery.receipt, /^lieferschein.*\.png$/);
+  assert.equal(r.delivery.receipt.length, 1);
+  assert.match(r.delivery.receipt[0], /^lieferschein.*\.png$/);
   assert.equal((await getRecord('order_items', ids.A)).qty_delivered, 4);
+});
+
+test('mehrseitiger Beleg: mehrere Dateien, höchstens 10', async () => {
+  await changeStatus(u.token, orderId, 'advance');
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  const form = (pages) => {
+    const f = new FormData();
+    f.append('lines', JSON.stringify([{ item: ids.A, qty: 1 }]));
+    for (let i = 1; i <= pages; i++) f.append('receipt', new Blob([png], { type: 'image/png' }), `seite-${i}.png`);
+    return f;
+  };
+  const r = await http('POST', `/api/lab/orders/${orderId}/deliveries`, { token: u.token, form: form(3) });
+  assert.equal(r.delivery.receipt.length, 3);
+  await expectHttpError(http('POST', `/api/lab/orders/${orderId}/deliveries`, { token: u.token, form: form(11) }), 400);
+  assert.equal((await getRecord('order_items', ids.A)).qty_delivered, 1, 'abgelehnte Buchung ohne Wirkung');
 });

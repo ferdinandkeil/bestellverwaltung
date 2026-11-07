@@ -39,7 +39,7 @@ routerAdd("POST", "/api/lab/orders/{id}/status", (e) => {
  * Body (JSON oder multipart/form-data):
  *   lines: [{ item, qty }]   (bei multipart als JSON-String)
  *   note?: string
- *   receipt?: Datei (nur multipart)
+ *   receipt?: eine oder mehrere Dateien (nur multipart, max. 10, z. B. eine pro Seite)
  * Antwort: { delivery, status }
  */
 routerAdd("POST", "/api/lab/orders/{id}/deliveries", (e) => {
@@ -56,16 +56,15 @@ routerAdd("POST", "/api/lab/orders/{id}/deliveries", (e) => {
     }
   }
 
-  let receipt = null;
+  let receipts = [];
   const contentType = String(e.request.header.get("Content-Type") || "");
   if (contentType.indexOf("multipart/form-data") === 0) {
-    const files = e.findUploadedFiles("receipt");
-    if (files && files.length > 0) receipt = files[0];
+    receipts = Array.from(e.findUploadedFiles("receipt") || []);
   }
 
   let result;
   $app.runInTransaction((txApp) => {
-    result = bookDelivery(txApp, id, lines, body.note, receipt, e.auth.id);
+    result = bookDelivery(txApp, id, lines, body.note, receipts, e.auth.id);
   });
   return e.json(200, result);
 }, $apis.requireAuth("users"));
