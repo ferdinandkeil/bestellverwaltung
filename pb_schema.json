@@ -128,7 +128,7 @@
     "authRule": "",
     "manageRule": null,
     "authAlert": {
-      "enabled": true,
+      "enabled": false,
       "emailTemplate": {
         "subject": "Login from a new location",
         "body": "<p>Hello,</p>\n<p>We noticed a login to your {APP_NAME} account from a new location:</p>\n<p><em>{ALERT_INFO}</em></p>\n<p><strong>If this wasn't you, you should immediately change your {APP_NAME} account password to revoke access from all other locations.</strong></p>\n<p>If this was you, you may disregard this email.</p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
@@ -157,11 +157,11 @@
     },
     "otp": {
       "enabled": true,
-      "duration": 180,
+      "duration": 600,
       "length": 8,
       "emailTemplate": {
-        "subject": "OTP for {APP_NAME}",
-        "body": "<p>Hello,</p>\n<p>Your one-time password is: <strong>{OTP}</strong></p>\n<p><i>If you didn't ask for the one-time password, you can ignore this email.</i></p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
+        "subject": "Ihr Anmeldecode für {APP_NAME}",
+        "body": "<p>Hallo,</p>\n<p>Ihr Anmeldecode lautet: <strong>{OTP}</strong></p>\n<p>Der Code ist 10 Minuten gültig.</p>\n<p><i>Falls Sie keinen Code angefordert haben, können Sie diese E-Mail ignorieren.</i></p>\n<p>Viele Grüße<br/>{APP_NAME}</p>"
       }
     },
     "authToken": {
@@ -433,6 +433,30 @@
         "primaryKey": false
       },
       {
+        "id": "ord_shipping",
+        "name": "shipping_cost",
+        "type": "number",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "min": 0,
+        "max": null,
+        "onlyInt": false
+      },
+      {
+        "id": "ord_invoice_total",
+        "name": "invoice_total",
+        "type": "number",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "min": 0,
+        "max": null,
+        "onlyInt": false
+      },
+      {
         "id": "pb_orders_col_created",
         "name": "created",
         "type": "autodate",
@@ -458,9 +482,9 @@
     ],
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
-    "createRule": "@request.auth.id != \"\"",
-    "updateRule": "@request.auth.id != \"\"",
-    "deleteRule": "@request.auth.id != \"\""
+    "createRule": null,
+    "updateRule": "@request.auth.id != \"\" && @request.body.status:isset = false && @request.body.created_by:isset = false",
+    "deleteRule": "@request.auth.id != \"\" && status = \"angefragt\""
   },
   {
     "id": "pb_order_items_col",
@@ -559,6 +583,18 @@
         "onlyInt": true
       },
       {
+        "id": "itm_qty_cancel",
+        "name": "qty_cancelled",
+        "type": "number",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "min": 0,
+        "max": null,
+        "onlyInt": true
+      },
+      {
         "id": "itm_price",
         "name": "price_unit",
         "type": "number",
@@ -608,16 +644,6 @@
         "maxSize": 500000
       },
       {
-        "id": "itm_moodle_ids",
-        "name": "moodle_entry_ids",
-        "type": "json",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "hidden": false,
-        "maxSize": 500000
-      },
-      {
         "id": "pb_order_items_col_created",
         "name": "created",
         "type": "autodate",
@@ -641,8 +667,185 @@
     "indexes": [],
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
-    "createRule": "@request.auth.id != \"\"",
-    "updateRule": "@request.auth.id != \"\"",
-    "deleteRule": "@request.auth.id != \"\""
+    "createRule": null,
+    "updateRule": "@request.auth.id != \"\" && @request.body.qty_delivered:isset = false && @request.body.order:isset = false && (order.status = \"angefragt\" || order.status = \"bestellt\" || order.status = \"teilgeliefert\" || order.status = \"geliefert\")",
+    "deleteRule": "@request.auth.id != \"\" && order.status = \"angefragt\""
+  },
+  {
+    "id": "pb_deliveries_col",
+    "name": "deliveries",
+    "type": "base",
+    "system": false,
+    "indexes": [],
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "primaryKey": true,
+        "min": 15,
+        "max": 15,
+        "pattern": "^[a-z0-9]+$",
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "id": "dlv_order",
+        "name": "order",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "hidden": false,
+        "collectionId": "pb_orders_col",
+        "cascadeDelete": true,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "id": "dlv_booked_by",
+        "name": "booked_by",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "id": "dlv_note",
+        "name": "note",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "id": "dlv_receipt",
+        "name": "receipt",
+        "type": "file",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "maxSelect": 1,
+        "maxSize": 15728640,
+        "mimeTypes": [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "application/pdf"
+        ],
+        "thumbs": [
+          "200x200"
+        ],
+        "protected": false
+      },
+      {
+        "id": "pb_deliveries_col_created",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false,
+        "system": false,
+        "presentable": false,
+        "hidden": false
+      }
+    ],
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
+  },
+  {
+    "id": "pb_delivery_items_col",
+    "name": "delivery_items",
+    "type": "base",
+    "system": false,
+    "indexes": [
+      "CREATE INDEX `idx_delivery_items_order_item` ON `delivery_items` (`order_item`)"
+    ],
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "primaryKey": true,
+        "min": 15,
+        "max": 15,
+        "pattern": "^[a-z0-9]+$",
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "id": "dli_delivery",
+        "name": "delivery",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "hidden": false,
+        "collectionId": "pb_deliveries_col",
+        "cascadeDelete": true,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "id": "dli_order_item",
+        "name": "order_item",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "hidden": false,
+        "collectionId": "pb_order_items_col",
+        "cascadeDelete": true,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "id": "dli_qty",
+        "name": "qty",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "hidden": false,
+        "min": null,
+        "max": null,
+        "onlyInt": true
+      },
+      {
+        "id": "pb_delivery_items_col_created",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false,
+        "system": false,
+        "presentable": false,
+        "hidden": false
+      }
+    ],
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
   }
 ]

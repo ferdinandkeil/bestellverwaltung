@@ -43,3 +43,4 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 - **Login:** OTP-Mail deutsch, Gültigkeit 10 min, Hinweis in der Login-Maske; keine Selbstregistrierung.
 - **Phasen-Reihenfolge:** Lieferschein-Scanner wird Phase 5 (nach Word-Export) und erst mit echten Belegen konzipiert.
 - **Test-Mailserver:** Mailpit lokal.
+- **Komplett storniert ohne Lieferung:** Status wird automatisch `geliefert` (bestätigt).
