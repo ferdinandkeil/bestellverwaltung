@@ -1,6 +1,6 @@
 # Implementierungsplan
 
-> Stand: 2026-11-07 – überarbeitet nach kritischer Plan-Review.
+> Stand: 2026-11-08. Phase 1 abgenommen und in `main` gemergt; Phase 2 umgesetzt, Abnahme ausstehend.
 >
 > Phasenweise arbeiten, nach jeder Phase Feedback einholen. Kein JS-Build (kein npm/Vite/Webpack); einzige Ausnahme ist der CSS-Build mit dem Tailwind Standalone CLI. Vorgaben: `ARCHITECTURE.md`, `pb_schema.json`, `CLAUDE.md`.
 
@@ -41,7 +41,9 @@
 1. ✔ Ansatz evaluiert und entschieden: Browser-OCR (Tesseract.js) mit Entzerrung (jscanify/OpenCV.js), Beleg als PDF.
 2. ✔ `modules/delivery-scanner/` in den Slots `order-detail-actions` und `dashboard-actions` (Details ARCHITECTURE Kap. 6), Profil Reichelt.
 3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.
-4. Offen: Test mit echten Handyfotos im Labor; Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege vorliegen.
+4. Offen:
+   * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
+   * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege in `samples/` liegen.
 
 ## Phase 3: Shop-Export (Branch `phase-3-shop-export`)
 1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
