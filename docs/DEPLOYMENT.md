@@ -81,6 +81,7 @@ scripts/dev-server.sh                                 # PocketBase :8090 + Mailp
 scripts/dev-server.sh add-user name@example.com "Vorname Name"
 scripts/build-css.sh --watch                          # parallel, bei UI-Arbeit
 tests/run.sh                                          # Tests gegen frische Instanz
+tests/run.sh --e2e                                    # zusätzlich Browser-Durchlauf (headless Chrome)
 ```
 
 Die Daten der Dev-Instanz liegen in `~/.local/share/bestellverwaltung-dev/` (außerhalb von Dropbox).
