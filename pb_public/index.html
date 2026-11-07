@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1d4ed8">
+  <title>Labor-Bestellsystem</title>
+  <link rel="stylesheet" href="assets/app.css">
+</head>
+<body class="min-h-dvh bg-slate-50 text-slate-900 antialiased">
+  <div x-data x-cloak>
+    <!-- Kopfzeile (nur eingeloggt) -->
+    <header x-show="$store.auth.user" class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl items-center gap-1 px-4 py-2">
+        <a href="#/" class="mr-2 text-sm font-semibold text-blue-700 sm:mr-4 sm:text-base">Labor-Bestellungen</a>
+        <nav class="flex flex-1 items-center gap-1 text-sm">
+          <a href="#/" class="rounded-lg px-2.5 py-1.5"
+             :class="['dashboard','order'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Bestellungen</a>
+          <a href="#/groups" class="rounded-lg px-2.5 py-1.5"
+             :class="$store.route.name === 'groups' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Gruppen<span class="hidden sm:inline">/Projekte</span></a>
+        </nav>
+        <span class="hidden text-xs text-slate-500 md:inline" x-text="$store.auth.user?.name || $store.auth.user?.email"></span>
+        <button type="button" class="btn btn-ghost btn-sm" @click="$store.auth.logout()">Logout</button>
+      </div>
+    </header>
+
+    <!-- Aktuelle Ansicht (wird vom Router ein-/ausgehängt) -->
+    <main id="view" class="mx-auto max-w-6xl px-4 py-4 pb-24"></main>
+
+    <!-- Toasts -->
+    <div class="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-2 p-4">
+      <template x-for="t in $store.toasts.items" :key="t.id">
+        <div class="pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-lg px-4 py-3 text-sm shadow-lg"
+             :class="{ 'bg-slate-800 text-white': t.type === 'info', 'bg-emerald-700 text-white': t.type === 'success', 'bg-red-700 text-white': t.type === 'error' }">
+          <span class="flex-1" x-text="t.message"></span>
+          <button type="button" class="opacity-70 hover:opacity-100" @click="$store.toasts.dismiss(t.id)" aria-label="Schließen">✕</button>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <script type="module">
+    import Alpine from './vendor/alpinejs@3.17.5/dist/module.esm.js';
+    import { refreshSession, onAuthChange, logout } from './core/pb.js';
+    import { initUiStore } from './core/ui.js';
+    import { onPluginsChanged } from './core/plugin-registry.js';
+
+    import loginView from './views/login-view.js';
+    import dashboardView from './views/dashboard-view.js';
+    import orderDetailView from './views/order-detail-view.js';
+    import groupsView from './views/groups-view.js';
+    import { registerItemForm } from './views/item-form.js';
+
+    // Erweiterungsmodule (registrieren sich selbst über core/plugin-registry.js):
+    const MODULES = [
+      // './modules/shop-export/shop-exporter.js',
+    ];
+
+    // Routen: Hash → View. ":id" wird als Parameter übergeben.
+    const ROUTES = [
+      { name: 'login', pattern: /^\/login$/, view: loginView, public: true },
+      { name: 'dashboard', pattern: /^\/?$/, view: dashboardView },
+      { name: 'order', pattern: /^\/orders\/([a-z0-9]{15})$/, view: orderDetailView, params: ['id'] },
+      { name: 'groups', pattern: /^\/groups$/, view: groupsView },
+    ];
+
+    window.Alpine = Alpine;
+    initUiStore();
+    Alpine.store('auth', {
+      user: null,
+      logout() {
+        logout();
+        location.hash = '#/login';
+      },
+    });
+    Alpine.store('route', { name: '', params: {} });
+    Alpine.store('plugins', { version: 0 });
+    onPluginsChanged(() => Alpine.store('plugins').version++);
+
+    for (const v of ROUTES.map((r) => r.view)) Alpine.data(v.dataName, v.component);
+    registerItemForm(Alpine);
+
+    const main = document.getElementById('view');
+    let mounted = null;
+
+    function mount(route, params) {
+      const store = Alpine.store('route');
+      if (mounted === route && JSON.stringify(store.params) === JSON.stringify(params)) return;
+      Alpine.destroyTree(main);
+      store.name = route.name;
+      store.params = params;
+      Alpine.mutateDom(() => { main.innerHTML = route.view.template; });
+      Alpine.initTree(main);
+      mounted = route;
+      window.scrollTo(0, 0);
+    }
+
+    function resolve() {
+      const path = decodeURI(location.hash.replace(/^#/, '')) || '/';
+      const user = Alpine.store('auth').user;
+      for (const route of ROUTES) {
+        const m = path.match(route.pattern);
+        if (!m) continue;
+        if (!route.public && !user) { location.replace('#/login'); return; }
+        if (route.name === 'login' && user) { location.replace('#/'); return; }
+        const params = Object.fromEntries((route.params ?? []).map((p, i) => [p, m[i + 1]]));
+        mount(route, params);
+        return;
+      }
+      location.replace('#/');
+    }
+
+    async function boot() {
+      Alpine.start();
+      Alpine.store('auth').user = await refreshSession();
+      onAuthChange((user) => {
+        Alpine.store('auth').user = user;
+        if (!user) resolve();
+      });
+      for (const m of MODULES) {
+        try { await import(m); } catch (err) { console.error('Modul konnte nicht geladen werden:', m, err); }
+      }
+      window.addEventListener('hashchange', resolve);
+      resolve();
+    }
+    boot();
+  </script>
+</body>
+</html>
