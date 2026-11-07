@@ -80,7 +80,13 @@ function component() {
         await verifyOTP(this.otpId, this.code);
         location.hash = '#/';
       } catch (err) {
-        this.error = err?.status === 400 ? 'Der Code ist falsch oder abgelaufen.' : errorMessage(err);
+        if (err?.status === 400) {
+          this.error = 'Der Code ist falsch oder abgelaufen.';
+        } else if (err?.status === 429) {
+          this.error = 'Zu viele Fehlversuche. Bitte einige Minuten warten und dann einen neuen Code anfordern.';
+        } else {
+          this.error = errorMessage(err);
+        }
       } finally {
         this.busy = false;
       }
