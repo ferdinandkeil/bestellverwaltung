@@ -47,3 +47,4 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 - **Gruppen:** gebunden an Veranstaltung (`course`, Freitext mit Vorschlägen aus bestehenden Gruppen) und Semester (Auswahl WS/SS + Jahr, Format `WS 2026/27` / `SS 2027`); Name eindeutig je Veranstaltung + Semester. In Positions-Hinweisen und Exporten nur der Gruppenname.
 - **Moodle-Import:** Gruppen werden interaktiv zugewiesen (bestehende wählen oder neu anlegen), keine automatische Zuordnung.
 - **Dashboard mobil:** Filter einklappbar, aktive Filter als Chips. Höchstens drei Toasts gleichzeitig.
+- **Lieferschein-Erfassung (Phase 2):** OCR im Browser (Tesseract.js, selbst gehostet, keine externen Dienste). Entzerrung (jscanify + OpenCV.js) ist fester Bestandteil, da direkt aus der Web-App fotografiert wird. Bewertung am Reichelt-Beleg: mit Entzerrung 12/12 Positionen und Mengen korrekt (auch bei schrägem Foto), ohne Entzerrung 0/12. Echte Belege liegen in `samples/` (nie committen).
