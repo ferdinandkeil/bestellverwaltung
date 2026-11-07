@@ -1,0 +1,44 @@
+/* Tailwind-Quelle. Übersetzen mit: scripts/build-css.sh  →  pb_public/assets/app.css */
+@import "tailwindcss";
+
+@source "../pb_public";
+@source not "../pb_public/vendor";
+@source not "../pb_public/assets";
+
+[x-cloak] { display: none !important; }
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium
+      transition-colors disabled:cursor-not-allowed disabled:opacity-50
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600;
+  }
+  .btn-sm { @apply px-2.5 py-1.5 text-xs; }
+  .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+  .btn-secondary { @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
+  .btn-success { @apply bg-emerald-600 text-white hover:bg-emerald-700; }
+  .btn-danger { @apply border border-red-300 bg-white text-red-700 hover:bg-red-50; }
+  .btn-ghost { @apply text-slate-600 hover:bg-slate-100; }
+
+  .label { @apply mb-1 block text-xs font-medium text-slate-600; }
+  .input {
+    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
+      placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30
+      disabled:bg-slate-100 disabled:text-slate-500;
+  }
+  .hint { @apply mt-1 text-xs text-slate-500; }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset;
+  }
+
+  .modal-backdrop {
+    @apply fixed inset-0 z-40 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4;
+  }
+  .modal-panel {
+    @apply max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-2xl sm:p-6;
+  }
+}
