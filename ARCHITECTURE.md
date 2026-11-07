@@ -58,7 +58,13 @@ Projekt/
 │       ├── shop-export/
 │       ├── moodle-import/
 │       ├── word-export/
-│       ├── delivery-scanner/       # Lieferschein-Erfassung, Ansatz offen (Kap. 6)
+│       ├── delivery-scanner/       # Lieferschein-Erfassung (Kap. 6)
+│       │   ├── scanner-modal.js    # Oberfläche: Aufnahme, Ecken, Prüfmaske, Buchung
+│       │   ├── vision.js           # OpenCV.js + jscanify: Eckenerkennung, Entzerrung (lazy)
+│       │   ├── ocr.js              # Tesseract.js deu+eng, normierte Wortkoordinaten (lazy)
+│       │   ├── matcher.js          # Tabellenzeilen lesen, unscharfer Abgleich, Bestellung finden
+│       │   ├── pdf.js              # JPEG-Seiten → PDF (ohne Bibliothek)
+│       │   └── profiles/           # je Lieferant: Erkennung + Spaltenüberschriften (index.js, reichelt.js)
 │       └── part-number-check/      # Prüfung der Bestellnummern (Kap. 6)
 ├── tailwind/app.src.css            # Tailwind-Quelle
 ├── scripts/
@@ -75,7 +81,7 @@ Projekt/
 * **`groups`:** `name`, **`course`** (Veranstaltung, Pflicht), `semester` (Pflicht, Format `WS 2026/27` bzw. `SS 2027`), `contact_info`, `is_active`. Der Gruppenname ist nur **innerhalb von Veranstaltung + Semester eindeutig** (Unique-Index `idx_groups_unique_name`, Groß-/Kleinschreibung egal). Bei der Eingabe werden bestehende Veranstaltungen vorgeschlagen; in Auswahllisten erscheinen Gruppen nach Veranstaltung/Semester gegliedert.
 * **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|other`), `supplier_custom_name` (nur bei `other`, sonst leer), `supplier_order_no`, `status`, `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
 * **`order_items`:** `order`, `part_number`, `name`, `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
-* **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (Beleg-Datei, optional), `created`.
+* **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (genau eine Datei, optional: Bild oder PDF; mehrseitige Belege als PDF, max. 15 MB), `created`.
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
 
 **Artikelnummer-Regel:** `part_number` ist **immer die Shop-Bestellnummer** des jeweiligen Lieferanten (z. B. `595-SN74HC595N` bei Mouser), nicht die Herstellernummer. Eingabemaske und Moodle-Formular weisen darauf hin. Gespeichert wird normalisiert (Trim + Großbuchstaben). Eine spätere Prüf-/Korrektur-Erweiterung ist als Modul denkbar.
@@ -106,7 +112,7 @@ Projekt/
 * **Änderungen ab `bestellt`:** `qty_ordered`, `part_number`/`name`/`url`/`price_unit` (Ersatzteil) und `qty_cancelled` bleiben änderbar (bis einschl. `geliefert`). Neue Positionen nur im offenen Korb.
 
 ### 4.4 Lieferbuchungen (Route `POST /api/lab/orders/{id}/deliveries`)
-* Body: `lines: [{item, qty}]`, `note`, optional `receipt` (Datei, multipart).
+* Body: `lines: [{item, qty}]`, `note`, optional `receipt` (eine Datei, multipart; mehr als eine wird abgelehnt).
 * In einer Transaktion: `deliveries` + `delivery_items` anlegen, `qty_delivered` jeder betroffenen Position = Σ `delivery_items.qty` neu berechnen (darf nicht < 0 werden), danach Auto-Lieferstatus.
 * Schnellbuttons im UI („+1“, „Rest komplett“) erzeugen ebenfalls Buchungen; mehrere schnelle Klicks werden im UI kurz gesammelt, bevor gebucht wird.
 
@@ -132,7 +138,15 @@ registerPlugin({
 * **shop-export:** Copy&Paste-Text und CSV je Lieferant. Die Formate werden vor der Umsetzung an den echten Schnellbestell-/Upload-Masken der Shops verifiziert.
 * **moodle-import:** CSV per Drag & Drop (PapaParse), Spalten-Mapping, Vorschau. **Gruppen werden interaktiv zugewiesen:** Für jede in der CSV vorkommende Gruppenbezeichnung wählt der Nutzer eine bestehende Gruppe (mit Veranstaltung/Semester) oder legt sie neu an – es gibt keine stillschweigende automatische Zuordnung. **Kein gespeicherter Import-Bezug:** Nach dem Buchen ist die Zuordnung zu Moodle-Einträgen nicht mehr vorhanden. Die Vorschau **warnt**, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen. Gebucht wird über `POST /api/lab/cart-items`. Benötigt eine Beispiel-CSV.
 * **word-export:** PizZip + docxtemplater, Zusatzfelder in `orders.custom_fields`. Benötigt die `.docx`-Vorlage.
-* **delivery-scanner:** Ansatz (OCR des Lieferscheins, Barcode/DataMatrix der Beutel-Etiketten, PDF-Lieferschein) wird erst anhand echter Belege entschieden. Ergebnis wird immer über die Lieferbuchungs-Route gebucht (Beleg als `receipt`).
+* **delivery-scanner:** Komplett im Browser, keine Daten an Dritte. Ablauf:
+  1. **Start** aus der Bestellung (Bestellung fest) oder aus dem Dashboard (Lieferant über das Profil erkannt, Bestellung über unscharfen Vergleich der Auftragsnummer mit `supplier_order_no` der offenen Bestellungen vorgeschlagen; Nutzer bestätigt).
+  2. **Aufnahme** über die System-Kamera (`<input capture="environment">`) oder Bildauswahl, beliebig viele Seiten.
+  3. **Entzerrung:** Blattecken automatisch (jscanify/OpenCV.js), als verschiebbare Punkte angezeigt; Seite auf 1800 px Breite entzerrt.
+  4. **OCR:** Tesseract.js (deu+eng, LSTM), Wörter mit normierten Koordinaten 0..1.
+  5. **Tabelle lesen:** Spaltengrenzen aus den Überschriften des Lieferanten-Profils (z. B. Menge | Artikelnummer | Bezeichnung) – unabhängig von Bildausschnitt und Auflösung. Mengen mit OCR-Korrektur (O→0, I/l→1) nur bei sonst rein numerischem Text.
+  6. **Abgleich:** Ähnlichkeit der normierten Bestellnummern (Levenshtein) gegen die Positionen der Bestellung. *Sicher* ab 0,85 mit Abstand ≥ 0,08 zum Zweitbesten, sonst *prüfen*; zusätzlich *prüfen* bei Menge > Rückstand oder mehreren Zeilen je Position. Nicht zugeordnete Zeilen weist der Nutzer von Hand zu.
+  7. **Buchung** über die Lieferbuchungs-Route; alle Seiten als ein PDF (Graustufen-JPEG) in `receipt`. Ohne Mengen wird das PDF nur an `orders.attachments` gehängt.
+  Neue Lieferanten: Profil in `profiles/` anlegen (Erkennungsmuster + Spaltenüberschriften), sobald Beispielbelege vorliegen.
 * **part-number-check:** Prüft Bestellnummern auf das Format des jeweiligen Shops und schlägt Korrekturen vor (z. B. Herstellernummer statt Shop-Nummer erkannt). Korrekturen werden interaktiv bestätigt.
 
 ## 7. Betrieb

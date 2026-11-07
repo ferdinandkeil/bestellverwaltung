@@ -38,9 +38,10 @@
 ---
 
 ## Phase 2: Lieferschein-Erfassung (Branch `phase-2-delivery-scanner`)
-1. Vorab: echte Lieferscheine und Beutel-Etiketten der vier Lieferanten sammeln; Ansatz (OCR / Barcode-DataMatrix / PDF) evaluieren und mit dem Nutzer entscheiden.
-2. `modules/delivery-scanner/` im Slot `order-detail-actions` (ggf. zusätzlich `dashboard-actions`): Erfassen → Abgleich mit den offenen Positionen → editierbare Review-Tabelle (Bestellt | Bisher geliefert | Neu erkannt | Rückstand | Gruppen-Info).
-3. Buchung immer über die Lieferbuchungs-Route mit Beleg als `receipt`.
+1. ✔ Ansatz evaluiert und entschieden: Browser-OCR (Tesseract.js) mit Entzerrung (jscanify/OpenCV.js), Beleg als PDF.
+2. ✔ `modules/delivery-scanner/` in den Slots `order-detail-actions` und `dashboard-actions` (Details ARCHITECTURE Kap. 6), Profil Reichelt.
+3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.
+4. Offen: Test mit echten Handyfotos im Labor; Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege vorliegen.
 
 ## Phase 3: Shop-Export (Branch `phase-3-shop-export`)
 1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
