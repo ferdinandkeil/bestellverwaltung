@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PB_URL, setup, resetData, createUser, addItem, changeStatus, listRecords, admin } from './helpers.mjs';
+import { PB_URL, MAILPIT_URL, setup, resetData, createUser, addItem, changeStatus, listRecords, admin } from './helpers.mjs';
 import { enableRateLimits, disableRateLimits } from './helpers.mjs';
 import { launchBrowser, loginViaUi, sleep } from './browser.mjs';
 
@@ -133,6 +133,31 @@ try {
   const checks = rows.filter((r) => r.status === 'check').length;
   ok(`alle 12 Positionen mit richtiger Menge erkannt (${12 - checks} sicher, ${checks} zur Prüfung)`);
   await b.screenshot('scanner-04-pruefen');
+
+  // Problem melden (hier ohne echtes Problem – geprüft wird der Ablauf)
+  if (await b.evaluate(`${scanner}.recognitionFailed`)) throw new Error('Erkennung fälschlich als gescheitert eingestuft');
+  await b.evaluate(`${scanner}.reviewRows.find((r) => r.part === 'STAPELLEISTE 10G').qty = 4`); // Korrektur von Hand
+  await b.clickText('[x-data=deliveryScanner] button', 'Problem melden');
+  await b.waitFor(`document.querySelector('[data-scan-report]')?.offsetParent`, 'Meldeformular');
+  await b.fill('[data-scan-report] textarea', 'Test-Meldung aus dem Browser-Durchlauf');
+  const reportedAt = Date.now();
+  await b.clickText('[data-scan-report] button', 'Meldung senden');
+  await b.waitFor(`${scanner}.reported`, 'Meldung gesendet', 30000);
+  const [report] = await listRecords('scan_reports');
+  if (report.photos.length !== 1 || report.order !== orderId || report.note !== 'Test-Meldung aus dem Browser-Durchlauf') {
+    throw new Error('Meldung unvollständig: ' + JSON.stringify({ ...report, analysis: undefined }));
+  }
+  const an = report.analysis;
+  const stapel = an.review.find((r) => r.part === 'STAPELLEISTE 10G');
+  if (an.profile !== 'reichelt' || an.pages[0].ocr.words.length < 50 || !an.pages[0].cornersAuto || an.rows.length !== 12
+      || stapel.recognized !== 5 || stapel.entered !== 4) {
+    throw new Error('Analyse-Daten unvollständig: ' + JSON.stringify({ profile: an.profile, words: an.pages[0].ocr?.words.length, rows: an.rows.length, stapel }));
+  }
+  const mails = await (await fetch(`${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent('subject:"Problem gemeldet"')}`)).json();
+  if (!mails.messages?.some((m) => new Date(m.Created).getTime() >= reportedAt - 2000)) throw new Error('Keine Mail zur Meldung');
+  ok(`Problem gemeldet: Originalfoto, ${an.pages[0].ocr.words.length} OCR-Wörter, erkannte + korrigierte Mengen, Mail an Admin`);
+  await b.screenshot('scanner-05-gemeldet');
+  await b.evaluate(`${scanner}.reviewRows.find((r) => r.part === 'STAPELLEISTE 10G').qty = 5`);
 
   await b.evaluate('window.confirm = () => true');
   await b.clickText('[x-data=deliveryScanner] button', 'Lieferung buchen');

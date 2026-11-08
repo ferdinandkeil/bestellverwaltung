@@ -126,6 +126,12 @@ export function rectify(canvas, corners) {
   return scanner.extractPaper(canvas, width, height, corners);
 }
 
+/** Canvas → JPEG-Blob in Farbe (Originalfoto für Problem-Meldungen). */
+export function toJpeg(canvas, quality = 0.85) {
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('JPEG-Erzeugung fehlgeschlagen.'))), 'image/jpeg', quality));
+}
+
 /** Canvas → JPEG-Blob in Graustufen (kleiner, für Beleg-PDF). */
 export function toGrayJpeg(canvas, quality = 0.75) {
   const out = document.createElement('canvas');
