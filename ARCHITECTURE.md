@@ -35,6 +35,7 @@ Projekt/
 ├── pb_schema.json                  # Collections im PocketBase-Importformat (≥ v0.23)
 ├── pb_hooks/                       # Serverseitige Geschäftslogik (PocketBase JSVM)
 │   ├── routes.pb.js                # Registrierung der /api/lab/* Routen
+│   ├── mcp.pb.js                   # MCP-Endpunkt /mcp für Claude Code (Phase 7, geplant)
 │   ├── record-hooks.pb.js          # created_by setzen, Status nach Positionsänderung neu berechnen
 │   └── lib/
 │       ├── cart.js                 # Sammel-Warenkorb-Merge
@@ -161,6 +162,7 @@ registerPlugin({
   7. **Buchung** über die Lieferbuchungs-Route; alle Seiten als ein PDF (Graustufen-JPEG) in `receipt`. Ohne Mengen wird das PDF nur an `orders.attachments` gehängt.
   Neue Lieferanten: Profil in `profiles/` anlegen (Erkennungsmuster + Spaltenüberschriften), sobald Beispielbelege vorliegen.
 * **part-number-check:** Prüft Bestellnummern auf das Format des jeweiligen Shops und schlägt Korrekturen vor (z. B. Herstellernummer statt Shop-Nummer erkannt). Korrekturen werden interaktiv bestätigt.
+* **MCP-Zugang für Claude Code (Phase 7, geplant):** Route `/mcp` in `pb_hooks` stellt ausgewählte Funktionen als MCP-Werkzeuge bereit (Streamable HTTP). Zugriff nur mit dem Token eines eigenen Dienst-Nutzers „KI-Assistent“ (widerrufbar, gleiche API-Rules wie Labor-Nutzer). Lesende Werkzeuge plus „Position in Sammelkorb“ und „Notiz setzen“; Lieferbuchungen, Statuswechsel und Löschen bleiben Menschen vorbehalten. Voraussetzung: Datenschutz-Freigabe der Hochschule.
 
 ## 7. UI-Konventionen
 * **Mobile-First:** große Touch-Ziele (Schnellbuttons „+1“, „Rest komplett“), Modals als Bottom-Sheet auf dem Smartphone.

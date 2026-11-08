@@ -63,3 +63,11 @@
 ## Phase 6: Prüfung der Bestellnummern (Branch `phase-6-part-number-check`)
 1. Vorab: Formatregeln der Shop-Bestellnummern zusammentragen und mit dem Nutzer abstimmen (z. B. Mouser `NNN-…`); klären, ob Online-Abfragen bei den Shops gewünscht/zulässig sind.
 2. `modules/part-number-check/` im Slot `order-detail-actions` (und als Prüfschritt im Moodle-Import nutzbar): auffällige Nummern markieren, Korrekturvorschläge interaktiv bestätigen.
+
+## Phase 7: Zugriff für Claude Code per MCP (Branch `phase-7-mcp`)
+1. Vorab: mit der Hochschule klären, ob Bestelldaten an Claude übermittelt werden dürfen (Datenschutz); ohne Freigabe keine Umsetzung.
+2. Dienst-Nutzer „KI-Assistent“ in `users`; langlebiges Token wird vom Admin ausgestellt (Impersonate) und ist durch Zurücksetzen des `tokenKey` sofort widerrufbar. Es gelten dieselben API-Rules; Ersteller/Bucher ist sichtbar „KI-Assistent“.
+3. MCP-Server als Route `/mcp` in `pb_hooks` (Streamable HTTP, JSON-RPC: `initialize`, `tools/list`, `tools/call`), Authentifizierung per `Authorization`-Header.
+4. Werkzeuge – lesend: Bestellungen suchen/anzeigen, Rückstände je Gruppe/Veranstaltung, Kosten einer Bestellung, Gruppen auflisten; schreibend: Position in den Sammelkorb legen (über die vorhandene Transaktionslogik), Notiz setzen. **Nicht** enthalten: Lieferungen buchen, Status ändern, Löschen (Schutz vor manipulierten Eingaben, z. B. aus Moodle-Daten).
+5. Einrichtung in Claude Code dokumentieren (`claude mcp add --transport http …` mit Header) in `docs/DEPLOYMENT.md`.
+6. Tests: Protokoll-Handshake, Werkzeugliste, Rechte (ohne/mit ungültigem Token), Schreibwerkzeuge nur im erlaubten Umfang.
