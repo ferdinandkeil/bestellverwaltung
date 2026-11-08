@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PB_URL, setup, resetData, createUser, addItem, changeStatus, listRecords, admin } from './helpers.mjs';
+import { enableRateLimits, disableRateLimits } from './helpers.mjs';
 import { launchBrowser, loginViaUi, sleep } from './browser.mjs';
 
 const ORDER_NO = '2026IW01047';
@@ -85,6 +86,7 @@ async function makePhoto(b, dir) {
 
 const ok = (msg) => console.log('✔', msg);
 const { orderId, login } = await seed();
+await enableRateLimits(); // Browser-Durchlauf unter Produktionsbedingungen
 const work = mkdtempSync(join(tmpdir(), 'bestellverwaltung-e2e-scanner-'));
 const b = await launchBrowser(join(work, 'profile'));
 let failed = false;
@@ -156,6 +158,7 @@ try {
   console.error('✖', err.message);
   await b.screenshot('scanner-fehler').catch(() => {});
 } finally {
+  await disableRateLimits().catch(() => {});
   await b.close();
   rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

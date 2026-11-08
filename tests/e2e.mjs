@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   PB_URL, setup, resetData, createUser, createGroup, addItem, changeStatus, bookDelivery,
+  enableRateLimits, disableRateLimits,
 } from './helpers.mjs';
 import { launchBrowser, otpFromMailpit, sleep } from './browser.mjs';
 
@@ -33,6 +34,7 @@ const ORDER_LINKS = `document.querySelectorAll('#view ul a[href^="#/orders/"]')`
 const BADGE = `document.querySelector('#view .badge').innerText.trim()`;
 
 const { groupA, login } = await seed();
+await enableRateLimits(); // Browser-Durchlauf unter Produktionsbedingungen
 const profile = mkdtempSync(join(tmpdir(), 'bestellverwaltung-e2e-'));
 const b = await launchBrowser(profile);
 let failed = false;
@@ -148,6 +150,7 @@ try {
   console.error('✖', err.message);
   await b.screenshot('fehler').catch(() => {});
 } finally {
+  await disableRateLimits().catch(() => {});
   await b.close();
   rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
