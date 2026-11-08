@@ -1,9 +1,16 @@
 // Problem-Meldungen der Lieferschein-Erfassung: Rechte, Validierung, Mail an die Superuser.
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
-  setup, createUser, addItem, http, admin, expectHttpError, PB_URL, MAILPIT_URL,
+  setup, createUser, addItem, http, admin, expectHttpError, listRecords, resetData, PB_URL, MAILPIT_URL,
 } from './helpers.mjs';
+
+const FETCH_SCRIPT = fileURLToPath(new URL('../scripts/fetch-scan-reports.mjs', import.meta.url));
 
 before(setup);
 
@@ -83,3 +90,84 @@ test('Meldung nur im eigenen Namen, mit Fotos und passender Seitenzahl', async (
   const mismatch = await expectHttpError(http('POST', url, { token, form: reportForm({ reportedBy: user.id, pages: 3, photos: 2 }) }), 400);
   assert.match(mismatch.body.message, /Anzahl der Seiten/);
 });
+
+/** Abhol-Skript ausführen; onOutput(text, child) erlaubt Eingaben (z. B. OTP-Code). */
+function runFetch(args, { onOutput } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [FETCH_SCRIPT, PB_URL, ...args], {
+      env: { ...process.env, PB_ADMIN_EMAIL: process.env.PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD: process.env.PB_ADMIN_PASSWORD },
+    });
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; onOutput?.(out, child); });
+    child.stderr.on('data', (d) => { out += d; });
+    child.on('error', reject);
+    child.on('close', (code) => (code === 0 ? resolve(out) : reject(new Error(`Exit ${code}: ${out}`))));
+  });
+}
+
+test('Abhol-Skript: lädt Fotos und Analyse herunter, mit --keep bleibt die Meldung, sonst wird sie gelöscht', async () => {
+  await resetData();
+  const { user, token } = await createUser();
+  const report = await http('POST', '/api/collections/scan_reports/records', {
+    token, form: reportForm({ reportedBy: user.id, note: 'abholen' }),
+  });
+  const out = mkdtempSync(join(tmpdir(), 'scan-reports-'));
+  try {
+    await runFetch(['--keep', '--out', out]);
+    assert.equal((await listRecords('scan_reports')).length, 1, '--keep löscht nicht');
+    const [dir] = readdirSync(out);
+    assert.match(dir, new RegExp(`_${report.id}$`));
+    assert.deepEqual(readdirSync(join(out, dir)).sort(), ['report.json', 'seite-01.jpg', 'seite-02.jpg']);
+    assert.deepEqual(readFileSync(join(out, dir, 'seite-01.jpg')), JPEG);
+    const saved = JSON.parse(readFileSync(join(out, dir, 'report.json'), 'utf8'));
+    assert.equal(saved.note, 'abholen');
+    assert.equal(saved.analysis.pages.length, 2);
+
+    const second = await runFetch(['--out', out]);
+    assert.match(second, /bereits vorhanden/);
+    assert.match(second, /auf dem Server gelöscht/);
+    assert.equal((await listRecords('scan_reports')).length, 0);
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});
+
+test('Abhol-Skript: Anmeldung mit MFA (Passwort + Code aus der Mail) wie im Betrieb', async () => {
+  const token = await admin();
+  const { user, token: userToken } = await createUser();
+  await http('POST', '/api/collections/scan_reports/records', { token: userToken, form: reportForm({ reportedBy: user.id, pages: 1, photos: 1 }) });
+  await http('PATCH', '/api/collections/_superusers', { token, json: { mfa: { enabled: true }, otp: { enabled: true } } });
+  const out = mkdtempSync(join(tmpdir(), 'scan-reports-'));
+  const startedAt = Date.now();
+  try {
+    let sent = false;
+    const output = await runFetch(['--out', out], {
+      onOutput: async (text, child) => {
+        if (sent || !text.includes('Code aus der Mail')) return;
+        sent = true;
+        const code = await otpFor(process.env.PB_ADMIN_EMAIL, startedAt);
+        child.stdin.write(code + '\n');
+      },
+    });
+    assert.ok(sent, 'Skript hat nach dem Code gefragt');
+    assert.match(output, /1 Seite\(n\)/);
+    assert.equal((await listRecords('scan_reports')).length, 0);
+  } finally {
+    await http('PATCH', '/api/collections/_superusers', { token, json: { mfa: { enabled: false }, otp: { enabled: false } } });
+    rmSync(out, { recursive: true, force: true });
+  }
+});
+
+async function otpFor(email, notBefore) {
+  for (let i = 0; i < 50; i++) {
+    const list = await (await fetch(`${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent('to:' + email)}`)).json();
+    for (const m of list.messages ?? []) {
+      if (new Date(m.Created).getTime() < notBefore - 2000) continue;
+      const full = await (await fetch(`${MAILPIT_URL}/api/v1/message/${m.ID}`)).json();
+      const code = full.Text.match(/\b(\d{6,})\b/)?.[1];
+      if (code) return code;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('Kein OTP-Code für ' + email);
+}
