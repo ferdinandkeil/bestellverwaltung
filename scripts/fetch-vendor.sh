@@ -25,6 +25,14 @@ FILES=(
   "tesseract.js-core@7.0.0               tesseract-core-lstm.wasm.js"
   "tesseract.js-core@7.0.0               tesseract-core-simd-lstm.wasm.js"
   "tesseract.js-core@7.0.0               tesseract-core-relaxedsimd-lstm.wasm.js"
+  # Lizenztexte (werden mit ausgeliefert; Übersicht in THIRD_PARTY_NOTICES.md)
+  "pocketbase@0.28.1                     LICENSE.md"
+  "jscanify@1.4.3                        LICENSE"
+  "@techstark/opencv-js@5.0.0-release.1  LICENSE"
+  "tesseract.js@7.0.0                    LICENSE.md"
+  "tesseract.js@7.0.0                    dist/worker.min.js.LICENSE.txt"
+  "tesseract.js@7.0.0                    dist/tesseract.min.js.LICENSE.txt"
+  "tesseract.js-core@7.0.0               LICENSE"
   # Tesseract.js erwartet alle Sprachdaten in einem Verzeichnis (langPath):
   "@tesseract.js-data/deu@1.0.0          4.0.0_best_int/deu.traineddata.gz  tessdata/4.0.0_best_int/deu.traineddata.gz"
   "@tesseract.js-data/eng@1.0.0          4.0.0_best_int/eng.traineddata.gz  tessdata/4.0.0_best_int/eng.traineddata.gz"
