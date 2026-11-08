@@ -1,6 +1,6 @@
 # Implementierungsplan
 
-> Stand: 2026-11-07 – überarbeitet nach kritischer Plan-Review.
+> Stand: 2026-11-08. Phase 1 abgenommen; Phase 2 als Beta in `main` (Abnahme nach Handytest). Nächste Schritte: Go-Live, dann Phase 3.
 >
 > Phasenweise arbeiten, nach jeder Phase Feedback einholen. Kein JS-Build (kein npm/Vite/Webpack); einzige Ausnahme ist der CSS-Build mit dem Tailwind Standalone CLI. Vorgaben: `ARCHITECTURE.md`, `pb_schema.json`, `CLAUDE.md`.
 
@@ -30,28 +30,34 @@
 
 ---
 
-## Meilenstein: Go-Live (nach Phase 1)
-1. Uberspace nach `docs/DEPLOYMENT.md` einrichten (Dienst, Domain, SMTP, Admin mit 2FA, Backups).
-2. Schema importieren, erste Labor-Nutzer und Gruppen anlegen, Probebetrieb.
-3. Erfahrungen aus dem Probebetrieb als Rückmeldung für die folgenden Phasen sammeln.
+## Meilenstein: Go-Live (Phase 1 + Phase 2 als Beta)
+1. Durchführung durch den Nutzer nach der Checkliste in `docs/DEPLOYMENT.md` (Kap. 0); Login-Mails über ein Postfach auf Uberspace.
+2. Härtung: Rate-Limiting aktiv, Proxy-Header für die Client-IP, MFA für den Admin, Backups geprüft.
+3. Erste Labor-Nutzer und Gruppen anlegen, Probebetrieb. Bestellwünsche bis Phase 3 von Hand erfassen.
+4. Erfahrungen aus dem Probebetrieb (inkl. Scanner-Beta mit echten Lieferscheinen) als Rückmeldung für die folgenden Phasen sammeln.
 
 ---
 
 ## Phase 2: Lieferschein-Erfassung (Branch `phase-2-delivery-scanner`)
-1. Vorab: echte Lieferscheine und Beutel-Etiketten der vier Lieferanten sammeln; Ansatz (OCR / Barcode-DataMatrix / PDF) evaluieren und mit dem Nutzer entscheiden.
-2. `modules/delivery-scanner/` im Slot `order-detail-actions` (ggf. zusätzlich `dashboard-actions`): Erfassen → Abgleich mit den offenen Positionen → editierbare Review-Tabelle (Bestellt | Bisher geliefert | Neu erkannt | Rückstand | Gruppen-Info).
-3. Buchung immer über die Lieferbuchungs-Route mit Beleg als `receipt`.
 
-## Phase 3: Shop-Export (Branch `phase-3-shop-export`)
-1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
-2. `modules/shop-export/shop-exporter.js` im Slot `order-detail-actions`: Modal mit Copy-to-Clipboard und CSV-Download (Menge = `qty_ordered − qty_cancelled`).
-3. Button „Exportiert & auf ‚Bestellt‘ setzen“ (optional mit `supplier_order_no`) über die Status-Route.
+**Status:** als **Beta** in `main` und im Go-Live enthalten (in der App gekennzeichnet); endgültige Abnahme nach dem Test mit echten Handyfotos.
+1. ✔ Ansatz evaluiert und entschieden: Browser-OCR (Tesseract.js) mit Entzerrung (jscanify/OpenCV.js), Beleg als PDF.
+2. ✔ `modules/delivery-scanner/` in den Slots `order-detail-actions` und `dashboard-actions` (Details ARCHITECTURE Kap. 6), Profil Reichelt.
+3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.
+4. Offen:
+   * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
+   * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege in `samples/` liegen.
 
-## Phase 4: Moodle-Import (Branch `phase-4-moodle-import`)
+## Phase 3: Moodle-Import (Branch `phase-3-moodle-import`)
 1. Vorab: Beispiel-CSV aus Moodle beschaffen (Spalten, Lieferantenangabe, Gruppen-Schreibweisen).
 2. `modules/moodle-import/moodle-importer.js` (PapaParse aus `vendor/`) im Slot `dashboard-actions`: Drag & Drop, Spalten-Mapping, Vorschau.
 3. **Interaktive Gruppenzuweisung:** Für jede Gruppenbezeichnung aus der CSV wählt der Nutzer eine bestehende Gruppe (Veranstaltung/Semester) oder legt sie neu an. Keine automatische Zuordnung.
 4. Warnung, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen; Buchen über `POST /api/lab/cart-items`.
+
+## Phase 4: Shop-Export (Branch `phase-4-shop-export`)
+1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
+2. `modules/shop-export/shop-exporter.js` im Slot `order-detail-actions`: Modal mit Copy-to-Clipboard und CSV-Download (Menge = `qty_ordered − qty_cancelled`).
+3. Button „Exportiert & auf ‚Bestellt‘ setzen“ (optional mit `supplier_order_no`) über die Status-Route.
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
@@ -60,3 +66,11 @@
 ## Phase 6: Prüfung der Bestellnummern (Branch `phase-6-part-number-check`)
 1. Vorab: Formatregeln der Shop-Bestellnummern zusammentragen und mit dem Nutzer abstimmen (z. B. Mouser `NNN-…`); klären, ob Online-Abfragen bei den Shops gewünscht/zulässig sind.
 2. `modules/part-number-check/` im Slot `order-detail-actions` (und als Prüfschritt im Moodle-Import nutzbar): auffällige Nummern markieren, Korrekturvorschläge interaktiv bestätigen.
+
+## Phase 7: Zugriff für Claude Code per MCP (Branch `phase-7-mcp`)
+1. Datengrundlage: Es werden nur Bestelldaten und Daten der Labor-Nutzer übermittelt. Labor-Nutzer (Name, E-Mail) sind öffentlich (Homepage der TH); Daten von Studierenden werden im System gar nicht gespeichert (Gruppen ohne Kontaktfeld). Belege und Anhänge werden nur als Dateiname genannt, nicht inhaltlich übertragen.
+2. Dienst-Nutzer „KI-Assistent“ in `users`; langlebiges Token wird vom Admin ausgestellt (Impersonate) und ist durch Zurücksetzen des `tokenKey` sofort widerrufbar. Es gelten dieselben API-Rules; Ersteller/Bucher ist sichtbar „KI-Assistent“.
+3. MCP-Server als Route `/mcp` in `pb_hooks` (Streamable HTTP, JSON-RPC: `initialize`, `tools/list`, `tools/call`), Authentifizierung per `Authorization`-Header.
+4. Werkzeuge – lesend: Bestellungen suchen/anzeigen, Rückstände je Gruppe/Veranstaltung, Kosten einer Bestellung, Gruppen auflisten; schreibend: Position in den Sammelkorb legen (über die vorhandene Transaktionslogik), Notiz setzen. **Nicht** enthalten: Lieferungen buchen, Status ändern, Löschen (Schutz vor manipulierten Eingaben, z. B. aus Moodle-Daten).
+5. Einrichtung in Claude Code dokumentieren (`claude mcp add --transport http …` mit Header) in `docs/DEPLOYMENT.md`.
+6. Tests: Protokoll-Handshake, Werkzeugliste, Rechte (ohne/mit ungültigem Token), Schreibwerkzeuge nur im erlaubten Umfang, keine Dateiinhalte in Antworten.

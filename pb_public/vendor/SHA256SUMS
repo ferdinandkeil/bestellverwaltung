@@ -1,3 +1,12 @@
 a33d2b1ce6ff039700cc5cb4e0850502db8b44be7cdbe5efbcb4a5f7faa2cfc4  alpinejs@3.17.5/dist/module.esm.js
+a09dadd36ad4103e693523677f1aba3740d06f2dcdeb3ed87c66022e6ac0d13d  jscanify@1.4.3/src/jscanify.js
 73a94f485cdb408317dab6e3c2e6ada6325a1445b35256df4c347d369aa3404a  pocketbase@0.28.1/dist/pocketbase.es.mjs
 3ea0000fbc6236a35995f12718aa6d3913c795f02223ffadc937c421e1237990  pocketbase@0.28.1/dist/pocketbase.es.mjs.map
+b873c8211421da7b9bf41ae157a923f05a46a0b8d3e5904c44c6f3ad6d39a1bd  @techstark/opencv-js@5.0.0-release.1/dist/opencv.js
+306c4280d0cbed46fbff727486bd43b92730181bae80f56941a091f363bdf28b  tessdata/4.0.0_best_int/deu.traineddata.gz
+45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91  tessdata/4.0.0_best_int/eng.traineddata.gz
+64871d76c75609fd5413b88a8171e2ef40deedd77d5875ba23df104b2d05eb29  tesseract.js@7.0.0/dist/tesseract.esm.min.js
+576b7df7e3393e137e51849357c9adb53fe7ac1bb69bfa06cf3d61520f182c6d  tesseract.js@7.0.0/dist/worker.min.js
+eef5f8b2f8e20e150680b20adaec4a60babafee3adbe8a94583c81fee46e8680  tesseract.js-core@7.0.0/tesseract-core-lstm.wasm.js
+861a536cf9ef8e63cb644d57bab39c388f37f7d6b6f60024b741c5f6b39a59b3  tesseract.js-core@7.0.0/tesseract-core-relaxedsimd-lstm.wasm.js
+c58b46a4c796c0b8afccf77591d5b875b6896b45d402bbce8caa6f5362447b38  tesseract.js-core@7.0.0/tesseract-core-simd-lstm.wasm.js

@@ -19,31 +19,14 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 ## Git
 
 - **Repository:** lokales Git-Repo im Projektordner. `pb_data/`, die PocketBase-Binary und lokale Testartefakte stehen in `.gitignore` und werden nie committet.
-- **Branches:** pro Phase ein Feature-Branch (`phase-1-core`, `phase-2-delivery-scanner`, `phase-3-shop-export`, `phase-4-moodle-import`, `phase-5-word-export`, `phase-6-part-number-check`). In `main` wird erst nach Freigabe der Phase durch den Nutzer gemergt.
+- **Branches:** pro Phase ein Feature-Branch (`phase-1-core`, `phase-2-delivery-scanner`, `phase-3-moodle-import`, `phase-4-shop-export`, `phase-5-word-export`, `phase-6-part-number-check`, `phase-7-mcp`). In `main` wird erst nach Freigabe der Phase durch den Nutzer gemergt.
 - **Commits:** selbstständig und kleinschrittig, nach jedem sinnvollen, in sich abgeschlossenen Schritt. Commit-Nachrichten auf Deutsch, kurz und aussagekräftig (was und warum).
 - **Remote / Push:** gepusht wird nur auf ausdrückliche Anweisung. Keine History-Umschreibungen (force-push, rebase veröffentlichter Commits) ohne Rückfrage.
 
-## Getroffene Entscheidungen
+## Wo Entscheidungen stehen
 
-- **PocketBase-Version:** aktuelles PocketBase (≥ v0.23, wegen Email-OTP). `pb_schema.json` liegt im aktuellen Import-Format vor (getestet mit v0.40.6, Import über Admin-UI → Settings → Import collections). Die Auth-Einstellungen der `users` (OTP an, Passwort-Login aus, Token-Dauer 30 Tage) sind im JSON enthalten.
-- **Bibliotheken:** selbst gehostet unter `pb_public/vendor/<name>@<version>/`, immer feste Version, nie `@latest`, keine CDN-Aufrufe zur Laufzeit.
-- **Lieferant `other`:** pro `supplier_custom_name` ein eigener offener Sammel-Warenkorb (statt eines gemeinsamen `other`-Korbs).
-- **Ein offener Korb – DB-seitig abgesichert:** Unique-Index `idx_orders_one_open_cart` auf `orders (supplier, supplier_custom_name COLLATE NOCASE) WHERE status = 'angefragt'`. `api.js` fängt den Konflikt ab und verwendet den vorhandenen Korb. Bei Lieferanten außer `other` ist `supplier_custom_name` leer.
-- **Auto-Lieferstatus:** `recalculateOrderStatus` rechnet bei `bestellt`, `teilgeliefert` **und** `geliefert` neu (nachträgliche Korrekturen nach unten werden berücksichtigt). Ab `geprueft` keine automatische Änderung mehr.
-- **Status zurück:** Button „Einen Schritt zurück“ mit Sicherheitsabfrage. Ein Zurücksetzen auf `angefragt` wird verweigert, wenn für den Lieferanten bereits ein anderer offener Korb existiert.
-- **Kernlogik serverseitig** in PocketBase-Hooks (Merge, Status, Lieferbuchungen); `core/api.js` ist nur ein Client.
-- **Lieferhistorie:** Collections `deliveries` + `delivery_items`; `qty_delivered` = Summe der Buchungen (nur Hook). Korrekturen per Gegenbuchung.
-- **Storno:** `order_items.qty_cancelled`; Position erledigt, wenn geliefert + storniert ≥ bestellt.
-- **Ab `bestellt` änderbar:** Mengen, Ersatzteil-Daten, Storno. Neue Positionen nur im offenen Korb.
-- **Löschen von Bestellungen** nur im Status `angefragt` (sonst Admin).
-- **Moodle-Import:** kein gespeicherter Import-Bezug (`moodle_entry_ids` entfällt); nur Warnung, wenn Artikelnummer + Gruppe schon im offenen Korb stehen.
-- **Artikelnummer:** ein Feld, immer Shop-Bestellnummer. Ggf. später Prüf-/Korrektur-Plugin.
-- **Gruppennamen in Allokationen:** Momentaufnahme, Umbenennungen werden nicht nachgezogen.
-- **Kosten:** `orders.shipping_cost`, MwSt. 19 % berechnet, `orders.invoice_total` von Hand. Kein Backorder-Feld.
-- **Login:** OTP-Mail deutsch, Gültigkeit 10 min, Hinweis in der Login-Maske; keine Selbstregistrierung.
-- **Phasen-Reihenfolge:** 1 Kern → Go-Live → 2 Lieferschein-Erfassung (erst mit echten Belegen konzipieren) → 3 Shop-Export → 4 Moodle-Import → 5 Word-Export → 6 Prüfung der Bestellnummern.
-- **Test-Mailserver:** Mailpit lokal.
-- **Komplett storniert ohne Lieferung:** Status wird automatisch `geliefert` (bestätigt).
-- **Gruppen:** gebunden an Veranstaltung (`course`, Freitext mit Vorschlägen aus bestehenden Gruppen) und Semester (Auswahl WS/SS + Jahr, Format `WS 2026/27` / `SS 2027`); Name eindeutig je Veranstaltung + Semester. In Positions-Hinweisen und Exporten nur der Gruppenname.
-- **Moodle-Import:** Gruppen werden interaktiv zugewiesen (bestehende wählen oder neu anlegen), keine automatische Zuordnung.
-- **Dashboard mobil:** Filter einklappbar, aktive Filter als Chips. Höchstens drei Toasts gleichzeitig.
+- **Fachliche und technische Entscheidungen** (Datenmodell, Rechte, Workflow, Module, UI-Konventionen, Tests, Betrieb): `ARCHITECTURE.md` – verbindliche Quelle.
+- **Reihenfolge, Umfang und offene Punkte der Phasen:** `IMPLEMENTATION_PLAN.md`.
+- **Betrieb, Deploy, Backup:** `docs/DEPLOYMENT.md`.
+- Neue Entscheidungen werden direkt in diesen Dokumenten festgehalten (nicht hier) und mit dem zugehörigen Code committet.
+- Echte Belege in `samples/` enthalten Kundendaten und werden nie committet.

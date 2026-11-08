@@ -124,3 +124,16 @@ export async function expectHttpError(promise, status) {
   }
   throw new Error(`Erwartet: HTTP ${status}, aber Anfrage war erfolgreich.`);
 }
+
+/** Rate-Limiting mit den PocketBase-Standardregeln einschalten (wie im Produktivbetrieb). */
+export async function enableRateLimits() {
+  const token = await admin();
+  const settings = await http('GET', '/api/settings', { token });
+  await http('PATCH', '/api/settings', { token, json: { rateLimits: { ...settings.rateLimits, enabled: true } } });
+}
+
+export async function disableRateLimits() {
+  const token = await admin();
+  const settings = await http('GET', '/api/settings', { token });
+  await http('PATCH', '/api/settings', { token, json: { rateLimits: { ...settings.rateLimits, enabled: false } } });
+}
