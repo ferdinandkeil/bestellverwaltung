@@ -1,6 +1,6 @@
 # Implementierungsplan
 
-> Stand: 2026-11-08. Phase 1 abgenommen und in `main` gemergt; Phase 2 umgesetzt, Abnahme ausstehend.
+> Stand: 2026-11-08. Phase 1 abgenommen; Phase 2 als Beta in `main` (Abnahme nach Handytest). Nächste Schritte: Go-Live, dann Phase 3.
 >
 > Phasenweise arbeiten, nach jeder Phase Feedback einholen. Kein JS-Build (kein npm/Vite/Webpack); einzige Ausnahme ist der CSS-Build mit dem Tailwind Standalone CLI. Vorgaben: `ARCHITECTURE.md`, `pb_schema.json`, `CLAUDE.md`.
 
@@ -30,14 +30,17 @@
 
 ---
 
-## Meilenstein: Go-Live (nach Phase 1)
-1. Uberspace nach `docs/DEPLOYMENT.md` einrichten (Dienst, Domain, SMTP, Admin mit 2FA, Backups).
-2. Schema importieren, erste Labor-Nutzer und Gruppen anlegen, Probebetrieb.
-3. Erfahrungen aus dem Probebetrieb als Rückmeldung für die folgenden Phasen sammeln.
+## Meilenstein: Go-Live (Phase 1 + Phase 2 als Beta)
+1. Durchführung durch den Nutzer nach der Checkliste in `docs/DEPLOYMENT.md` (Kap. 0); Login-Mails über ein Postfach auf Uberspace.
+2. Härtung: Rate-Limiting aktiv, Proxy-Header für die Client-IP, MFA für den Admin, Backups geprüft.
+3. Erste Labor-Nutzer und Gruppen anlegen, Probebetrieb. Bestellwünsche bis Phase 3 von Hand erfassen.
+4. Erfahrungen aus dem Probebetrieb (inkl. Scanner-Beta mit echten Lieferscheinen) als Rückmeldung für die folgenden Phasen sammeln.
 
 ---
 
 ## Phase 2: Lieferschein-Erfassung (Branch `phase-2-delivery-scanner`)
+
+**Status:** als **Beta** in `main` und im Go-Live enthalten (in der App gekennzeichnet); endgültige Abnahme nach dem Test mit echten Handyfotos.
 1. ✔ Ansatz evaluiert und entschieden: Browser-OCR (Tesseract.js) mit Entzerrung (jscanify/OpenCV.js), Beleg als PDF.
 2. ✔ `modules/delivery-scanner/` in den Slots `order-detail-actions` und `dashboard-actions` (Details ARCHITECTURE Kap. 6), Profil Reichelt.
 3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.

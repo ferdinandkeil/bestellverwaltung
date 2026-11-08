@@ -15,7 +15,7 @@
   * **Mobile-First:** Smartphone-Nutzung am Auspack-Tisch im Labor.
 
 ## 2. Authentifizierung, Rollen & Sicherheit
-1. **System-Admin (`_superusers`):** Ausschließlich über das PocketBase Admin-UI (`/_/`), Passwort + 2FA (TOTP). Legt Labor-Nutzer an.
+1. **System-Admin (`_superusers`):** Ausschließlich über das PocketBase Admin-UI (`/_/`), Passwort + zweiter Faktor per E-Mail-Code (PocketBase-MFA; TOTP-Apps unterstützt PocketBase nicht). Legt Labor-Nutzer an.
 2. **Labor-Nutzer (`users`):**
    * **Login:** Passwortlos per **Email-OTP** (`requestOTP(email)` → `authWithOTP(otpId, code)`). Passwort-Login deaktiviert. OTP-Gültigkeit **10 Minuten**, OTP-Mail **auf Deutsch** (beides in `pb_schema.json`).
    * **Keine Selbstregistrierung** (`createRule: null`). Für unbekannte Adressen verschickt PocketBase bewusst keinen Code (Schutz vor Konten-Ausspähung); die Login-Maske weist darauf hin: *„Kein Code erhalten? Ihr Konto muss vom Admin angelegt sein.“*
@@ -178,6 +178,7 @@ registerPlugin({
 * Nach Änderungen an `pb_hooks/` oder am Schema: `tests/run.sh`; nach UI-Änderungen zusätzlich `scripts/build-css.sh` und `tests/run.sh --e2e`.
 
 ## 9. Betrieb
+* **Produktivbetrieb:** Rate-Limiting aktiv, Client-IP über den Proxy-Header `X-Forwarded-For` (Uberspace-Proxy), Login-Mails über ein Postfach auf Uberspace.
 * `pb_data/` liegt **nie** in Dropbox (SQLite/WAL kann durch Sync beschädigt werden). Lokale Test-Instanzen liegen außerhalb des Projektordners.
 * Lokale Entwicklung: `scripts/dev-server.sh` (PocketBase + Mailpit), Daten unter `~/.local/share/bestellverwaltung-dev/`.
 * Deploy, Dienst-Einrichtung, Backup und Updates auf Uberspace: `docs/DEPLOYMENT.md`.

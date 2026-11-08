@@ -1,5 +1,30 @@
 # Betrieb auf Uberspace
 
+## 0. Checkliste Go-Live
+
+**Vorbereitung**
+- [ ] Uberspace-Konto und Adresse der App (Subdomain) festgelegt
+- [ ] Liste der Labor-Nutzer (Name, E-Mail) und Veranstaltungen/Gruppen des Semesters liegt vor
+- [ ] Lokal auf `main`: `tests/run.sh --e2e` grün
+
+**Einrichtung** (Kap. 1–4)
+- [ ] PocketBase installiert, Dienst läuft (`supervisorctl status bestellverwaltung`), Web-Backend gesetzt
+- [ ] Admin angelegt; Schema importiert; App-Name/-URL gesetzt
+- [ ] Proxy-Header gesetzt und in den Logs geprüft; Rate limiting aktiv
+- [ ] Postfach angelegt, Test-Mail an TH-Adresse kommt im Posteingang an
+- [ ] MFA für den Admin aktiv (erst nach funktionierendem Mailversand)
+- [ ] App deployt (Kap. 3)
+- [ ] Auto-Backups aktiv, ein Backup manuell erzeugt, heruntergeladen und geprüft
+
+**Abnahme im Betrieb**
+- [ ] Eigener Login per Code am Rechner und am Smartphone
+- [ ] Gruppe anlegen, Position erfassen, Warenkorb als bestellt markieren, Lieferung buchen – danach die Testbestellung über das Admin-UI löschen
+- [ ] Lieferschein-Scanner (Beta) einmal mit einem echten Lieferschein am Smartphone ausprobieren, Ergebnis notieren
+- [ ] Labor-Nutzer anlegen und informieren (Adresse der App, Login per E-Mail-Code)
+
+**Zurückrollen:** vorherigen Stand aus Git erneut deployen (`git switch --detach <commit>`, Kap. 3) bzw. bei Datenproblemen das letzte Backup wiederherstellen (Kap. 4).
+
+
 Ziel-Layout auf dem Uberspace-Host (Benutzer `<user>`):
 
 ```text
@@ -40,16 +65,33 @@ uberspace web backend set / --http --port 8090      # oder eine Subdomain: --dom
 
 ## 2. Konfiguration im Admin-UI (`https://<domain>/_/`)
 
-1. **2FA für den Admin** aktivieren (Superusers → eigener Account → MFA/OTP).
+1. **Zweiter Faktor für den Admin:** Collections → `_superusers` → ⚙ Optionen → **MFA** und **OTP** aktivieren. Danach braucht der Admin-Login Passwort **und** einen E-Mail-Code (PocketBase kennt keine TOTP-Apps). Erst aktivieren, wenn der Mailversand (Schritt 5) funktioniert.
 2. **Collections importieren:** Settings → Import collections → Inhalt von `pb_schema.json` einfügen → „Merge“ (fehlende Collections *nicht* löschen) → Review → Confirm.
-   Enthält auch die `users`-Auth-Einstellungen (OTP 10 min, deutsche Mail, Passwort-Login aus, Token 30 Tage).
-3. **Settings → Application:** App-Name „Labor-Bestellsystem“, App-URL `https://<domain>`.
-4. **Settings → Mail settings:** Absender + SMTP. Auf Uberspace z. B. ein eigenes Postfach anlegen (`uberspace mail user add labor`) und als SMTP `<host>.uberspace.de:587`, STARTTLS, Benutzer `labor@<user>.uber.space` verwenden – oder den SMTP-Server der Hochschule. Mit „Send test email“ prüfen.
-5. **Labor-Nutzer anlegen:** Collections → users → New record (E-Mail, Name, beliebiges Passwort – wird nie benutzt, `verified` an).
+   Enthält auch die `users`-Auth-Einstellungen (OTP 10 min, deutsche Mail, Passwort-Login aus, Token 30 Tage, Login-Alarm aus).
+3. **Settings → Application:**
+   * App-Name „Labor-Bestellsystem“, App-URL `https://<domain>` (wird in Mails verwendet).
+   * **User IP proxy headers:** `X-Forwarded-For` eintragen, „Use leftmost IP“ **aus**. Uberspace stellt einen Proxy vor die App; ohne diese Einstellung sehen Logs und Rate-Limiting nur die IP des Proxys. Prüfen: Settings → Logs → eine eigene Anfrage muss die eigene öffentliche IP zeigen, nicht `127.0.0.1` o. Ä.
+   * **Rate limiting aktivieren** (Standardregeln übernehmen). Ab Werk ist es aus; ohne Begrenzung könnten z. B. massenhaft Login-Mails ausgelöst werden.
+4. **Postfach für den Versand** (auf dem Host):
+   ```bash
+   uberspace mail user add labor      # fragt nach einem Passwort
+   ```
+5. **Settings → Mail settings:**
+   * Absender-Name „Labor-Bestellsystem“, Absender-Adresse `labor@<user>.uber.space`.
+   * SMTP: Host `<host>.uberspace.de`, Port `587`, TLS/STARTTLS, Benutzer `labor@<user>.uber.space`, Passwort aus Schritt 4.
+   * „Send test email“ an eine **TH-Adresse** schicken und prüfen, dass sie im Posteingang (nicht im Spam) landet. Landet sie im Spam: Absender bei der TH-IT freigeben lassen oder auf den SMTP-Server der TH umstellen.
+6. **Labor-Nutzer anlegen:** Collections → users → New record (E-Mail, Name, beliebiges Passwort – wird nie benutzt, `verified` an).
+7. **Backups einrichten** (siehe Kap. 4).
 
 ## 3. Deploy (vom Entwicklungsrechner)
 
-Vorher lokal: `tests/run.sh` grün, `scripts/build-css.sh` ausgeführt und `pb_public/assets/app.css` committet.
+Immer vom Branch `main` deployen:
+
+```bash
+git switch main && git status        # Arbeitsverzeichnis muss sauber sein
+tests/run.sh --e2e                   # alles grün
+git log --oneline -1                 # deployten Stand notieren (für ein Zurückrollen)
+```
 
 ```bash
 rsync -av --delete pb_public/ <user>@<host>.uberspace.de:bestellverwaltung/pb_public/
@@ -65,6 +107,7 @@ rsync -av pb_schema.json      <user>@<host>.uberspace.de:bestellverwaltung/
 
 * **PocketBase-Backups:** Settings → Backups → „Auto backups“ aktivieren, z. B. täglich `0 3 * * *`, 14 Stück behalten. Die ZIPs liegen in `pb_data/backups/`.
 * **Kopie außerhalb des Hosts:** die Backup-ZIPs regelmäßig abholen (z. B. per `rsync` vom Hochschul-Rechner) oder in den Backup-Einstellungen einen S3-Speicher eintragen. Uberspace-eigene Snapshots sind nur eine zusätzliche Absicherung.
+* **Backup prüfen** (nach der Einrichtung und dann regelmäßig): Settings → Backups → „Initialize new backup“ → ZIP herunterladen und öffnen; es muss `data.db` und den Ordner `storage/` enthalten.
 * **Wiederherstellen:** Settings → Backups → Backup auswählen → Restore (startet PocketBase neu).
 * `pb_data/` niemals per Dropbox oder ähnlichem synchronisieren (SQLite/WAL kann dabei beschädigt werden).
 
