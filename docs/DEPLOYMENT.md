@@ -69,7 +69,7 @@ uberspace web backend set / --http --port 8090      # oder eine Subdomain: --dom
 2. **Collections importieren:** Settings → Import collections → Inhalt von `pb_schema.json` einfügen → „Merge“ (fehlende Collections *nicht* löschen) → Review → Confirm.
    Enthält auch die `users`-Auth-Einstellungen (OTP 10 min, deutsche Mail, Passwort-Login aus, Token 30 Tage, Login-Alarm aus).
 3. **Settings → Application:**
-   * App-Name „Labor-Bestellsystem“, App-URL `https://<domain>` (wird in Mails verwendet).
+   * App-Name „Labor-Bestellsystem“, App-URL `https://<domain>` (wird in Mails verwendet, auch für den Link in Scanner-Meldungen).
    * **User IP proxy headers:** `X-Forwarded-For` eintragen, „Use leftmost IP“ **aus**. Uberspace stellt einen Proxy vor die App; ohne diese Einstellung sehen Logs und Rate-Limiting nur die IP des Proxys. Prüfen: Settings → Logs → eine eigene Anfrage muss die eigene öffentliche IP zeigen, nicht `127.0.0.1` o. Ä.
    * **Rate limiting aktivieren** (Standardregeln übernehmen). Ab Werk ist es aus; ohne Begrenzung könnten z. B. massenhaft Login-Mails ausgelöst werden.
 4. **Postfach für den Versand** (auf dem Host):
@@ -82,6 +82,13 @@ uberspace web backend set / --http --port 8090      # oder eine Subdomain: --dom
    * „Send test email“ an eine **TH-Adresse** schicken und prüfen, dass sie im Posteingang (nicht im Spam) landet. Landet sie im Spam: Absender bei der TH-IT freigeben lassen oder auf den SMTP-Server der TH umstellen.
 6. **Labor-Nutzer anlegen:** Collections → users → New record (E-Mail, Name, beliebiges Passwort – wird nie benutzt, `verified` an).
 7. **Backups einrichten** (siehe Kap. 4).
+
+**Scanner-Meldungen:** Meldet jemand im Lieferschein-Scanner ein Problem, bekommen **alle Superuser** eine Mail an ihre Admin-Adresse (nur Link, kein Anhang). Abholen und auf dem Server löschen, vom Entwicklungsrechner im Projektordner:
+```bash
+node scripts/fetch-scan-reports.mjs https://<domain>          # fragt E-Mail, Passwort und Code aus der Mail
+node scripts/fetch-scan-reports.mjs https://<domain> --keep   # nur herunterladen
+```
+Die Meldungen landen in `samples/scan-reports/` (nicht im Repo, enthält echte Belege).
 
 ## 3. Deploy (vom Entwicklungsrechner)
 

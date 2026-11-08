@@ -6,13 +6,15 @@ import { DELIVERY_STATUSES, supplierLabel } from '../../core/config.js';
 import { pb } from '../../core/pb.js';
 import { listOrderItems, getOrder, bookDelivery, uploadAttachments, backlogOf, errorMessage } from '../../core/api.js';
 import { toast, confirmAction } from '../../core/ui.js';
-import { loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, toGrayJpeg } from './vision.js';
+import { loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, toGrayJpeg, toJpeg } from './vision.js';
 import { preloadOcr, recognizePage, terminateOcr } from './ocr.js';
 import { extractRows, matchRows, orderNumberTokens, rankOrders } from './matcher.js';
 import { detectProfile, profileForSupplier } from './profiles/index.js';
 import { jpegsToPdf } from './pdf.js';
+import { assessRecognition, buildAnalysis } from './report.js';
 
 const MAX_RECEIPT_BYTES = 15 * 1024 * 1024; // = maxSize von deliveries.receipt
+const MAX_REPORT_PHOTO_BYTES = 5 * 1024 * 1024; // = maxSize von scan_reports.photos
 const CORNER_KEYS = ['topLeftCorner', 'topRightCorner', 'bottomRightCorner', 'bottomLeftCorner'];
 const STATUS_COLORS = { sure: '#059669', check: '#d97706', none: '#dc2626' };
 
@@ -104,6 +106,12 @@ const template = /* html */ `
             <p class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900" x-text="w"></p>
           </template>
 
+          <div x-show="recognitionFailed && !reported && !reportOpen" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p class="font-medium">Die Erkennung hat bei diesem Lieferschein nicht geklappt.</p>
+            <p class="mt-1 text-xs">Eine Meldung legt Fotos und Erkennungsergebnis zur Analyse auf dem Server ab – so lässt sich die Erkennung verbessern. Von Hand buchen geht trotzdem.</p>
+            <button type="button" class="btn btn-secondary btn-sm mt-2" @click="openReport()">Problem melden</button>
+          </div>
+
           <!-- Bestellung wählen (Start aus dem Dashboard) -->
           <div x-show="!lockedOrder" class="card p-3">
             <label class="label">Bestellung</label>
@@ -187,7 +195,27 @@ const template = /* html */ `
             <input class="input" x-model="note" maxlength="500" placeholder="z. B. Paket 1 von 2">
           </div>
 
+          <div x-show="reportOpen" class="card space-y-2 border-amber-300 p-3" data-scan-report>
+            <h3 class="text-sm font-semibold">Problem melden</h3>
+            <p class="text-xs text-slate-600">
+              Originalfotos, erkannter Text und die eingetragenen Mengen werden auf dem Server abgelegt, der Administrator bekommt eine Mail.
+              Am meisten hilft es, vorher die richtigen Mengen einzutragen.
+            </p>
+            <ul x-show="problems.length" class="list-disc pl-5 text-xs text-amber-800">
+              <template x-for="p in problems" :key="p"><li x-text="p"></li></template>
+            </ul>
+            <textarea class="input" rows="2" maxlength="1000" x-model="reportNote" placeholder="Was ist schiefgelaufen? (optional)" aria-label="Beschreibung des Problems"></textarea>
+            <div class="flex justify-end gap-2">
+              <button type="button" class="btn btn-ghost" @click="reportOpen = false" :disabled="reportBusy">Abbrechen</button>
+              <button type="button" class="btn btn-primary" @click="sendReport()" :disabled="reportBusy">
+                <span x-text="reportBusy ? 'Wird gesendet …' : 'Meldung senden'"></span>
+              </button>
+            </div>
+          </div>
+          <p x-show="reported" class="rounded-lg bg-emerald-50 p-2 text-sm text-emerald-800">Problem gemeldet – danke! Die Lieferung kann trotzdem gebucht werden.</p>
+
           <div class="flex flex-wrap justify-end gap-2 pb-6">
+            <button type="button" class="btn btn-ghost mr-auto" x-show="!reported && !reportOpen" @click="openReport()">Problem melden</button>
             <button type="button" class="btn btn-secondary" @click="step = 'pages'">Seiten bearbeiten</button>
             <button type="button" class="btn btn-success" :disabled="!order || busy" @click="book()">
               <span x-text="busy ? 'Wird gebucht …' : (hasQuantities() ? 'Lieferung buchen' : 'Nur Beleg an Bestellung anhängen')"></span>
@@ -205,6 +233,8 @@ function component() {
   let source = null; // { canvas, corners, display: { scale }, drag }
   let pageData = []; // [{ canvas, jpeg, ocr }]
   let assignments = [];
+  let extracted = { rows: [], missingHeader: [] };
+  let detectedProfile = null;
   let pageCounter = 0;
 
   return {
@@ -227,6 +257,12 @@ function component() {
     unmatched: [],
     note: '',
     busy: false,
+    problems: [],
+    recognitionFailed: false,
+    reportOpen: false,
+    reportNote: '',
+    reportBusy: false,
+    reported: false,
 
     // ---- Öffnen / Schließen -------------------------------------------------
     async open(detail = {}) {
@@ -261,10 +297,13 @@ function component() {
       source = null;
       pageData = [];
       assignments = [];
+      extracted = { rows: [], missingHeader: [] };
+      detectedProfile = null;
       Object.assign(this, {
         step: 'pages', busyText: '', pages: [], cornersDetected: true, progress: { value: 0, label: '' },
         order: null, items: [], lockedOrder: false, orderCandidates: [], selectedOrderId: '', detectedOrderHint: '',
         warnings: [], reviewRows: [], unmatched: [], note: '', busy: false,
+        problems: [], recognitionFailed: false, reportOpen: false, reportNote: '', reportBusy: false, reported: false,
       });
     },
 
@@ -293,7 +332,7 @@ function component() {
         await loadVision();
         const canvas = await fileToCanvas(file);
         const { corners, detected } = detectCorners(canvas);
-        source = { canvas, corners, drag: null, display: null };
+        source = { canvas, corners, cornersAuto: detected ? structuredClone(corners) : null, detected, drag: null, display: null };
         this.cornersDetected = detected;
         this.step = 'corners';
         await this.$nextTick();
@@ -389,8 +428,19 @@ function component() {
       this.busyText = 'Seite wird entzerrt …';
       try {
         const canvas = rectify(source.canvas, source.corners);
-        const jpeg = await toGrayJpeg(canvas);
-        pageData.push({ canvas, jpeg, ocr: null });
+        const [jpeg, original] = await Promise.all([toGrayJpeg(canvas), toJpeg(source.canvas)]);
+        pageData.push({
+          canvas, jpeg, ocr: null,
+          // für Problem-Meldungen: Originalfoto und Eckpunkte (Koordinaten im Originalfoto)
+          original,
+          meta: {
+            source: { width: source.canvas.width, height: source.canvas.height },
+            cornersDetected: source.detected,
+            cornersAuto: source.cornersAuto,
+            corners: structuredClone(source.corners),
+            rectified: { width: canvas.width, height: canvas.height },
+          },
+        });
         this.pages.push({ id: ++pageCounter, thumb: URL.createObjectURL(jpeg) });
         source = null;
       } catch (err) {
@@ -410,6 +460,7 @@ function component() {
     // ---- Erkennung -----------------------------------------------------------
     async recognize() {
       this.step = 'processing';
+      Object.assign(this, { reportOpen: false, reported: false, reportNote: '' });
       try {
         for (let i = 0; i < pageData.length; i++) {
           const label = pageData.length > 1 ? `Seite ${i + 1} von ${pageData.length}: ` : '';
@@ -434,6 +485,7 @@ function component() {
     async analyze() {
       const ocrPages = pageData.map((p) => p.ocr);
       const detected = detectProfile(ocrPages);
+      detectedProfile = detected;
       this.warnings = [];
 
       if (!this.lockedOrder) {
@@ -442,6 +494,7 @@ function component() {
         this.warnings.push(`Der Lieferschein sieht nach ${detected.label} aus, die Bestellung ist aber bei ${supplierLabel(this.order)}. Bitte prüfen.`);
       }
       this.computeReview();
+      this.updateAssessment();
     },
 
     async loadOrderCandidates(detected, ocrPages) {
@@ -471,11 +524,15 @@ function component() {
         this.items = [];
         this.reviewRows = [];
         this.unmatched = [];
+        assignments = [];
+        extracted = { rows: [], missingHeader: [] };
+        this.updateAssessment();
         return;
       }
       try {
         [this.order, this.items] = await Promise.all([getOrder(id), listOrderItems(id)]);
         this.computeReview();
+        this.updateAssessment();
         await this.$nextTick();
         this.drawReviewPages();
       } catch (err) {
@@ -502,6 +559,7 @@ function component() {
         this.warnings.push(`Auf Seite ${missingHeader.join(', ')} wurde die Positionstabelle nicht gefunden. Bitte Foto prüfen oder Mengen von Hand eintragen.`);
       }
 
+      extracted = { rows, missingHeader };
       const result = matchRows(rows, this.items);
       assignments = result.assignments;
       this.reviewRows = this.items.map((it) => {
@@ -515,6 +573,7 @@ function component() {
           delivered: it.qty_delivered,
           backlog: backlogOf(it),
           qty: m?.qty ?? 0,
+          recognized: m?.qty ?? 0,
           status: m ? m.status : 'missing',
           reasons: m?.reasons ?? [],
         };
@@ -522,6 +581,20 @@ function component() {
       this.unmatched = assignments
         .filter((a) => a.status === 'none')
         .map((a, i) => ({ key: i, part: a.row.part, qty: a.row.qty, assignTo: '', assigned: false }));
+    },
+
+    updateAssessment() {
+      const { failed, problems } = assessRecognition({
+        pages: pageData.map((p) => p.meta),
+        detectedProfile,
+        order: this.order,
+        orderProfile: this.order ? profileForSupplier(this.order.supplier) : null,
+        missingHeader: extracted.missingHeader,
+        rows: extracted.rows,
+        assignments,
+      });
+      this.recognitionFailed = failed;
+      this.problems = problems;
     },
 
     assignUnmatched(u) {
@@ -551,6 +624,50 @@ function component() {
           ctx.strokeRect(b.x0 * view.width - 3, b.y0 * view.height - 3, (b.x1 - b.x0) * view.width + 6, (b.y1 - b.y0) * view.height + 6);
         }
       });
+    },
+
+    // ---- Problem melden ------------------------------------------------------
+    openReport() {
+      this.reportOpen = true;
+      this.$nextTick(() => this.$root.querySelector('[data-scan-report]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    },
+
+    async sendReport() {
+      const tooBig = pageData.findIndex((p) => p.original.size > MAX_REPORT_PHOTO_BYTES);
+      if (tooBig >= 0) {
+        toast.error(`Foto von Seite ${tooBig + 1} ist für die Meldung zu groß (max. 5 MB).`);
+        return;
+      }
+      const analysis = buildAnalysis({
+        pages: pageData.map((p) => ({ ...p.meta, ocr: p.ocr })),
+        detectedProfile,
+        order: this.order,
+        items: this.items,
+        rows: extracted.rows,
+        assignments,
+        review: this.reviewRows,
+        assessment: { failed: this.recognitionFailed, problems: this.problems },
+        warnings: this.warnings,
+        client: { userAgent: navigator.userAgent, viewport: { width: window.innerWidth, height: window.innerHeight } },
+      });
+      const form = new FormData();
+      form.append('reported_by', pb.authStore.record?.id ?? '');
+      if (this.order) form.append('order', this.order.id);
+      form.append('note', this.reportNote.trim());
+      form.append('analysis', JSON.stringify(analysis));
+      pageData.forEach((p, i) => form.append('photos', p.original, `seite-${i + 1}.jpg`));
+
+      this.reportBusy = true;
+      try {
+        await pb.collection('scan_reports').create(form);
+        this.reported = true;
+        this.reportOpen = false;
+        toast.success('Problem gemeldet – danke!');
+      } catch (err) {
+        toast.error('Meldung fehlgeschlagen: ' + errorMessage(err));
+      } finally {
+        this.reportBusy = false;
+      }
     },
 
     // ---- Buchen ------------------------------------------------------------

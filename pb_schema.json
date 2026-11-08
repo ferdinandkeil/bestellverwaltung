@@ -849,5 +849,111 @@
     "createRule": null,
     "updateRule": null,
     "deleteRule": null
+  },
+  {
+    "id": "pb_scan_reports_col",
+    "name": "scan_reports",
+    "type": "base",
+    "system": false,
+    "indexes": [],
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "primaryKey": true,
+        "min": 15,
+        "max": 15,
+        "pattern": "^[a-z0-9]+$",
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "scr_reported_by",
+        "name": "reported_by",
+        "type": "relation",
+        "required": true,
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "scr_order",
+        "name": "order",
+        "type": "relation",
+        "required": false,
+        "collectionId": "pb_orders_col",
+        "cascadeDelete": false,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "scr_note",
+        "name": "note",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 1000,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "scr_photos",
+        "name": "photos",
+        "type": "file",
+        "required": true,
+        "maxSelect": 30,
+        "maxSize": 5242880,
+        "mimeTypes": [
+          "image/jpeg"
+        ],
+        "thumbs": [
+          "200x200"
+        ],
+        "protected": true
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "scr_analysis",
+        "name": "analysis",
+        "type": "json",
+        "required": true,
+        "maxSize": 5000000
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "pb_scan_reports_col_created",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      }
+    ],
+    "listRule": null,
+    "viewRule": null,
+    "createRule": "@request.auth.id != \"\" && @request.auth.collectionName = \"users\" && reported_by = @request.auth.id",
+    "updateRule": null,
+    "deleteRule": null
   }
 ]
