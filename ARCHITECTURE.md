@@ -26,6 +26,7 @@
    * `orders.status`, `order_items.qty_delivered`, `orders.created_by` sowie das Anlegen von `order_items`, `deliveries`, `delivery_items` sind per Rule für direkte Schreibzugriffe gesperrt und laufen ausschließlich über die Hook-Routen (Kap. 4).
    * `created_by` / `booked_by` werden serverseitig aus dem Auth-Kontext gesetzt (nicht fälschbar).
    * `deliveries` sind unveränderlich (kein Update/Delete für Nutzer); Korrekturen erfolgen per Gegenbuchung.
+   * `scan_reports` (Problem-Meldungen des Scanners): Labor-Nutzer dürfen nur **anlegen** (im eigenen Namen), lesen/löschen nur der Admin; Fotos sind geschützte Dateien.
    * PocketBase-Login-Alarm („Login from a new location“) ist deaktiviert, da er auf Passwörter verweist, die es nicht gibt.
 
 ## 3. Verzeichnisstruktur
@@ -37,6 +38,7 @@ Projekt/
 │   ├── routes.pb.js                # Registrierung der /api/lab/* Routen
 │   ├── mcp.pb.js                   # MCP-Endpunkt /mcp für Claude Code (Phase 7, geplant)
 │   ├── record-hooks.pb.js          # created_by setzen, Status nach Positionsänderung neu berechnen
+│   ├── scan-reports.pb.js          # Problem-Meldungen des Scanners: Validierung, Mail an Superuser
 │   └── lib/
 │       ├── cart.js                 # Sammel-Warenkorb-Merge
 │       ├── deliveries.js           # Lieferbuchungen, qty_delivered-Summen
@@ -69,13 +71,15 @@ Projekt/
 │       │   ├── ocr.js              # Tesseract.js deu+eng, normierte Wortkoordinaten (lazy)
 │       │   ├── matcher.js          # Tabellenzeilen lesen, unscharfer Abgleich, Bestellung finden
 │       │   ├── pdf.js              # JPEG-Seiten → PDF (ohne Bibliothek)
+│       │   ├── report.js           # Problem-Meldung: Einschätzung „gescheitert“, Analyse-Daten
 │       │   └── profiles/           # je Lieferant: Erkennung + Spaltenüberschriften (index.js, reichelt.js)
 │       └── part-number-check/      # Prüfung der Bestellnummern (Kap. 6)
 ├── tailwind/app.src.css            # Tailwind-Quelle
 ├── scripts/
 │   ├── build-css.sh                # Tailwind Standalone CLI → pb_public/assets/app.css
 │   ├── fetch-vendor.sh             # Lädt festgelegte Bibliotheksversionen nach pb_public/vendor/
-│   └── dev-server.sh               # Lokale Test-Instanz (pb_data außerhalb von Dropbox)
+│   ├── dev-server.sh               # Lokale Test-Instanz (pb_data außerhalb von Dropbox)
+│   └── fetch-scan-reports.mjs      # Scanner-Meldungen nach samples/scan-reports/ holen, dann auf dem Server löschen
 ├── tests/                          # siehe Kap. 8
 │   ├── run.sh                      # frische PocketBase + Mailpit, dann node --test [--e2e]
 │   ├── *.test.mjs                  # Server-, Rechte-, OTP- und Unit-Tests
@@ -94,6 +98,7 @@ Projekt/
 * **`order_items`:** `order`, `part_number`, `name`, `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
 * **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (genau eine Datei, optional: Bild oder PDF; mehrseitige Belege als PDF, max. 15 MB ≈ 30 Seiten), `created`.
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
+* **`scan_reports`** (Problem-Meldungen der Lieferschein-Erfassung): `reported_by`, `order` (optional), `note`, `photos` (Originalfotos, JPEG ≤ 3200 px, geschützt, max. 30), `analysis` (JSON: Ecken automatisch/final, OCR-Wörter mit Koordinaten, gelesene Zeilen, Zuordnung, erkannte und eingetragene Mengen, erkannte Probleme; Format-Version `REPORT_VERSION` in `report.js`), `created`. Kurzlebig: werden nach dem Abholen auf dem Server gelöscht.
 
 **Artikelnummer-Regel:** `part_number` ist **immer die Shop-Bestellnummer** des jeweiligen Lieferanten (z. B. `595-SN74HC595N` bei Mouser), nicht die Herstellernummer. Eingabemaske und Moodle-Formular weisen darauf hin. Gespeichert wird normalisiert (Trim + Großbuchstaben). Eine spätere Prüf-/Korrektur-Erweiterung ist als Modul denkbar.
 
@@ -160,6 +165,7 @@ registerPlugin({
   5. **Tabelle lesen:** Spaltengrenzen aus den Überschriften des Lieferanten-Profils (z. B. Menge | Artikelnummer | Bezeichnung) – unabhängig von Bildausschnitt und Auflösung. Mengen mit OCR-Korrektur (O→0, I/l→1) nur bei sonst rein numerischem Text.
   6. **Abgleich:** Ähnlichkeit der normierten Bestellnummern (Levenshtein) gegen die Positionen der Bestellung. *Sicher* ab 0,85 mit Abstand ≥ 0,08 zum Zweitbesten, sonst *prüfen*; zusätzlich *prüfen* bei Menge > Rückstand oder mehreren Zeilen je Position. Nicht zugeordnete Zeilen weist der Nutzer von Hand zu.
   7. **Buchung** über die Lieferbuchungs-Route; alle Seiten als ein PDF (Graustufen-JPEG) in `receipt`. Ohne Mengen wird das PDF nur an `orders.attachments` gehängt.
+  8. **Problem melden** (Beta-Rückmeldung): Knopf in der Prüfansicht, unabhängig von der Buchung. Bei offensichtlichem Scheitern (Lieferant nicht erkannt, kein Profil, Positionstabelle nicht gefunden, keine Zeile zugeordnet) wird die Meldung hervorgehoben angeboten; kleinere Auffälligkeiten (Ecken von Hand, einzelne Zeilen ohne Zuordnung) werden nur mitgeschickt. Die Meldung landet in `scan_reports` auf dem eigenen Server; alle Superuser bekommen eine Mail mit **Link in die Admin-UI, ohne Anhang** (in der Mail nur Bestellung, Probleme, Notiz). Analyse: `node scripts/fetch-scan-reports.mjs <URL>` holt die Meldungen nach `samples/scan-reports/` (nie committen) und löscht sie danach auf dem Server; daraus werden synthetische Testfälle abgeleitet.
   Neue Lieferanten: Profil in `profiles/` anlegen (Erkennungsmuster + Spaltenüberschriften), sobald Beispielbelege vorliegen.
 * **part-number-check:** Prüft Bestellnummern auf das Format des jeweiligen Shops und schlägt Korrekturen vor (z. B. Herstellernummer statt Shop-Nummer erkannt). Korrekturen werden interaktiv bestätigt.
 * **MCP-Zugang für Claude Code (Phase 7, geplant):** Route `/mcp` in `pb_hooks` stellt ausgewählte Funktionen als MCP-Werkzeuge bereit (Streamable HTTP). Zugriff nur mit dem Token eines eigenen Dienst-Nutzers „KI-Assistent“ (widerrufbar, gleiche API-Rules wie Labor-Nutzer). Lesende Werkzeuge plus „Position in Sammelkorb“ und „Notiz setzen“; Lieferbuchungen, Statuswechsel und Löschen bleiben Menschen vorbehalten. Übermittelt werden nur Bestelldaten und Labor-Nutzer (öffentlich auf der TH-Homepage); Studierendendaten existieren im System nicht; Belege/Anhänge nur als Dateiname.

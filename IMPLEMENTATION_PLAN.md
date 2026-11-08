@@ -44,7 +44,9 @@
 1. ✔ Ansatz evaluiert und entschieden: Browser-OCR (Tesseract.js) mit Entzerrung (jscanify/OpenCV.js), Beleg als PDF.
 2. ✔ `modules/delivery-scanner/` in den Slots `order-detail-actions` und `dashboard-actions` (Details ARCHITECTURE Kap. 6), Profil Reichelt.
 3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.
-4. Offen:
+4. ✔ **Problem melden:** fehlgeschlagene Erkennungen landen mit Originalfotos und OCR-Ergebnis in `scan_reports`, Mail mit Link an die Superuser; Abholen zur Analyse mit `scripts/fetch-scan-reports.mjs` (löscht danach auf dem Server).
+5. Offen:
+   * Gemeldete Lieferscheine auswerten und Erkennung/Profile nachbessern.
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
    * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege in `samples/` liegen.
 
