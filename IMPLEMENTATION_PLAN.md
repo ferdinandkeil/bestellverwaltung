@@ -45,16 +45,16 @@
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
    * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege in `samples/` liegen.
 
-## Phase 3: Shop-Export (Branch `phase-3-shop-export`)
-1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
-2. `modules/shop-export/shop-exporter.js` im Slot `order-detail-actions`: Modal mit Copy-to-Clipboard und CSV-Download (Menge = `qty_ordered − qty_cancelled`).
-3. Button „Exportiert & auf ‚Bestellt‘ setzen“ (optional mit `supplier_order_no`) über die Status-Route.
-
-## Phase 4: Moodle-Import (Branch `phase-4-moodle-import`)
+## Phase 3: Moodle-Import (Branch `phase-3-moodle-import`)
 1. Vorab: Beispiel-CSV aus Moodle beschaffen (Spalten, Lieferantenangabe, Gruppen-Schreibweisen).
 2. `modules/moodle-import/moodle-importer.js` (PapaParse aus `vendor/`) im Slot `dashboard-actions`: Drag & Drop, Spalten-Mapping, Vorschau.
 3. **Interaktive Gruppenzuweisung:** Für jede Gruppenbezeichnung aus der CSV wählt der Nutzer eine bestehende Gruppe (Veranstaltung/Semester) oder legt sie neu an. Keine automatische Zuordnung.
 4. Warnung, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen; Buchen über `POST /api/lab/cart-items`.
+
+## Phase 4: Shop-Export (Branch `phase-4-shop-export`)
+1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
+2. `modules/shop-export/shop-exporter.js` im Slot `order-detail-actions`: Modal mit Copy-to-Clipboard und CSV-Download (Menge = `qty_ordered − qty_cancelled`).
+3. Button „Exportiert & auf ‚Bestellt‘ setzen“ (optional mit `supplier_order_no`) über die Status-Route.
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.

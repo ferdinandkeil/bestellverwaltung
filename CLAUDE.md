@@ -19,7 +19,7 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 ## Git
 
 - **Repository:** lokales Git-Repo im Projektordner. `pb_data/`, die PocketBase-Binary und lokale Testartefakte stehen in `.gitignore` und werden nie committet.
-- **Branches:** pro Phase ein Feature-Branch (`phase-1-core`, `phase-2-delivery-scanner`, `phase-3-shop-export`, `phase-4-moodle-import`, `phase-5-word-export`, `phase-6-part-number-check`, `phase-7-mcp`). In `main` wird erst nach Freigabe der Phase durch den Nutzer gemergt.
+- **Branches:** pro Phase ein Feature-Branch (`phase-1-core`, `phase-2-delivery-scanner`, `phase-3-moodle-import`, `phase-4-shop-export`, `phase-5-word-export`, `phase-6-part-number-check`, `phase-7-mcp`). In `main` wird erst nach Freigabe der Phase durch den Nutzer gemergt.
 - **Commits:** selbstständig und kleinschrittig, nach jedem sinnvollen, in sich abgeschlossenen Schritt. Commit-Nachrichten auf Deutsch, kurz und aussagekräftig (was und warum).
 - **Remote / Push:** gepusht wird nur auf ausdrückliche Anweisung. Keine History-Umschreibungen (force-push, rebase veröffentlichter Commits) ohne Rückfrage.
 
