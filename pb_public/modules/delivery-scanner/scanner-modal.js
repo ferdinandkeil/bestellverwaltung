@@ -22,7 +22,7 @@ const template = /* html */ `
     <!-- Kopf -->
     <div class="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
       <div class="min-w-0 flex-1">
-        <h2 class="text-base font-semibold">Lieferschein erfassen</h2>
+        <h2 class="text-base font-semibold">Lieferschein erfassen <span class="badge ml-1 bg-amber-50 text-amber-800 ring-amber-300 align-middle">Beta</span></h2>
         <p class="truncate text-xs text-slate-500" x-text="orderLabel()"></p>
       </div>
       <button type="button" class="btn btn-ghost btn-sm" @click="close()">Schließen</button>
@@ -37,6 +37,9 @@ const template = /* html */ `
 
         <!-- Schritt: Seiten -->
         <section x-show="step === 'pages'">
+          <p class="mb-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
+            Testbetrieb: Erkannte Mengen bitte vor dem Buchen immer prüfen. Rückmeldungen zu schlecht erkannten Lieferscheinen helfen bei der Verbesserung.
+          </p>
           <p class="mb-3 text-sm text-slate-600">
             Lieferschein flach auf einen <strong>dunklen, kontrastreichen Untergrund</strong> legen und von oben fotografieren.
             Mehrseitige Lieferscheine Seite für Seite aufnehmen.
@@ -607,7 +610,7 @@ const openScanner = (detail) => window.dispatchEvent(new CustomEvent('open-deliv
 registerPlugin({
   id: 'delivery-scanner-order',
   slot: 'order-detail-actions',
-  label: 'Lieferschein scannen',
+  label: 'Lieferschein scannen (Beta)',
   icon: 'scan',
   isVisible: (order) => DELIVERY_STATUSES.includes(order?.status),
   // Kopien übergeben: die Werte der Detailansicht sind reaktive Proxies einer anderen Komponente.
@@ -617,7 +620,7 @@ registerPlugin({
 registerPlugin({
   id: 'delivery-scanner-dashboard',
   slot: 'dashboard-actions',
-  label: 'Lieferschein scannen',
+  label: 'Lieferschein scannen (Beta)',
   icon: 'scan',
   onClick: () => openScanner({}),
 });
