@@ -255,20 +255,6 @@
         "primaryKey": false
       },
       {
-        "id": "grp_contact",
-        "name": "contact_info",
-        "type": "text",
-        "system": false,
-        "required": false,
-        "presentable": false,
-        "hidden": false,
-        "min": 0,
-        "max": 250,
-        "pattern": "",
-        "autogeneratePattern": "",
-        "primaryKey": false
-      },
-      {
         "id": "grp_active",
         "name": "is_active",
         "type": "bool",

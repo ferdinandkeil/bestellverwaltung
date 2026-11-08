@@ -9,7 +9,7 @@ import { toast, confirmAction } from '../core/ui.js';
 
 function emptyForm(prefill = {}) {
   const sem = currentSemester();
-  return { name: '', course: '', term: sem.term, year: sem.year, contact_info: '', is_active: true, ...prefill };
+  return { name: '', course: '', term: sem.term, year: sem.year, is_active: true, ...prefill };
 }
 
 const template = /* html */ `
@@ -40,7 +40,6 @@ const template = /* html */ `
               <div class="flex items-start gap-2">
                 <div class="min-w-0 flex-1">
                   <div class="font-medium" :class="!g.is_active && 'text-slate-400'" x-text="g.name"></div>
-                  <div class="text-xs text-slate-500" x-show="g.contact_info" x-text="g.contact_info"></div>
                 </div>
                 <span x-show="!g.is_active" class="badge bg-slate-100 text-slate-500 ring-slate-300">inaktiv</span>
                 <button type="button" class="btn btn-ghost btn-sm" @click.stop="startEdit(g)">Bearbeiten</button>
@@ -127,10 +126,6 @@ const template = /* html */ `
       </div>
       <div>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="form.data.is_active"> aktiv</label>
-      </div>
-      <div>
-        <label class="label">Kontakt</label>
-        <input class="input" x-model="form.data.contact_info" maxlength="250" placeholder="Name, E-Mail …">
       </div>
       <div class="flex flex-wrap gap-2 pt-1">
         <template x-if="form.id">
@@ -235,7 +230,7 @@ function component() {
         id: g.id,
         data: emptyForm({
           name: g.name, course: g.course, ...(parseSemester(g.semester) ?? {}),
-          contact_info: g.contact_info || '', is_active: !!g.is_active,
+          is_active: !!g.is_active,
         }),
       };
     },

@@ -65,9 +65,9 @@
 2. `modules/part-number-check/` im Slot `order-detail-actions` (und als Prüfschritt im Moodle-Import nutzbar): auffällige Nummern markieren, Korrekturvorschläge interaktiv bestätigen.
 
 ## Phase 7: Zugriff für Claude Code per MCP (Branch `phase-7-mcp`)
-1. Vorab: mit der Hochschule klären, ob Bestelldaten an Claude übermittelt werden dürfen (Datenschutz); ohne Freigabe keine Umsetzung.
+1. Datengrundlage: Es werden nur Bestelldaten und Daten der Labor-Nutzer übermittelt. Labor-Nutzer (Name, E-Mail) sind öffentlich (Homepage der TH); Daten von Studierenden werden im System gar nicht gespeichert (Gruppen ohne Kontaktfeld). Belege und Anhänge werden nur als Dateiname genannt, nicht inhaltlich übertragen.
 2. Dienst-Nutzer „KI-Assistent“ in `users`; langlebiges Token wird vom Admin ausgestellt (Impersonate) und ist durch Zurücksetzen des `tokenKey` sofort widerrufbar. Es gelten dieselben API-Rules; Ersteller/Bucher ist sichtbar „KI-Assistent“.
 3. MCP-Server als Route `/mcp` in `pb_hooks` (Streamable HTTP, JSON-RPC: `initialize`, `tools/list`, `tools/call`), Authentifizierung per `Authorization`-Header.
 4. Werkzeuge – lesend: Bestellungen suchen/anzeigen, Rückstände je Gruppe/Veranstaltung, Kosten einer Bestellung, Gruppen auflisten; schreibend: Position in den Sammelkorb legen (über die vorhandene Transaktionslogik), Notiz setzen. **Nicht** enthalten: Lieferungen buchen, Status ändern, Löschen (Schutz vor manipulierten Eingaben, z. B. aus Moodle-Daten).
 5. Einrichtung in Claude Code dokumentieren (`claude mcp add --transport http …` mit Header) in `docs/DEPLOYMENT.md`.
-6. Tests: Protokoll-Handshake, Werkzeugliste, Rechte (ohne/mit ungültigem Token), Schreibwerkzeuge nur im erlaubten Umfang.
+6. Tests: Protokoll-Handshake, Werkzeugliste, Rechte (ohne/mit ungültigem Token), Schreibwerkzeuge nur im erlaubten Umfang, keine Dateiinhalte in Antworten.
