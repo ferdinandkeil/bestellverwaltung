@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizePart, similarity, parseQty, extractRows, matchRows, orderNumberTokens, rankOrders,
+  parseInternalOrderNo, findInternalOrderNumbers,
 } from '../pb_public/modules/delivery-scanner/matcher.js';
 import { detectProfile, profileForSupplier } from '../pb_public/modules/delivery-scanner/profiles/index.js';
 
@@ -102,13 +103,29 @@ test('gleiche Position in zwei Zeilen → Mengen addiert, zur Prüfung markiert'
   assert.equal(perItem.xiao.status, 'check');
 });
 
-test('Bestellung über unscharf gelesene Auftragsnummer finden', () => {
+test('interne Bestellnummer trotz OCR-Verwechslungen lesen', () => {
+  assert.equal(parseInternalOrderNo('2026IW01047'), '2026IW01047');
+  assert.equal(parseInternalOrderNo('20261W01049'), '2026IW01049', 'I als 1 gelesen (TME, Reichelt)');
+  assert.equal(parseInternalOrderNo('2026lW0lO47,'), '2026IW01047', 'l/O in Ziffern, Satzzeichen am Rand');
+  assert.equal(parseInternalOrderNo('2026|VV01047'), '2026IW01047', 'W als VV gelesen');
+  for (const t of ['40538175', '2026IW0104', 'IIIIIWlllll', 'L26DE440078', 'B26DE363696', '']) {
+    assert.equal(parseInternalOrderNo(t), null, t);
+  }
+});
+
+test('interne Bestellnummer auf allen Seiten finden, auch getrennt gelesen', () => {
+  const page2 = { words: [word('Bestellnummer', 0.1, 0.2), word('des', 0.2, 0.2), word('Kunden', 0.25, 0.2), word('2026IW', 0.4, 0.2), word('00777', 0.47, 0.2)] };
+  assert.deepEqual(findInternalOrderNumbers([PAGE, page2, PAGE]), ['2026IW01047', '2026IW00777']);
+  assert.deepEqual(findInternalOrderNumbers([{ words: [word('Kundennummer', 0.1, 0.1), word('40538175', 0.3, 0.1)] }]), []);
+});
+
+test('Rückfall: Bestellung über unscharf gelesene Nummer finden (intern oder Shop)', () => {
   const tokens = orderNumberTokens(PAGE);
   assert.ok(tokens.includes('20261W01047'));
   assert.ok(!tokens.includes('Volksbank'));
   const ranked = rankOrders([
-    { id: 'a', supplier_order_no: '2026IW00999' },
-    { id: 'b', supplier_order_no: '2026IW01047' },
+    { id: 'a', internal_order_no: '2026IW00999' },
+    { id: 'b', internal_order_no: '2026IW01047' },
     { id: 'c', supplier_order_no: '' },
   ], tokens);
   assert.equal(ranked[0].order.id, 'b');

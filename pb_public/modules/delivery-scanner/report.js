@@ -62,12 +62,16 @@ function compactOcr(ocr) {
  *   pages:   [{ source: {width,height}, cornersAuto, cornersDetected, corners, rectified: {width,height}, ocr }]
  *   review:  Zeilen der Prüfansicht (erkannte und zuletzt eingetragene Mengen)
  */
-export function buildAnalysis({ pages, detectedProfile, order, items = [], rows = [], assignments = [], review = [], assessment, warnings = [], client = {} }) {
+export function buildAnalysis({ pages, detectedProfile, order, items = [], rows = [], assignments = [], review = [], assessment, warnings = [], internalOrderNos = [], client = {} }) {
   return {
     version: REPORT_VERSION,
     client,
     profile: detectedProfile?.id ?? null,
-    order: order ? { id: order.id, supplier: order.supplier, supplier_custom_name: order.supplier_custom_name || '', supplier_order_no: order.supplier_order_no || '' } : null,
+    order: order ? {
+      id: order.id, supplier: order.supplier, supplier_custom_name: order.supplier_custom_name || '',
+      internal_order_no: order.internal_order_no || '', supplier_order_no: order.supplier_order_no || '',
+    } : null,
+    internalOrderNos,
     problems: assessment?.problems ?? [],
     failed: assessment?.failed ?? false,
     warnings,

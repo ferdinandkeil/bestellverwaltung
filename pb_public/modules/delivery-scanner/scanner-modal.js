@@ -2,13 +2,13 @@
 // Registriert sich in den Slots 'order-detail-actions' und 'dashboard-actions'.
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
-import { DELIVERY_STATUSES, supplierLabel } from '../../core/config.js';
+import { DELIVERY_STATUSES, supplierLabel, orderNumbersLabel, statusMeta } from '../../core/config.js';
 import { pb } from '../../core/pb.js';
 import { listOrderItems, getOrder, bookDelivery, uploadAttachments, backlogOf, errorMessage } from '../../core/api.js';
 import { toast, confirmAction } from '../../core/ui.js';
 import { loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, toGrayJpeg, toJpeg } from './vision.js';
 import { preloadOcr, recognizePage, terminateOcr } from './ocr.js';
-import { extractRows, matchRows, orderNumberTokens, rankOrders } from './matcher.js';
+import { extractRows, matchRows, orderNumberTokens, rankOrders, findInternalOrderNumbers } from './matcher.js';
 import { detectProfile, profileForSupplier } from './profiles/index.js';
 import { jpegsToPdf } from './pdf.js';
 import { assessRecognition, buildAnalysis } from './report.js';
@@ -235,6 +235,7 @@ function component() {
   let assignments = [];
   let extracted = { rows: [], missingHeader: [] };
   let detectedProfile = null;
+  let internalNos = []; // auf dem Lieferschein gelesene interne Bestellnummern
   let pageCounter = 0;
 
   return {
@@ -299,6 +300,7 @@ function component() {
       assignments = [];
       extracted = { rows: [], missingHeader: [] };
       detectedProfile = null;
+      internalNos = [];
       Object.assign(this, {
         step: 'pages', busyText: '', pages: [], cornersDetected: true, progress: { value: 0, label: '' },
         order: null, items: [], lockedOrder: false, orderCandidates: [], selectedOrderId: '', detectedOrderHint: '',
@@ -309,7 +311,7 @@ function component() {
 
     orderLabel() {
       if (!this.order) return 'Bestellung wird nach der Erkennung zugeordnet';
-      return supplierLabel(this.order) + (this.order.supplier_order_no ? ' · Auftrag ' + this.order.supplier_order_no : '');
+      return supplierLabel(this.order) + ' · ' + orderNumbersLabel(this.order);
     },
 
     // ---- Seiten aufnehmen ---------------------------------------------------
@@ -486,12 +488,19 @@ function component() {
       const ocrPages = pageData.map((p) => p.ocr);
       const detected = detectProfile(ocrPages);
       detectedProfile = detected;
+      internalNos = findInternalOrderNumbers(ocrPages);
       this.warnings = [];
 
       if (!this.lockedOrder) {
         await this.loadOrderCandidates(detected, ocrPages);
-      } else if (detected && detected.supplier !== this.order.supplier) {
-        this.warnings.push(`Der Lieferschein sieht nach ${detected.label} aus, die Bestellung ist aber bei ${supplierLabel(this.order)}. Bitte prüfen.`);
+      } else {
+        if (detected && detected.supplier !== this.order.supplier) {
+          this.warnings.push(`Der Lieferschein sieht nach ${detected.label} aus, die Bestellung ist aber bei ${supplierLabel(this.order)}. Bitte prüfen.`);
+        }
+        const own = this.order.internal_order_no;
+        if (own && internalNos.length && !internalNos.includes(own)) {
+          this.warnings.push(`Auf dem Lieferschein steht die Bestellnummer ${internalNos.join(', ')}, diese Bestellung hat ${own}. Bitte prüfen.`);
+        }
       }
       this.computeReview();
       this.updateAssessment();
@@ -500,20 +509,50 @@ function component() {
     async loadOrderCandidates(detected, ocrPages) {
       const statusFilter = DELIVERY_STATUSES.filter((s) => s !== 'geliefert').map((s) => `status = "${s}"`).join(' || ');
       const filter = detected ? `(${statusFilter}) && supplier = "${detected.supplier}"` : statusFilter;
-      const orders = await pb.collection('orders').getFullList({ filter, sort: '-updated' });
+      const [orders, byNumber] = await Promise.all([
+        pb.collection('orders').getFullList({ filter, sort: '-updated' }),
+        internalNos.length
+          ? pb.collection('orders').getFullList({ filter: internalNos.map((no) => pb.filter('internal_order_no = {:no}', { no })).join(' || ') })
+          : [],
+      ]);
       const ranked = rankOrders(orders, orderNumberTokens(ocrPages[0]));
-      this.orderCandidates = ranked.map(({ order }) => ({
+      const candidates = [...byNumber.filter((o) => DELIVERY_STATUSES.includes(o.status)), ...ranked.map((r) => r.order).filter((o) => !byNumber.some((b) => b.id === o.id))];
+      this.orderCandidates = candidates.map((order) => ({
         id: order.id,
-        label: supplierLabel(order) + ' · ' + (order.supplier_order_no || 'ohne Auftragsnummer'),
+        label: supplierLabel(order) + ' · ' + orderNumbersLabel(order),
       }));
+      this.detectedOrderHint = detected ? `Erkannter Lieferant: ${detected.label}.` : 'Lieferant nicht erkannt.';
+
+      // 1. Wahl: eindeutig gelesene interne Bestellnummer (lieferantenunabhängig)
+      if (byNumber.length === 1) {
+        const order = byNumber[0];
+        if (!DELIVERY_STATUSES.includes(order.status)) {
+          this.warnings.push(`Die Bestellung ${order.internal_order_no} hat den Status „${statusMeta(order.status).label}“ – hier kann keine Lieferung gebucht werden.`);
+          return;
+        }
+        if (detected && detected.supplier !== order.supplier) {
+          this.warnings.push(`Der Lieferschein sieht nach ${detected.label} aus, die Bestellung ${order.internal_order_no} ist aber bei ${supplierLabel(order)}. Bitte prüfen.`);
+        }
+        this.detectedOrderHint += ` Bestellung über die interne Bestellnummer ${order.internal_order_no} zugeordnet.`;
+        await this.selectOrder(order.id);
+        return;
+      }
+      if (byNumber.length > 1) {
+        this.warnings.push(`Auf dem Lieferschein stehen mehrere Bestellnummern (${internalNos.join(', ')}). Bitte die Bestellung wählen.`);
+        return;
+      }
+      if (internalNos.length) {
+        this.warnings.push(`Die Bestellnummer ${internalNos.join(', ')} ist keiner Bestellung im System zugeordnet.`);
+      }
+
+      // 2. Wahl: unscharfer Vergleich der Nummern bzw. einzige offene Bestellung
       const top = ranked[0];
       const clear = top && (top.sim >= 0.8 || ranked.length === 1) && (ranked.length === 1 || top.sim - ranked[1].sim >= 0.1);
-      this.detectedOrderHint = detected ? `Erkannter Lieferant: ${detected.label}.` : 'Lieferant nicht erkannt.';
       if (clear) {
-        this.detectedOrderHint += top.sim >= 0.8 ? ' Bestellung über die Auftragsnummer zugeordnet – bitte prüfen.' : ' Einzige offene Bestellung vorausgewählt – bitte prüfen.';
+        this.detectedOrderHint += top.sim >= 0.8 ? ' Bestellung über eine ähnliche Nummer zugeordnet – bitte prüfen.' : ' Einzige offene Bestellung vorausgewählt – bitte prüfen.';
         await this.selectOrder(top.order.id);
       } else if (!ranked.length) {
-        this.warnings.push('Keine offene Bestellung für diesen Lieferanten gefunden.');
+        this.warnings.push(detected ? 'Keine offene Bestellung für diesen Lieferanten gefunden.' : 'Keine offene Bestellung gefunden.');
       }
     },
 
@@ -648,6 +687,7 @@ function component() {
         review: this.reviewRows,
         assessment: { failed: this.recognitionFailed, problems: this.problems },
         warnings: this.warnings,
+        internalOrderNos: internalNos,
         client: { userAgent: navigator.userAgent, viewport: { width: window.innerWidth, height: window.innerHeight } },
       });
       const form = new FormData();

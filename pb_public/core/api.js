@@ -40,10 +40,14 @@ export function addItemToSupplierCart(data) {
   return pb.send('/api/lab/cart-items', { method: 'POST', body: data });
 }
 
-/** action: 'advance' | 'back' */
-export function changeOrderStatus(orderId, action, supplierOrderNo) {
+/**
+ * action: 'advance' | 'back'
+ * numbers (nur angefragt → bestellt): { internal_order_no, supplier_order_no? }
+ */
+export function changeOrderStatus(orderId, action, numbers = {}) {
   const body = { action };
-  if (supplierOrderNo) body.supplier_order_no = supplierOrderNo;
+  if (numbers.internal_order_no) body.internal_order_no = numbers.internal_order_no;
+  if (numbers.supplier_order_no) body.supplier_order_no = numbers.supplier_order_no;
   return pb.send(`/api/lab/orders/${orderId}/status`, { method: 'POST', body });
 }
 
@@ -94,7 +98,7 @@ export function listOrderItems(orderId) {
   });
 }
 
-/** Freigegebene Felder: supplier_order_no, notes, shipping_cost, invoice_total, custom_fields, … */
+/** Freigegebene Felder: internal_order_no, supplier_order_no, notes, shipping_cost, invoice_total, custom_fields, … */
 export function updateOrder(id, data) {
   return pb.collection('orders').update(id, data);
 }

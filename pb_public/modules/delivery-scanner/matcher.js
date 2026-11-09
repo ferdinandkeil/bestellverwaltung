@@ -157,6 +157,49 @@ export function matchRows(rows, items) {
   return { assignments, perItem };
 }
 
+// ---------------------------------------------------------------------------
+// Interne Bestellnummer der Hochschule (JJJJIW#####) – steht bei allen Lieferanten auf dem Lieferschein
+// ---------------------------------------------------------------------------
+
+/** OCR-Verwechslungen in Ziffernfeldern. */
+const DIGIT_FIX = { O: '0', o: '0', D: '0', Q: '0', I: '1', l: '1', i: '1', '|': '1', '!': '1' };
+/** 4 Ziffern, „I“ (oft als 1/l/| gelesen), „W“ (auch „VV“), 5 Ziffern – Satzzeichen am Rand werden ignoriert. */
+const INTERNAL_NO_FUZZY = /^([0-9OoDQIli|!]{4})[I1li|!](W|VV)([0-9OoDQIli|!]{5})$/;
+
+/** Wort → normierte interne Bestellnummer oder null. */
+export function parseInternalOrderNo(text) {
+  const t = String(text).replace(/^[^0-9A-Za-z|!]+|[^0-9A-Za-z|!]+$/g, '');
+  const m = INTERNAL_NO_FUZZY.exec(t);
+  if (!m) return null;
+  const fix = (s) => [...s].map((c) => DIGIT_FIX[c] ?? c).join('');
+  const year = fix(m[1]);
+  const num = fix(m[3]);
+  if (!/^\d{4}$/.test(year) || !/^\d{5}$/.test(num)) return null;
+  // Ganz ohne echte Ziffern (z. B. „IIIIIWlllll“) ist es keine Nummer.
+  if ((m[1] + m[3]).replace(/[^0-9]/g, '').length < 5) return null;
+  return `${year}IW${num}`;
+}
+
+/**
+ * Alle internen Bestellnummern auf den Seiten (in Lesereihenfolge, ohne Dubletten).
+ * Berücksichtigt auch Nummern, die die OCR in zwei Wörter getrennt hat („2026IW 01047“).
+ */
+export function findInternalOrderNumbers(pages) {
+  const found = [];
+  for (const page of pages) {
+    const words = page?.words ?? [];
+    for (let i = 0; i < words.length; i++) {
+      const candidates = [words[i].text];
+      if (i + 1 < words.length) candidates.push(words[i].text + words[i + 1].text);
+      for (const c of candidates) {
+        const no = parseInternalOrderNo(c);
+        if (no && !found.includes(no)) found.push(no);
+      }
+    }
+  }
+  return found;
+}
+
 /** Kandidaten für die Auftragsnummer: längere Wörter mit Ziffern im oberen Teil der ersten Seite. */
 export function orderNumberTokens(page, maxY = 0.5) {
   return page.words
@@ -166,14 +209,15 @@ export function orderNumberTokens(page, maxY = 0.5) {
 }
 
 /**
- * Bestellungen nach Übereinstimmung der Auftragsnummer mit dem Lieferschein sortieren.
+ * Bestellungen nach unscharfer Übereinstimmung ihrer Nummern (interne Bestellnummer, Shop-Auftragsnummer)
+ * mit dem Lieferschein sortieren – Rückfall, wenn keine interne Bestellnummer eindeutig gelesen wurde.
  * → [{ order, sim }] absteigend
  */
 export function rankOrders(orders, tokens) {
   return orders
     .map((order) => {
-      const no = order.supplier_order_no;
-      const sim = no ? Math.max(0, ...tokens.map((t) => similarity(t, no))) : 0;
+      const numbers = [order.internal_order_no, order.supplier_order_no].filter(Boolean);
+      const sim = Math.max(0, ...numbers.flatMap((no) => tokens.map((t) => similarity(t, no))));
       return { order, sim };
     })
     .sort((a, b) => b.sim - a.sim);

@@ -56,7 +56,7 @@ test('Analyse-Daten: Seiten, OCR gekürzt, erkannte und eingetragene Mengen', ()
   });
   assert.equal(a.version, REPORT_VERSION);
   assert.equal(a.profile, 'reichelt');
-  assert.deepEqual(Object.keys(a.order).sort(), ['id', 'supplier', 'supplier_custom_name', 'supplier_order_no']);
+  assert.deepEqual(Object.keys(a.order).sort(), ['id', 'internal_order_no', 'supplier', 'supplier_custom_name', 'supplier_order_no']);
   assert.deepEqual(a.pages[0].ocr.words[0], { text: 'Menge', conf: 91, bbox: { x0: 0.1235, y0: 0.2, x1: 0.3, y1: 0.21 } });
   assert.equal(a.items[0].group_allocation_note, undefined, 'Gruppenaufteilung wird nicht mitgesendet');
   assert.deepEqual(a.review, [{ itemId: 'i1', part: 'A', recognized: 1, entered: 3, status: 'sure' }]);

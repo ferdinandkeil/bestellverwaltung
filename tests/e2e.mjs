@@ -114,6 +114,22 @@ try {
   await b.waitFor(`${BADGE} === 'Geliefert'`, 'zurück');
   ok('Geprüft und einen Schritt zurück');
 
+  // Offenen Mouser-Korb bestellen: interne Bestellnummer ist Pflicht und wird normalisiert
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`${ORDER_LINKS}.length === 2`, 'Dashboard');
+  await b.evaluate(`[...${ORDER_LINKS}].find((a) => a.innerText.includes('Mouser')).click()`);
+  await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Angefragt'`, 'Detail Mouser');
+  await b.clickText('button', 'Als bestellt markieren');
+  await b.waitFor(`document.body.innerText.includes('Bitte zuerst die interne Bestellnummer eintragen')`, 'Pflicht-Hinweis');
+  await b.fill('#internal-order-no', ' 2026iw04711 ');
+  await b.waitFor(`document.querySelector('#internal-order-no').value === '2026IW04711'`, 'normalisiert');
+  await b.clickText('button', 'Als bestellt markieren');
+  await b.waitFor(`${BADGE} === 'Bestellt'`, 'Bestellt');
+  await b.screenshot('05-bestellt');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('2026IW04711'))`, 'Nummer im Dashboard');
+  ok('Bestellen nur mit interner Bestellnummer (normalisiert, im Dashboard sichtbar)');
+
   await b.navigate(PB_URL + '/#/groups');
   await b.waitFor(`document.querySelector('[x-data=groupsView]') && [...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('Gruppe B'))`, 'Gruppenliste');
   await b.evaluate(`[...document.querySelectorAll('#view li')].find((l) => l.innerText.includes('Gruppe B')).click()`);
