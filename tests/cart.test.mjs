@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setup, resetData, createUser, createGroup, addItem, listRecords, expectHttpError,
+  setup, resetData, createUser, createGroup, addItem, listRecords, expectHttpError, http,
 } from './helpers.mjs';
 
 let u;
@@ -47,6 +47,24 @@ test('gleiche Gruppe zweimal erhöht deren Anteil; ohne Gruppe wird separat gef�
   const [it] = await listRecords('order_items');
   assert.equal(it.qty_ordered, 7);
   assert.equal(it.group_allocation_note, 'Gruppe A: 6x | ohne Gruppe: 1x');
+});
+
+test('Bestellnummer: mehrfacher und unsichtbarer Leerraum wird zusammengefasst, einzelne Leerzeichen bleiben', async () => {
+  const a = await addItem(u.token, { supplier: 'reichelt', part_number: ' mkds 1,5 3 5,08 ', name: 'Klemme', qty: 1 });
+  assert.equal(a.item.part_number, 'MKDS 1,5 3 5,08');
+  for (const variant of ['MKDS  1,5\t3 5,08', 'MKDS\u00A01,5 3\u202F5,08', 'MKDS 1,5\u200B 3 5,08']) {
+    const r = await addItem(u.token, { supplier: 'reichelt', part_number: variant, name: 'Klemme', qty: 1 });
+    assert.equal(r.merged, true, JSON.stringify(variant));
+    assert.equal(r.item.id, a.item.id);
+  }
+  const other = await addItem(u.token, { supplier: 'reichelt', part_number: 'MKDS1,535,08', name: 'ohne Leerzeichen', qty: 1 });
+  assert.equal(other.merged, false, 'ganz ohne Leerzeichen ist es eine andere Nummer');
+
+  // auch beim direkten Bearbeiten einer Position
+  const edited = await http('PATCH', `/api/collections/order_items/records/${other.item.id}`, {
+    token: u.token, json: { part_number: 'XIAO\u00A0\u00A0esp32c6 ' },
+  });
+  assert.equal(edited.part_number, 'XIAO ESP32C6');
 });
 
 test('verschiedene Lieferanten landen in verschiedenen Körben', async () => {

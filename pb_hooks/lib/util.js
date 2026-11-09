@@ -7,8 +7,16 @@ const AUTO_STATUSES = ["bestellt", "teilgeliefert", "geliefert"];
 /** Status, in denen Positionen bearbeitet und Lieferungen gebucht werden dürfen. */
 const DELIVERY_STATUSES = AUTO_STATUSES;
 
+/**
+ * Bestellnummer normalisieren: Großbuchstaben, Leerraum (auch Tabulator, geschützte und unsichtbare
+ * Leerzeichen aus kopierten Texten) zu einem Leerzeichen zusammengefasst, außen getrimmt.
+ * Einzelne Leerzeichen bleiben – sie gehören z. B. bei Reichelt zur Nummer („MKDS 1,5 3 5,08“).
+ */
 function normalizePartNumber(value) {
-  return String(value == null ? "" : value).trim().toUpperCase();
+  return String(value == null ? "" : value)
+    .replace(/[\s\u200B\u2060]+/g, " ")
+    .trim()
+    .toUpperCase();
 }
 
 /** Interne Bestellnummer der Hochschule: JJJJIW##### (z. B. 2026IW01047). */
