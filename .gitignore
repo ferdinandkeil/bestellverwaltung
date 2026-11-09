@@ -12,3 +12,6 @@ pocketbase.exe
 
 # Echte Belege (Lieferscheine, Etiketten) – enthalten Kundendaten, nie committen
 samples/
+
+# Deploy-Ziel (Host, Domain) – nur lokal
+scripts/deploy.env
