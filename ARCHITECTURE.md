@@ -94,7 +94,7 @@ Projekt/
 
 ### 4.1 Collections (Details: `pb_schema.json`)
 * **`groups`:** `name`, **`course`** (Veranstaltung, Pflicht), `semester` (Pflicht, Format `WS 2026/27` bzw. `SS 2027`), `is_active`. **Bewusst keine Kontaktdaten von Studierenden** (kein Name/E-Mail-Feld) – es werden keine personenbezogenen Daten Studierender gespeichert. Der Gruppenname ist nur **innerhalb von Veranstaltung + Semester eindeutig** (Unique-Index `idx_groups_unique_name`, Groß-/Kleinschreibung egal). Bei der Eingabe werden bestehende Veranstaltungen vorgeschlagen; in Auswahllisten erscheinen Gruppen nach Veranstaltung/Semester gegliedert.
-* **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|other`), `supplier_custom_name` (nur bei `other`, sonst leer), `supplier_order_no`, `status`, `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
+* **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|other`), `supplier_custom_name` (nur bei `other`, sonst leer), **`internal_order_no`** (interne Bestellnummer der Hochschule, Format `JJJJIW#####`, z. B. `2026IW01047`; eindeutig, Pflicht ab „bestellt“, danach korrigierbar, aber nicht mehr leer; ältere Bestellungen ohne Nummer bleiben bearbeitbar), `supplier_order_no` (optionale Auftragsnummer des Shops), `status`, `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
 * **`order_items`:** `order`, `part_number`, `name`, `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
 * **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (genau eine Datei, optional: Bild oder PDF; mehrseitige Belege als PDF, max. 15 MB ≈ 30 Seiten), `created`.
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
@@ -117,8 +117,8 @@ Projekt/
 
 ### 4.3 Status-Workflow
 * Kette: `angefragt` → `bestellt` → `teilgeliefert` → `geliefert` → `geprueft` → `abgerechnet`.
-* **Manuelle Schritte** (Route `POST /api/lab/orders/{id}/status`, `{action: "advance" | "back", supplier_order_no?}`):
-  * `angefragt → bestellt` (optional mit `supplier_order_no`); der Korb ist damit für neue Positionen geschlossen, neue landen in einem neuen offenen Korb.
+* **Manuelle Schritte** (Route `POST /api/lab/orders/{id}/status`, `{action: "advance" | "back", internal_order_no?, supplier_order_no?}`):
+  * `angefragt → bestellt` **nur mit interner Bestellnummer** (im Body oder vorher an der Bestellung eingetragen), optional mit `supplier_order_no`; der Korb ist damit für neue Positionen geschlossen, neue landen in einem neuen offenen Korb.
   * `geliefert → geprueft → abgerechnet`.
   * **„Einen Schritt zurück“** mit Sicherheitsabfrage im UI. Zurück auf `angefragt` wird verweigert, wenn bereits ein anderer offener Korb für den Lieferanten existiert.
 * **Automatischer Lieferstatus** (bei `bestellt`, `teilgeliefert`, `geliefert`; ab `geprueft` keine Automatik), neu berechnet nach jeder Lieferbuchung und jeder Änderung von `qty_ordered`/`qty_cancelled`:
@@ -158,7 +158,7 @@ registerPlugin({
 * **moodle-import:** CSV per Drag & Drop (PapaParse), Spalten-Mapping, Vorschau. **Gruppen werden interaktiv zugewiesen:** Für jede in der CSV vorkommende Gruppenbezeichnung wählt der Nutzer eine bestehende Gruppe (mit Veranstaltung/Semester) oder legt sie neu an – es gibt keine stillschweigende automatische Zuordnung. **Kein gespeicherter Import-Bezug:** Nach dem Buchen ist die Zuordnung zu Moodle-Einträgen nicht mehr vorhanden. Die Vorschau **warnt**, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen. Gebucht wird über `POST /api/lab/cart-items`. Benötigt eine Beispiel-CSV.
 * **word-export:** PizZip + docxtemplater, Zusatzfelder in `orders.custom_fields`. Benötigt die `.docx`-Vorlage.
 * **delivery-scanner:** Komplett im Browser, keine Daten an Dritte (OCR-Dienste/KI-APIs bewusst ausgeschlossen). Die Entzerrung ist fester Bestandteil, weil direkt aus der Web-App fotografiert wird und keine Scan-App vorausgesetzt werden kann. Bewertung am echten Reichelt-Beleg: mit Entzerrung 12/12 Positionen und Mengen korrekt (auch bei schrägem Foto), ohne Entzerrung 0/12. Ablauf:
-  1. **Start** aus der Bestellung (Bestellung fest) oder aus dem Dashboard (Lieferant über das Profil erkannt, Bestellung über unscharfen Vergleich der Auftragsnummer mit `supplier_order_no` der offenen Bestellungen vorgeschlagen; Nutzer bestätigt).
+  1. **Start** aus der Bestellung (Bestellung fest; Warnung, wenn auf dem Lieferschein eine andere interne Bestellnummer steht) oder aus dem Dashboard. Die Bestellung wird dann **über die interne Bestellnummer** zugeordnet, die bei allen Lieferanten auf dem Lieferschein steht (z. B. Reichelt „Bestellnummer“, TME „Bestellnummer des Kunden“): Suche auf allen Seiten, tolerant gegenüber OCR-Verwechslungen (`I`→`1`, `O`→`0`, `W`→`VV`), auch ohne Lieferanten-Profil. Rückfall: unscharfer Vergleich mit interner und Shop-Auftragsnummer der offenen Bestellungen. Der Nutzer bestätigt.
   2. **Aufnahme** über die System-Kamera (`<input capture="environment">`) oder Bildauswahl, beliebig viele Seiten.
   3. **Entzerrung:** Blattecken automatisch (jscanify/OpenCV.js), als verschiebbare Punkte angezeigt; Seite auf 1800 px Breite entzerrt.
   4. **OCR:** Tesseract.js (deu+eng, LSTM), Wörter mit normierten Koordinaten 0..1.

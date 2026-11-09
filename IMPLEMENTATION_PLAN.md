@@ -46,7 +46,8 @@
 3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.
 4. ✔ **Problem melden:** fehlgeschlagene Erkennungen landen mit Originalfotos und OCR-Ergebnis in `scan_reports`, Mail mit Link an die Superuser; Abholen zur Analyse mit `scripts/fetch-scan-reports.mjs` (löscht danach auf dem Server).
 5. Offen:
-   * Gemeldete Lieferscheine auswerten und Erkennung/Profile nachbessern.
+   * Gemeldete Lieferscheine auswerten und Erkennung/Profile nachbessern (erste Auswertung 11/2026: TME und Würth ohne Profil, OCR gut; daraus die Zuordnung über die interne Bestellnummer).
+   * Profil TME (läuft als „sonstige“ – Profile müssen dafür auch über den Shop-Namen wählbar sein) bzw. allgemeine Rückfallregel über typische Spaltenüberschriften; noch nicht entschieden.
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
    * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege in `samples/` liegen.
 
@@ -59,7 +60,7 @@
 ## Phase 4: Shop-Export (Branch `phase-4-shop-export`)
 1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
 2. `modules/shop-export/shop-exporter.js` im Slot `order-detail-actions`: Modal mit Copy-to-Clipboard und CSV-Download (Menge = `qty_ordered − qty_cancelled`).
-3. Button „Exportiert & auf ‚Bestellt‘ setzen“ (optional mit `supplier_order_no`) über die Status-Route.
+3. Button „Exportiert & auf ‚Bestellt‘ setzen“ (mit interner Bestellnummer, optional `supplier_order_no`) über die Status-Route.
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
