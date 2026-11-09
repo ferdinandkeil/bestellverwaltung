@@ -2,9 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assessRecognition, buildAnalysis, REPORT_VERSION } from '../pb_public/modules/delivery-scanner/report.js';
-import { profileForSupplier } from '../pb_public/modules/delivery-scanner/profiles/index.js';
+import { profileById } from '../pb_public/modules/delivery-scanner/profiles/index.js';
 
-const reichelt = profileForSupplier('reichelt');
+const reichelt = profileById('reichelt');
 const order = { id: 'o1', supplier: 'reichelt', supplier_order_no: '2026IW01047' };
 const ok = { pages: [{ cornersDetected: true }], detectedProfile: reichelt, order, orderProfile: reichelt };
 const row = (part) => ({ qty: 1, part, page: 0, box: { x0: 0, y0: 0, x1: 0.1, y1: 0.01 }, conf: 90 });

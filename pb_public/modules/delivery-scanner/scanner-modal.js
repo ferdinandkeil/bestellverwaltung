@@ -9,7 +9,7 @@ import { toast, confirmAction } from '../../core/ui.js';
 import { loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, toGrayJpeg, toJpeg } from './vision.js';
 import { preloadOcr, recognizePage, terminateOcr } from './ocr.js';
 import { extractRows, matchRows, orderNumberTokens, rankOrders, findInternalOrderNumbers } from './matcher.js';
-import { detectProfile, profileForSupplier } from './profiles/index.js';
+import { detectProfile, profileForOrder, profileMatchesOrder } from './profiles/index.js';
 import { jpegsToPdf } from './pdf.js';
 import { assessRecognition, buildAnalysis } from './report.js';
 
@@ -494,7 +494,7 @@ function component() {
       if (!this.lockedOrder) {
         await this.loadOrderCandidates(detected, ocrPages);
       } else {
-        if (detected && detected.supplier !== this.order.supplier) {
+        if (detected && !profileMatchesOrder(detected, this.order)) {
           this.warnings.push(`Der Lieferschein sieht nach ${detected.label} aus, die Bestellung ist aber bei ${supplierLabel(this.order)}. Bitte prüfen.`);
         }
         const own = this.order.internal_order_no;
@@ -509,12 +509,14 @@ function component() {
     async loadOrderCandidates(detected, ocrPages) {
       const statusFilter = DELIVERY_STATUSES.filter((s) => s !== 'geliefert').map((s) => `status = "${s}"`).join(' || ');
       const filter = detected ? `(${statusFilter}) && supplier = "${detected.supplier}"` : statusFilter;
-      const [orders, byNumber] = await Promise.all([
+      const [openOrders, byNumber] = await Promise.all([
         pb.collection('orders').getFullList({ filter, sort: '-updated' }),
         internalNos.length
           ? pb.collection('orders').getFullList({ filter: internalNos.map((no) => pb.filter('internal_order_no = {:no}', { no })).join(' || ') })
           : [],
       ]);
+      // bei „sonstigen“ Lieferanten zusätzlich über den Shop-Namen eingrenzen
+      const orders = detected ? openOrders.filter((o) => profileMatchesOrder(detected, o)) : openOrders;
       const ranked = rankOrders(orders, orderNumberTokens(ocrPages[0]));
       const candidates = [...byNumber.filter((o) => DELIVERY_STATUSES.includes(o.status)), ...ranked.map((r) => r.order).filter((o) => !byNumber.some((b) => b.id === o.id))];
       this.orderCandidates = candidates.map((order) => ({
@@ -530,7 +532,7 @@ function component() {
           this.warnings.push(`Die Bestellung ${order.internal_order_no} hat den Status „${statusMeta(order.status).label}“ – hier kann keine Lieferung gebucht werden.`);
           return;
         }
-        if (detected && detected.supplier !== order.supplier) {
+        if (detected && !profileMatchesOrder(detected, order)) {
           this.warnings.push(`Der Lieferschein sieht nach ${detected.label} aus, die Bestellung ${order.internal_order_no} ist aber bei ${supplierLabel(order)}. Bitte prüfen.`);
         }
         this.detectedOrderHint += ` Bestellung über die interne Bestellnummer ${order.internal_order_no} zugeordnet.`;
@@ -581,13 +583,13 @@ function component() {
 
     computeReview() {
       if (!this.order) return;
-      const profile = profileForSupplier(this.order.supplier);
+      const profile = profileForOrder(this.order);
       const rows = [];
       const missingHeader = [];
       if (profile) {
         pageData.forEach((p, page) => {
           const res = extractRows(p.ocr, profile);
-          if (!res.headerFound) missingHeader.push(page + 1);
+          if (res.headerFound === false) missingHeader.push(page + 1);
           res.rows.forEach((r) => rows.push({ ...r, page }));
         });
       }
@@ -627,7 +629,7 @@ function component() {
         pages: pageData.map((p) => p.meta),
         detectedProfile,
         order: this.order,
-        orderProfile: this.order ? profileForSupplier(this.order.supplier) : null,
+        orderProfile: this.order ? profileForOrder(this.order) : null,
         missingHeader: extracted.missingHeader,
         rows: extracted.rows,
         assignments,

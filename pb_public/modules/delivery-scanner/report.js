@@ -1,5 +1,6 @@
 // Problem-Meldungen: Einschätzung, ob die Erkennung gescheitert ist, und Aufbau der Analyse-Daten
 // für die Collection scan_reports. Reine Funktionen (ohne DOM), damit sie ohne Browser testbar sind.
+import { profileMatchesOrder } from './profiles/index.js';
 
 /** Version des Formats von scan_reports.analysis – bei Änderungen erhöhen. */
 export const REPORT_VERSION = 1;
@@ -22,7 +23,7 @@ export function assessRecognition({ pages, detectedProfile, order, orderProfile,
   if (noCorners.length) soft.push(`Blattkanten auf Seite ${noCorners.join(', ')} nicht automatisch erkannt`);
 
   if (!detectedProfile) (order ? soft : hard).push('Lieferant im Kopf des Lieferscheins nicht erkannt');
-  else if (order && detectedProfile.supplier !== order.supplier) soft.push(`Lieferschein sieht nach ${detectedProfile.label} aus, Bestellung ist bei ${order.supplier}`);
+  else if (order && !profileMatchesOrder(detectedProfile, order)) soft.push(`Lieferschein sieht nach ${detectedProfile.label} aus, Bestellung ist bei ${order.supplier === 'other' ? order.supplier_custom_name : order.supplier}`);
 
   if (order) {
     if (!orderProfile) {

@@ -48,11 +48,81 @@ const unionBox = (ws) => ({
 });
 
 /**
- * Positionszeilen einer Seite lesen. Die Spaltengrenzen ergeben sich aus der Kopfzeile
- * (profile.columns), dadurch unabhängig von Bildausschnitt und Auflösung.
+ * Positionszeilen einer Seite lesen – je nach Profil über die Kopfzeile oder über die Mengeneinheit.
  * → { headerFound, rows: [{ qty, part, box, conf }] }   (box normiert 0..1)
+ *   headerFound: true/false bei Kopfzeilen-Profilen, null bei Profilen ohne Kopfzeile (rowAnchor 'unit')
  */
 export function extractRows(page, profile) {
+  return profile.rowAnchor === 'unit' ? extractRowsByUnit(page, profile) : extractRowsByHeader(page, profile);
+}
+
+/** Position, Satzzeichen: gehören nicht zur Bestellnummer. */
+const isPosition = (w) => /^0*\d{1,3}\.?$/.test(w.text.trim());
+const isPunctuation = (w) => !/[0-9A-Za-z]/.test(w.text);
+
+/**
+ * Lesart „Einheit“: Jede Mengeneinheit (profile.unit, z. B. „ST“) markiert eine Positionszeile.
+ * Menge = Zahl direkt links der Einheit (darf durch die OCR leicht versetzt sein),
+ * Bestellnummer = Wörter derselben Zeile links der Menge, ohne führende Positionsnummer.
+ * Tabellen ohne Einheit (z. B. Pack- oder Chargenlisten) liefern so keine Zeilen.
+ */
+function extractRowsByUnit(page, profile) {
+  const words = page.words;
+  const rows = [];
+  for (const unit of words.filter((w) => profile.unit.test(w.text.trim()))) {
+    const uc = center(unit.bbox);
+    const h = unit.bbox.y1 - unit.bbox.y0;
+    // Menge: Zahl rechtsbündig vor der Einheit, vertikal höchstens etwa eine Zeilenhöhe versetzt
+    const qtyWord = words
+      .filter((w) => w !== unit && w.bbox.x1 <= unit.bbox.x0 + 0.005 && w.bbox.x1 >= unit.bbox.x0 - 0.06
+        && Math.abs(center(w.bbox).y - uc.y) < h * 1.2 && parseQty(w.text))
+      .sort((a, b) => b.bbox.x1 - a.bbox.x1)[0];
+    if (!qtyWord) continue;
+    // Bestellnummer: Zeile links der Menge. Bei leicht schiefem Blatt liegt die Folgezeile (Hersteller,
+    // Beschreibung) ähnlich nah – daher Textzeilen bilden und die Zeile mit Positionsnummer bevorzugen.
+    const nearby = words
+      .filter((w) => w !== qtyWord && w !== unit && w.bbox.x1 <= qtyWord.bbox.x0 && Math.abs(center(w.bbox).y - uc.y) < h * 2)
+      .sort((a, b) => center(a.bbox).y - center(b.bbox).y);
+    const lines = [];
+    for (const w of nearby) {
+      const last = lines[lines.length - 1];
+      const cy = center(w.bbox).y;
+      if (last && cy - last.cy < 0.5 * Math.max(h, w.bbox.y1 - w.bbox.y0)) last.words.push(w);
+      else lines.push({ cy, words: [w] });
+    }
+    for (const l of lines) {
+      l.words.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+      l.dy = Math.abs(l.words.reduce((sum, w) => sum + center(w.bbox).y, 0) / l.words.length - uc.y);
+    }
+    const byDistance = (a, b) => a.dy - b.dy;
+    const line = lines.filter((l) => isPosition(l.words[0])).sort(byDistance)[0]
+      ?? lines.filter((l) => l.dy < h * 0.6).sort(byDistance)[0];
+    if (!line) continue;
+    // Nur der zusammenhängende Block am Zeilenanfang (große Lücke = andere Spalte)
+    const block = [];
+    for (const w of line.words) {
+      if (block.length && w.bbox.x0 - block[block.length - 1].bbox.x1 > 0.08) break;
+      block.push(w);
+    }
+    if (block.length && isPosition(block[0])) block.shift();
+    const partWords = block.filter((w) => !isPunctuation(w));
+    if (!partWords.length) continue;
+    rows.push({
+      qty: parseQty(qtyWord.text),
+      part: partWords.map((w) => w.text).join(' ').replace(/[\s/]+$/, ''),
+      box: unionBox([...partWords, qtyWord, unit]),
+      conf: Math.round(Math.min(...partWords.map((w) => w.conf ?? 0))),
+    });
+  }
+  rows.sort((a, b) => a.box.y0 - b.box.y0);
+  return { headerFound: null, rows };
+}
+
+/**
+ * Lesart „Kopfzeile“: Die Spaltengrenzen ergeben sich aus den Überschriften (profile.columns),
+ * dadurch unabhängig von Bildausschnitt und Auflösung.
+ */
+function extractRowsByHeader(page, profile) {
   const words = page.words;
   const find = (re) => words.find((w) => re.test(w.text.trim()));
   const hQty = find(profile.columns.qty);

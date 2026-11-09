@@ -7,9 +7,9 @@ import {
   normalizePart, similarity, parseQty, extractRows, matchRows, orderNumberTokens, rankOrders,
   parseInternalOrderNo, findInternalOrderNumbers,
 } from '../pb_public/modules/delivery-scanner/matcher.js';
-import { detectProfile, profileForSupplier } from '../pb_public/modules/delivery-scanner/profiles/index.js';
+import { detectProfile, profileById, profileForOrder, profileMatchesOrder } from '../pb_public/modules/delivery-scanner/profiles/index.js';
 
-const reichelt = profileForSupplier('reichelt');
+const reichelt = profileById('reichelt');
 
 /** Wort an Position (x, y) in normierten Koordinaten; Breite ~ Zeichenanzahl. */
 const word = (text, x, y, conf = 90) => ({ text, conf, bbox: { x0: x, y0: y, x1: x + text.length * 0.009, y1: y + 0.008 } });
@@ -131,4 +131,75 @@ test('Rückfall: Bestellung über unscharf gelesene Nummer finden (intern oder S
   assert.equal(ranked[0].order.id, 'b');
   assert.ok(ranked[0].sim > 0.9);
   assert.ok(ranked[0].sim - ranked[1].sim > 0.1);
+});
+
+// ---------------------------------------------------------------------------
+// Profile ohne Kopfzeile (Zeilen über die Mengeneinheit): TME, Würth – synthetische Seiten
+// ---------------------------------------------------------------------------
+const tme = profileById('tme');
+const wuerth = profileById('wuerth');
+
+/** Wörter einer Zeile ab x, mit Abstand; dy verschiebt einzelne Zeilen (schiefes Blatt). */
+const lineAt = (y, x, texts, step = 0.006) => texts.map((t) => { const w = word(t, x, y); x += t.length * 0.009 + step; return w; });
+
+/** TME-Layout: Lfd. Nr. | Artikel (fett) + Hersteller/Beschreibung darunter | Anzahl „n ST“ rechts. Kopfzeile fehlt (OCR). */
+const TME_PAGE = {
+  words: [
+    word('TME', 0.04, 0.21), word('Germany', 0.09, 0.21), word('GmbH', 0.17, 0.21),
+    word('Bestellnummer', 0.59, 0.10), word('des', 0.7, 0.10), word('Kunden', 0.73, 0.10), word('20261W00321', 0.83, 0.10),
+    word('Kundennummer', 0.67, 0.14), word('12345678', 0.86, 0.14),
+    // Position 1: Blatt leicht schief – die Einheit liegt rechts tiefer als die Artikelzeile
+    // (Artikelzeile 0,66 Zeilenhöhen über der Einheit, Herstellerzeile 0,78 darunter – beide ähnlich nah)
+    word('1', 0.05, 0.3405), word('TST-ABC123', 0.10, 0.337), word('4', 0.887, 0.3423), word('ST', 0.902, 0.3423),
+    ...lineAt(0.3485, 0.10, ['Hersteller:', 'MUSTER', 'Herstellersymbol:', 'ABC123']),
+    ...lineAt(0.356, 0.10, ['IC:Beispiel;5VDC;SO8']),
+    // Position 2: Menge von der OCR eine halbe Zeile tiefer gelesen
+    word('2', 0.05, 0.386), word('NTC-10K-1%', 0.10, 0.383), word('ST', 0.902, 0.389), word('10', 0.88, 0.3893),
+    ...lineAt(0.392, 0.10, ['Hersteller:', 'BEISPIEL', 'Herstellersymbol:', 'NTC-10K-1%']),
+    // Fließtext ohne Einheit
+    ...lineAt(0.47, 0.04, ['Die', 'Bestellung', 'wurde', '2', 'Mal', 'geprüft']),
+  ],
+};
+
+/** Würth-Layout: Lieferschein mit „n STK“, dazu Chargen- und Packliste ohne Einheit (dürfen nicht doppelt zählen). */
+const WE_DELIVERY = {
+  words: [
+    word('WÜRTH', 0.6, 0.05), word('ELEKTRONIK', 0.7, 0.05),
+    ...lineAt(0.50, 0.02, ['Pos.', 'Artikelnr.', '/', 'Ihre', 'Artikelnr.']), word('Menge', 0.47, 0.50), word('Herkunft', 0.63, 0.50),
+    ...lineAt(0.535, 0.07, ['Unsere', 'Auftragsnummer', 'X26DE000001', 'von', '02.11.2026']),
+    word('001', 0.03, 0.551), word('1111111111105', 0.07, 0.551), word('/', 0.19, 0.551), word('2', 0.49, 0.551), word('STK', 0.51, 0.551), word('SI', 0.66, 0.551), word('85423911000', 0.76, 0.551),
+    ...lineAt(0.578, 0.07, ['SENSOR-A', '3', 'to', '5,5', 'V']),
+    word('002', 0.03, 0.669), word('1111111111101', 0.08, 0.669), word('/', 0.2, 0.669), word('3', 0.5, 0.669), word('STK', 0.51, 0.669), word('SI', 0.66, 0.669),
+  ],
+};
+const WE_PACKING = {
+  words: [
+    ...lineAt(0.40, 0.05, ['Pos.', 'Artikel-Nr./', 'Ihre', 'Artikelnummer']), word('Menge', 0.38, 0.40), word('Charge', 0.51, 0.40),
+    word('1', 0.05, 0.484), word('1111111111101', 0.08, 0.484), word('3', 0.38, 0.484),
+    word('2', 0.05, 0.626), word('1111111111105', 0.09, 0.626), word('2', 0.38, 0.626), word('444010012510000', 0.51, 0.626),
+  ],
+};
+
+test('Profile TME und Würth: Erkennung über den Kopf, Zuordnung über den Shop-Namen', () => {
+  assert.equal(detectProfile([TME_PAGE]).id, 'tme');
+  assert.equal(detectProfile([WE_DELIVERY]).id, 'wuerth');
+  const other = (name) => ({ supplier: 'other', supplier_custom_name: name });
+  assert.equal(profileForOrder(other('TME')).id, 'tme');
+  assert.equal(profileForOrder(other(' tme.eu ')).id, 'tme');
+  for (const n of ['Würth Elektronik', 'Wuerth', 'WE']) assert.equal(profileForOrder(other(n)).id, 'wuerth', n);
+  assert.equal(profileForOrder(other('Conrad')), null);
+  assert.equal(profileForOrder({ supplier: 'reichelt' }).id, 'reichelt');
+  assert.equal(profileMatchesOrder(tme, { supplier: 'reichelt' }), false);
+  assert.equal(profileMatchesOrder(tme, other('Wuerth')), false);
+});
+
+test('TME: Zeilen über die Einheit „ST“ – trotz schiefem Blatt, versetzter Menge und fehlender Kopfzeile', () => {
+  const { headerFound, rows } = extractRows(TME_PAGE, tme);
+  assert.equal(headerFound, null, 'keine Kopfzeile nötig');
+  assert.deepEqual(rows.map((r) => [r.qty, r.part]), [[4, 'TST-ABC123'], [10, 'NTC-10K-1%']]);
+});
+
+test('Würth: nur Lieferschein-Zeilen mit „STK“ zählen, Packliste nicht doppelt', () => {
+  assert.deepEqual(extractRows(WE_DELIVERY, wuerth).rows.map((r) => [r.qty, r.part]), [[2, '1111111111105'], [3, '1111111111101']]);
+  assert.deepEqual(extractRows(WE_PACKING, wuerth), { headerFound: null, rows: [] });
 });
