@@ -662,6 +662,30 @@
         "maxSize": 500000
       },
       {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "itm_added_later_by",
+        "name": "added_later_by",
+        "type": "relation",
+        "required": false,
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "itm_added_later_at",
+        "name": "added_later_at",
+        "type": "date",
+        "required": false,
+        "min": "",
+        "max": ""
+      },
+      {
         "id": "pb_order_items_col_created",
         "name": "created",
         "type": "autodate",
@@ -686,7 +710,7 @@
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": null,
-    "updateRule": "@request.auth.id != \"\" && @request.body.qty_delivered:isset = false && @request.body.order:isset = false && (order.status = \"angefragt\" || order.status = \"bestellt\" || order.status = \"teilgeliefert\" || order.status = \"geliefert\")",
+    "updateRule": "@request.auth.id != \"\" && @request.body.qty_delivered:isset = false && @request.body.order:isset = false && @request.body.added_later_by:isset = false && @request.body.added_later_at:isset = false && (order.status = \"angefragt\" || order.status = \"bestellt\" || order.status = \"teilgeliefert\" || order.status = \"geliefert\")",
     "deleteRule": "@request.auth.id != \"\" && order.status = \"angefragt\""
   },
   {

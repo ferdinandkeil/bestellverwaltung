@@ -58,22 +58,30 @@ routerAdd("POST", "/api/lab/orders/{id}/status", (e) => {
  * POST /api/lab/orders/{id}/deliveries
  * Body (JSON oder multipart/form-data):
  *   lines: [{ item, qty }]   (bei multipart als JSON-String)
+ *   newItems?: [{ part_number, name?, qty, group? }] – werden nachgetragen und mit qty geliefert (JSON-String bei multipart)
  *   note?: string
  *   receipt?: eine Datei (nur multipart; Bild oder PDF, mehrseitige Belege als PDF)
  * Antwort: { delivery, status }
  */
 routerAdd("POST", "/api/lab/orders/{id}/deliveries", (e) => {
   const { bookDelivery } = require(`${__hooks}/lib/deliveries.js`);
+  const { addLateItem } = require(`${__hooks}/lib/late-items.js`);
   const id = e.request.pathValue("id");
   const body = e.requestInfo().body || {};
 
-  let lines = body.lines;
-  if (typeof lines === "string") {
+  const parseJSON = (value, field, fallback) => {
+    if (value === undefined || value === null || value === "") return fallback;
+    if (typeof value !== "string") return value;
     try {
-      lines = JSON.parse(lines);
+      return JSON.parse(value);
     } catch (_) {
-      throw new BadRequestError("„lines“ ist kein gültiges JSON.");
+      throw new BadRequestError("„" + field + "“ ist kein gültiges JSON.");
     }
+  };
+  let lines = parseJSON(body.lines, "lines", []);
+  const newItems = parseJSON(body.newItems, "newItems", []);
+  if (!Array.isArray(lines) || !Array.isArray(newItems)) {
+    throw new BadRequestError("„lines“ und „newItems“ müssen Listen sein.");
   }
 
   let receipts = [];
@@ -84,7 +92,28 @@ routerAdd("POST", "/api/lab/orders/{id}/deliveries", (e) => {
 
   let result;
   $app.runInTransaction((txApp) => {
-    result = bookDelivery(txApp, id, lines, body.note, receipts, e.auth.id);
+    // nachgetragene Positionen (Lieferschein enthält Ware, die beim Erfassen vergessen wurde)
+    const added = newItems.map((n) => addLateItem(txApp, id, n || {}, e.auth.id));
+    const allLines = lines.concat(added.map((item, i) => ({ item: item.id, qty: newItems[i].qty })));
+    result = bookDelivery(txApp, id, allLines, body.note, receipts, e.auth.id);
+  });
+  return e.json(200, result);
+}, $apis.requireAuth("users"));
+
+/**
+ * POST /api/lab/orders/{id}/items   – Position nachtragen (Bestellung ab „bestellt“)
+ * Body: { part_number, name?, qty, group?, url?, price_unit? }
+ * Antwort: { item, status }
+ */
+routerAdd("POST", "/api/lab/orders/{id}/items", (e) => {
+  const { addLateItem } = require(`${__hooks}/lib/late-items.js`);
+  const { recalculateOrderStatus } = require(`${__hooks}/lib/status.js`);
+  const id = e.request.pathValue("id");
+  const body = e.requestInfo().body || {};
+  let result;
+  $app.runInTransaction((txApp) => {
+    const item = addLateItem(txApp, id, body, e.auth.id);
+    result = { item: item, status: recalculateOrderStatus(txApp, id) };
   });
   return e.json(200, result);
 }, $apis.requireAuth("users"));

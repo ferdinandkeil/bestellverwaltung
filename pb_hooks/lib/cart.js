@@ -30,6 +30,25 @@ function allocationNote(allocations) {
   return allocations.map((a) => a.groupName + ": " + a.qty + "x").join(" | ");
 }
 
+/** Stückpreis aus der Eingabe (leer → null), sonst Fehler. */
+function parsePrice(value) {
+  const price = value === undefined || value === null || value === "" ? null : Number(value);
+  if (price !== null && (!isFinite(price) || price < 0)) {
+    throw new BadRequestError("Der Stückpreis muss eine Zahl ≥ 0 sein.");
+  }
+  return price;
+}
+
+/** Gruppe zur ID (leer → null), unbekannte ID → Fehler. */
+function resolveGroup(app, id) {
+  if (!id) return null;
+  try {
+    return app.findRecordById("groups", String(id));
+  } catch (_) {
+    throw new BadRequestError("Unbekannte Gruppe: " + id);
+  }
+}
+
 /**
  * Position in den offenen Sammelkorb buchen bzw. mit vorhandener Position zusammenführen.
  * Muss innerhalb einer Transaktion aufgerufen werden.
@@ -51,20 +70,8 @@ function addItemToSupplierCart(app, input, userId) {
   const name = String(input.name || "").trim();
   const qty = positiveInt(input.qty, "Die Menge");
   const url = String(input.url || "").trim();
-  const price = input.price_unit === undefined || input.price_unit === null || input.price_unit === ""
-    ? null : Number(input.price_unit);
-  if (price !== null && (!isFinite(price) || price < 0)) {
-    throw new BadRequestError("Der Stückpreis muss eine Zahl ≥ 0 sein.");
-  }
-
-  let group = null;
-  if (input.group) {
-    try {
-      group = app.findRecordById("groups", String(input.group));
-    } catch (_) {
-      throw new BadRequestError("Unbekannte Gruppe: " + input.group);
-    }
-  }
+  const price = parsePrice(input.price_unit);
+  const group = resolveGroup(app, input.group);
   const allocKey = group ? group.id : null;
   const allocName = group ? group.getString("name") : NO_GROUP_LABEL;
 
@@ -108,4 +115,4 @@ function addItemToSupplierCart(app, input, userId) {
   return { order: order, item: item, merged: merged };
 }
 
-module.exports = { addItemToSupplierCart };
+module.exports = { addItemToSupplierCart, allocationNote, parsePrice, resolveGroup, NO_GROUP_LABEL };
