@@ -72,7 +72,7 @@ Projekt/
 │       │   ├── matcher.js          # Tabellenzeilen lesen, unscharfer Abgleich, Bestellung finden
 │       │   ├── pdf.js              # JPEG-Seiten → PDF (ohne Bibliothek)
 │       │   ├── report.js           # Problem-Meldung: Einschätzung „gescheitert“, Analyse-Daten
-│       │   └── profiles/           # je Lieferant: Erkennung + Spaltenüberschriften (index.js, reichelt.js)
+│       │   └── profiles/           # je Lieferant: Erkennung + Lesart der Tabelle (reichelt.js, tme.js, wuerth.js)
 │       └── part-number-check/      # Prüfung der Bestellnummern (Kap. 6)
 ├── tailwind/app.src.css            # Tailwind-Quelle
 ├── scripts/
@@ -162,11 +162,14 @@ registerPlugin({
   2. **Aufnahme** über die System-Kamera (`<input capture="environment">`) oder Bildauswahl, beliebig viele Seiten.
   3. **Entzerrung:** Blattecken automatisch (jscanify/OpenCV.js), als verschiebbare Punkte angezeigt; Seite auf 1800 px Breite entzerrt.
   4. **OCR:** Tesseract.js (deu+eng, LSTM), Wörter mit normierten Koordinaten 0..1.
-  5. **Tabelle lesen:** Spaltengrenzen aus den Überschriften des Lieferanten-Profils (z. B. Menge | Artikelnummer | Bezeichnung) – unabhängig von Bildausschnitt und Auflösung. Mengen mit OCR-Korrektur (O→0, I/l→1) nur bei sonst rein numerischem Text.
+  5. **Tabelle lesen**, je Profil auf eine von zwei Arten – unabhängig von Bildausschnitt und Auflösung:
+     * **Kopfzeile** (Reichelt): Spaltengrenzen aus den Überschriften (z. B. Menge | Artikelnummer | Bezeichnung).
+     * **Mengeneinheit** (TME „4 ST“, Würth „2 STK“): jede Einheit markiert eine Positionszeile; Menge = Zahl direkt davor, Bestellnummer = Anfang der Zeile mit Positionsnummer. Braucht keine Kopfzeile (bei TME von der OCR oft nicht gelesen) und zählt Begleitdokumente ohne Einheit (Würth: Chargen- und Packliste) nicht doppelt.
+     Mengen mit OCR-Korrektur (O→0, I/l→1) nur bei sonst rein numerischem Text. Profile gehören zu einem Lieferanten, bei „sonstige“ zusätzlich zu einem Shop-Namen (z. B. TME, Würth/WE).
   6. **Abgleich:** Ähnlichkeit der normierten Bestellnummern (Levenshtein) gegen die Positionen der Bestellung. *Sicher* ab 0,85 mit Abstand ≥ 0,08 zum Zweitbesten, sonst *prüfen*; zusätzlich *prüfen* bei Menge > Rückstand oder mehreren Zeilen je Position. Nicht zugeordnete Zeilen weist der Nutzer von Hand zu.
   7. **Buchung** über die Lieferbuchungs-Route; alle Seiten als ein PDF (Graustufen-JPEG) in `receipt`. Ohne Mengen wird das PDF nur an `orders.attachments` gehängt.
   8. **Problem melden** (Beta-Rückmeldung): Knopf in der Prüfansicht, unabhängig von der Buchung. Bei offensichtlichem Scheitern (Lieferant nicht erkannt, kein Profil, Positionstabelle nicht gefunden, keine Zeile zugeordnet) wird die Meldung hervorgehoben angeboten; kleinere Auffälligkeiten (Ecken von Hand, einzelne Zeilen ohne Zuordnung) werden nur mitgeschickt. Die Meldung landet in `scan_reports` auf dem eigenen Server; alle Superuser bekommen eine Mail mit **Link in die Admin-UI, ohne Anhang** (in der Mail nur Bestellung, Probleme, Notiz). Analyse: `node scripts/fetch-scan-reports.mjs <URL>` holt die Meldungen nach `samples/scan-reports/` (nie committen) und löscht sie danach auf dem Server; daraus werden synthetische Testfälle abgeleitet.
-  Neue Lieferanten: Profil in `profiles/` anlegen (Erkennungsmuster + Spaltenüberschriften), sobald Beispielbelege vorliegen.
+  Neue Lieferanten: Profil in `profiles/` anlegen (Erkennungsmuster + Lesart), sobald Beispielbelege vorliegen – am einfachsten aus einer Problem-Meldung.
 * **part-number-check:** Prüft Bestellnummern auf das Format des jeweiligen Shops und schlägt Korrekturen vor (z. B. Herstellernummer statt Shop-Nummer erkannt). Korrekturen werden interaktiv bestätigt.
 * **MCP-Zugang für Claude Code (Phase 7, geplant):** Route `/mcp` in `pb_hooks` stellt ausgewählte Funktionen als MCP-Werkzeuge bereit (Streamable HTTP). Zugriff nur mit dem Token eines eigenen Dienst-Nutzers „KI-Assistent“ (widerrufbar, gleiche API-Rules wie Labor-Nutzer). Lesende Werkzeuge plus „Position in Sammelkorb“ und „Notiz setzen“; Lieferbuchungen, Statuswechsel und Löschen bleiben Menschen vorbehalten. Übermittelt werden nur Bestelldaten und Labor-Nutzer (öffentlich auf der TH-Homepage); Studierendendaten existieren im System nicht; Belege/Anhänge nur als Dateiname.
 

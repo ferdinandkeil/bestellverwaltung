@@ -42,14 +42,14 @@
 
 **Status:** als **Beta** in `main` und im Go-Live enthalten (in der App gekennzeichnet); endgültige Abnahme nach dem Test mit echten Handyfotos.
 1. ✔ Ansatz evaluiert und entschieden: Browser-OCR (Tesseract.js) mit Entzerrung (jscanify/OpenCV.js), Beleg als PDF.
-2. ✔ `modules/delivery-scanner/` in den Slots `order-detail-actions` und `dashboard-actions` (Details ARCHITECTURE Kap. 6), Profil Reichelt.
+2. ✔ `modules/delivery-scanner/` in den Slots `order-detail-actions` und `dashboard-actions` (Details ARCHITECTURE Kap. 6), Profile Reichelt, TME, Würth Elektronik.
 3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.
 4. ✔ **Problem melden:** fehlgeschlagene Erkennungen landen mit Originalfotos und OCR-Ergebnis in `scan_reports`, Mail mit Link an die Superuser; Abholen zur Analyse mit `scripts/fetch-scan-reports.mjs` (löscht danach auf dem Server).
 5. Offen:
    * Gemeldete Lieferscheine auswerten und Erkennung/Profile nachbessern (erste Auswertung 11/2026: TME und Würth ohne Profil, OCR gut; daraus die Zuordnung über die interne Bestellnummer).
-   * Profil TME (läuft als „sonstige“ – Profile müssen dafür auch über den Shop-Namen wählbar sein) bzw. allgemeine Rückfallregel über typische Spaltenüberschriften; noch nicht entschieden.
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
-   * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege in `samples/` liegen.
+   * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege vorliegen (am einfachsten per „Problem melden“).
+   * TME und Würth sind nur an je einem echten Beleg geprüft (11/2026); weitere Meldungen abwarten.
 
 ## Phase 3: Moodle-Import (Branch `phase-3-moodle-import`)
 1. Vorab: Beispiel-CSV aus Moodle beschaffen (Spalten, Lieferantenangabe, Gruppen-Schreibweisen).
