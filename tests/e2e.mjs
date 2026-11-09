@@ -47,11 +47,12 @@ try {
   await b.screenshot('01-login');
 
   const requestedAt = Date.now();
-  await b.fill('#login-email', login.email);
+  // Adresse mit anderer Groß-/Kleinschreibung als im Konto (Handy-Autokorrektur, Gewohnheit)
+  await b.fill('#login-email', ' ' + login.email[0].toUpperCase() + login.email.slice(1).replace('example.com', 'Example.COM'));
   await b.clickText('button', 'Code anfordern');
   await b.waitFor(`document.querySelector('#login-code')?.offsetParent`, 'Code-Feld');
   const code = await otpFromMailpit(login.email, requestedAt);
-  ok('Code angefordert, OTP-Mail erhalten');
+  ok('Code angefordert (andere Groß-/Kleinschreibung), OTP-Mail erhalten');
 
   await b.fill('#login-code', '00000000');
   await b.clickText('button', 'Anmelden');
