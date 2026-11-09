@@ -115,6 +115,19 @@ try {
   await b.waitFor(`${BADGE} === 'Geliefert'`, 'zurück');
   ok('Geprüft und einen Schritt zurück');
 
+  // Vergessene Position nachtragen und gleich als geliefert buchen → bleibt „Geliefert“, gekennzeichnet
+  await b.clickText('#view button', 'Position nachtragen');
+  await b.waitFor(`document.querySelector('#late-part')?.offsetParent`, 'Formular nachtragen');
+  await b.fill('#late-part', 'ne 556 dip');
+  await b.fill('#late-qty', '2');
+  await b.evaluate(`document.querySelector('#late-part').closest('form').querySelector('input[type=checkbox]').click()`);
+  await sleep(400); // Einblendung abwarten (nur für den Screenshot)
+  await b.screenshot('04b-nachtragen');
+  await b.clickText('.modal-panel button', 'Nachtragen');
+  await b.waitFor(`[...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('NE 556 DIP') && l.innerText.includes('nachgetragen') && l.innerText.includes('E2E Tester'))`, 'nachgetragene Position');
+  if ((await b.evaluate(BADGE)) !== 'Geliefert') throw new Error('Status nach Nachtragen: ' + await b.evaluate(BADGE));
+  ok('Position nachgetragen und geliefert gebucht – gekennzeichnet, Status bleibt Geliefert');
+
   // Offenen Mouser-Korb bestellen: interne Bestellnummer ist Pflicht und wird normalisiert
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`${ORDER_LINKS}.length === 2`, 'Dashboard');

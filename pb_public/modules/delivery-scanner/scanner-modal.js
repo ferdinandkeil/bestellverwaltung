@@ -2,9 +2,9 @@
 // Registriert sich in den Slots 'order-detail-actions' und 'dashboard-actions'.
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
-import { DELIVERY_STATUSES, supplierLabel, orderNumbersLabel, statusMeta } from '../../core/config.js';
+import { DELIVERY_STATUSES, supplierLabel, orderNumbersLabel, statusMeta, groupsByCourse } from '../../core/config.js';
 import { pb } from '../../core/pb.js';
-import { listOrderItems, getOrder, bookDelivery, uploadAttachments, backlogOf, errorMessage } from '../../core/api.js';
+import { listOrderItems, getOrder, bookDelivery, uploadAttachments, backlogOf, errorMessage, listGroups } from '../../core/api.js';
 import { toast, confirmAction } from '../../core/ui.js';
 import { loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, toGrayJpeg, toJpeg } from './vision.js';
 import { preloadOcr, recognizePage, terminateOcr } from './ocr.js';
@@ -165,14 +165,32 @@ const template = /* html */ `
                 <h3 class="mb-2 text-sm font-semibold">Nicht zugeordnete Zeilen</h3>
                 <ul class="space-y-2">
                   <template x-for="u in unmatched" :key="u.key">
-                    <li class="flex flex-wrap items-center gap-2 text-sm">
-                      <span class="font-mono" x-text="u.qty + ' × ' + u.part"></span>
-                      <select class="input ml-auto w-auto" x-model="u.assignTo" :disabled="u.assigned" @change="assignUnmatched(u)">
-                        <option value="">– zuordnen –</option>
-                        <template x-for="r in reviewRows" :key="r.itemId">
-                          <option :value="r.itemId" x-text="r.part"></option>
-                        </template>
-                      </select>
+                    <li class="text-sm" :data-unmatched="u.key">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="font-mono" x-text="u.qty + ' × ' + u.part"></span>
+                        <select class="input ml-auto w-auto" x-model="u.assignTo" :disabled="u.assigned" @change="assignUnmatched(u)"
+                                :aria-label="'Zeile ' + u.part + ' zuordnen'">
+                          <option value="">– zuordnen –</option>
+                          <option value="__new">als neue Position nachtragen</option>
+                          <template x-for="r in reviewRows" :key="r.itemId">
+                            <option :value="r.itemId" x-text="r.part"></option>
+                          </template>
+                        </select>
+                      </div>
+                      <div x-show="u.addNew" class="mt-2 grid grid-cols-[5rem_minmax(0,1fr)] gap-2 rounded-lg bg-violet-50 p-2">
+                        <p class="col-span-2 text-xs text-violet-900">Wird als vergessene Position nachgetragen (gekennzeichnet) und mit dieser Lieferung gebucht. Bestellnummer bitte prüfen.</p>
+                        <input class="input text-right" type="number" min="1" step="1" x-model.number="u.qty" aria-label="Menge der nachgetragenen Position">
+                        <input class="input font-mono" x-model="u.part" maxlength="100" spellcheck="false" aria-label="Bestellnummer der nachgetragenen Position">
+                        <input class="input col-span-2" x-model="u.name" maxlength="300" placeholder="Bezeichnung (empfohlen)" aria-label="Bezeichnung der nachgetragenen Position">
+                        <select class="input col-span-2" x-model="u.group" aria-label="Gruppe der nachgetragenen Position">
+                          <option value="">– ohne Gruppe –</option>
+                          <template x-for="c in groupCourses" :key="c.label">
+                            <optgroup :label="c.label">
+                              <template x-for="g in c.groups" :key="g.id"><option :value="g.id" x-text="g.name"></option></template>
+                            </optgroup>
+                          </template>
+                        </select>
+                      </div>
                     </li>
                   </template>
                 </ul>
@@ -256,6 +274,7 @@ function component() {
     warnings: [],
     reviewRows: [],
     unmatched: [],
+    groupCourses: [],
     note: '',
     busy: false,
     problems: [],
@@ -621,7 +640,7 @@ function component() {
       });
       this.unmatched = assignments
         .filter((a) => a.status === 'none')
-        .map((a, i) => ({ key: i, part: a.row.part, qty: a.row.qty, assignTo: '', assigned: false }));
+        .map((a, i) => ({ key: i, part: a.row.part, qty: a.row.qty, assignTo: '', assigned: false, addNew: false, name: '', group: '' }));
     },
 
     updateAssessment() {
@@ -638,7 +657,18 @@ function component() {
       this.problems = problems;
     },
 
-    assignUnmatched(u) {
+    async assignUnmatched(u) {
+      u.addNew = u.assignTo === '__new';
+      if (u.addNew) {
+        if (!this.groupCourses.length) {
+          try {
+            this.groupCourses = groupsByCourse(await listGroups({ onlyActive: true }));
+          } catch (err) {
+            toast.error(errorMessage(err));
+          }
+        }
+        return;
+      }
       const row = this.reviewRows.find((r) => r.itemId === u.assignTo);
       if (!row) return;
       row.qty = (row.qty || 0) + u.qty;
@@ -714,7 +744,7 @@ function component() {
 
     // ---- Buchen ------------------------------------------------------------
     hasQuantities() {
-      return this.reviewRows.some((r) => Number(r.qty) !== 0);
+      return this.reviewRows.some((r) => Number(r.qty) !== 0) || this.unmatched.some((u) => u.addNew);
     },
 
     async buildPdf() {
@@ -733,15 +763,23 @@ function component() {
         return;
       }
       const lines = this.reviewRows.filter((r) => Number(r.qty) !== 0).map((r) => ({ item: r.itemId, qty: Number(r.qty) }));
+      const newItems = this.unmatched.filter((u) => u.addNew)
+        .map((u) => ({ part_number: u.part.trim(), name: u.name.trim(), qty: Number(u.qty), group: u.group }));
+      const badNew = newItems.find((n) => !n.part_number || !Number.isInteger(n.qty) || n.qty < 1);
+      if (badNew) {
+        toast.error('Nachzutragende Position: Bestellnummer und Menge (ganze Zahl ≥ 1) angeben.');
+        return;
+      }
       const unchecked = this.reviewRows.filter((r) => r.status === 'check' && Number(r.qty) !== 0).length;
       if (unchecked && !confirmAction(`${unchecked} Position(en) sind zur Prüfung markiert. Trotzdem buchen?`)) return;
 
       this.busy = true;
       try {
         const receipt = await this.buildPdf();
-        if (lines.length) {
-          await bookDelivery(this.order.id, lines, { note: this.note, receipt });
-          toast.success(`Lieferung mit ${lines.length} Position(en) gebucht, Beleg angehängt.`);
+        if (lines.length || newItems.length) {
+          await bookDelivery(this.order.id, lines, { note: this.note, receipt, newItems });
+          toast.success(`Lieferung mit ${lines.length + newItems.length} Position(en) gebucht` +
+            (newItems.length ? `, davon ${newItems.length} nachgetragen` : '') + ', Beleg angehängt.');
         } else {
           await uploadAttachments(this.order.id, [receipt]);
           toast.success('Beleg an die Bestellung angehängt.');

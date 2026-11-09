@@ -1,11 +1,11 @@
 // Bestell-Detail: Positionen, Lieferbuchungen, Storno, Status, Kosten, Anhänge, Plugin-Slot.
 import {
-  supplierLabel, statusMeta, INTERNAL_ORDER_NO_RE, EDITABLE_STATUSES, DELIVERY_STATUSES, ADVANCE_LABELS, BACK_ALLOWED, VAT_RATE,
+  supplierLabel, statusMeta, groupsByCourse, INTERNAL_ORDER_NO_RE, EDITABLE_STATUSES, DELIVERY_STATUSES, ADVANCE_LABELS, BACK_ALLOWED, VAT_RATE,
 } from '../core/config.js';
 import {
   getOrder, listOrderItems, listDeliveries, updateOrder, deleteOrder, updateItem, deleteItem,
   changeOrderStatus, bookDelivery, uploadAttachments, removeAttachment, fileUrl, backlogOf, orderTotals,
-  subscribe, errorMessage,
+  subscribe, errorMessage, addLateItem, listGroups,
 } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast, confirmAction, numberOrNull } from '../core/ui.js';
@@ -81,6 +81,9 @@ const template = /* html */ `
             Positionen <span class="text-sm font-normal text-slate-500" x-text="'(' + items.length + ')'"></span>
           </h2>
           <template x-if="canDeliver()">
+            <button type="button" class="btn btn-secondary" @click="openLateForm()">Position nachtragen</button>
+          </template>
+          <template x-if="canDeliver()">
             <button type="button" class="btn btn-success" @click="openDeliveryForm()">Lieferung erfassen</button>
           </template>
           <template x-if="order.status === 'angefragt'">
@@ -98,6 +101,10 @@ const template = /* html */ `
                     <div class="font-mono text-sm font-semibold break-all" x-text="it.part_number"></div>
                     <div class="text-sm" :class="it.name ? 'text-slate-700' : 'italic text-slate-400'" x-text="it.name || 'ohne Bezeichnung'"></div>
                     <a x-show="it.url" :href="it.url" target="_blank" rel="noopener" class="text-xs text-blue-700 hover:underline">Zum Artikel ↗</a>
+                    <div x-show="it.added_later_at" class="mt-1 text-xs text-violet-800">
+                      <span class="badge bg-violet-50 text-violet-800 ring-violet-200">nachgetragen</span>
+                      <span x-text="lateLabel(it)"></span>
+                    </div>
                     <div x-show="it.group_allocation_note" class="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900" x-text="it.group_allocation_note"></div>
                   </div>
                   <template x-if="canEditItems()">
@@ -269,6 +276,47 @@ const template = /* html */ `
         </div>
       </div>
 
+      <!-- Modal: Position nachtragen -->
+      <div x-show="late.open" x-transition.opacity class="modal-backdrop" @click.self="late.open = false"
+           @keydown.escape.window="late.open = false">
+        <form class="modal-panel space-y-3" @submit.prevent="submitLate()">
+          <h2 class="text-lg font-semibold">Position nachtragen</h2>
+          <p class="text-sm text-slate-600">Für Ware, die bestellt wurde, aber beim Erfassen vergessen wurde. Die Position wird als „nachgetragen“ gekennzeichnet.</p>
+          <div>
+            <label class="label" for="late-part">Bestellnummer des Shops</label>
+            <input id="late-part" class="input font-mono" x-model="late.part_number" required maxlength="100" autocapitalize="characters" spellcheck="false">
+          </div>
+          <div>
+            <label class="label">Bezeichnung <span class="font-normal text-slate-500">(empfohlen)</span></label>
+            <input class="input" x-model="late.name" maxlength="300">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label" for="late-qty">Bestellte Menge</label>
+              <input id="late-qty" class="input" type="number" min="1" step="1" x-model.number="late.qty" required>
+            </div>
+            <div>
+              <label class="label">Gruppe <span class="font-normal text-slate-500">(optional)</span></label>
+              <select class="input" x-model="late.group">
+                <option value="">– ohne Gruppe –</option>
+                <template x-for="c in late.courses" :key="c.label">
+                  <optgroup :label="c.label">
+                    <template x-for="g in c.groups" :key="g.id"><option :value="g.id" x-text="g.name"></option></template>
+                  </optgroup>
+                </template>
+              </select>
+            </div>
+          </div>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" x-model="late.delivered"> Menge gleich als geliefert buchen
+          </label>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button type="button" class="btn btn-secondary" @click="late.open = false">Abbrechen</button>
+            <button type="submit" class="btn btn-primary" :disabled="busy">Nachtragen</button>
+          </div>
+        </form>
+      </div>
+
       <!-- Modal: Lieferung erfassen -->
       <div x-show="delivery.open" x-transition.opacity class="modal-backdrop" @click.self="delivery.open = false"
            @keydown.escape.window="delivery.open = false">
@@ -322,6 +370,7 @@ function component() {
     pending: {},
     pendingTimer: null,
     delivery: { open: false, qty: {}, note: '', receipt: null },
+    late: { open: false, part_number: '', name: '', qty: 1, group: '', delivered: false, courses: [] },
     unsubscribe: null,
 
     get orderId() {
@@ -385,6 +434,42 @@ function component() {
     totals() { return orderTotals(this.order, this.items); },
     allocationSum(it) { return (it.group_allocations || []).reduce((s, a) => s + (a.qty || 0), 0); },
     partNumberOf(itemId) { return this.items.find((i) => i.id === itemId)?.part_number || '(gelöscht)'; },
+
+    // ---- Position nachtragen ----------------------------------------------
+    lateLabel(it) {
+      const who = it.expand?.added_later_by?.name || it.expand?.added_later_by?.email;
+      return 'am ' + fmt.date(it.added_later_at) + (who ? ' von ' + who : '');
+    },
+
+    async openLateForm() {
+      this.late = { open: true, part_number: '', name: '', qty: 1, group: '', delivered: false, courses: [] };
+      try {
+        this.late.courses = groupsByCourse(await listGroups({ onlyActive: true }));
+      } catch (err) {
+        toast.error(errorMessage(err));
+      }
+      this.$nextTick(() => document.getElementById('late-part')?.focus());
+    },
+
+    async submitLate() {
+      const data = { part_number: this.late.part_number, name: this.late.name, qty: this.late.qty, group: this.late.group };
+      this.busy = true;
+      try {
+        if (this.late.delivered) {
+          await bookDelivery(this.order.id, [], { newItems: [data], note: 'Nachgetragene Position' });
+          toast.success('Position nachgetragen und als geliefert gebucht.');
+        } else {
+          await addLateItem(this.order.id, data);
+          toast.success('Position nachgetragen.');
+        }
+        this.late.open = false;
+        await this.reload();
+      } catch (err) {
+        toast.error(errorMessage(err));
+      } finally {
+        this.busy = false;
+      }
+    },
 
     // ---- Bestellung --------------------------------------------------------
     async saveOrder(field) {

@@ -25,6 +25,9 @@ const PARTS = [
   [5, 'STAPELLEISTE 10G', 'Stapelleiste, 10-polig, einreihig'],
 ];
 
+/** Geliefert, aber beim Erfassen der Bestellung vergessen → wird im Scanner nachgetragen. */
+const FORGOTTEN = [2, 'LED 5-4500 RT', 'LED, 5 mm, bedrahtet, rot'];
+
 /** Synthetischer Lieferschein im Layout von Reichelt (keine echten Kundendaten). */
 const NOTE_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
   body { margin: 0; width: 1240px; height: 1754px; background: #fff; font-family: Arial, Helvetica, sans-serif; color: #111; }
@@ -44,6 +47,7 @@ const NOTE_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
   <div class="order">Bestellnummer<br>${ORDER_NO}</div>
   <table><tr><th>Menge</th><th>Artikelnummer</th><th>Bezeichnung</th></tr>
   ${PARTS.map(([q, p, d]) => `<tr><td class="q">${q}</td><td>${p}</td><td>${d}</td></tr>`).join('')}
+  <tr><td class="q">${FORGOTTEN[0]}</td><td>${FORGOTTEN[1]}</td><td>${FORGOTTEN[2]}</td></tr>
   </table>
 </body></html>`;
 
@@ -151,7 +155,7 @@ try {
   }
   const an = report.analysis;
   const stapel = an.review.find((r) => r.part === 'STAPELLEISTE 10G');
-  if (an.profile !== 'reichelt' || an.pages[0].ocr.words.length < 50 || !an.pages[0].cornersAuto || an.rows.length !== 12
+  if (an.profile !== 'reichelt' || an.pages[0].ocr.words.length < 50 || !an.pages[0].cornersAuto || an.rows.length !== 13
       || stapel.recognized !== 5 || stapel.entered !== 4) {
     throw new Error('Analyse-Daten unvollständig: ' + JSON.stringify({ profile: an.profile, words: an.pages[0].ocr?.words.length, rows: an.rows.length, stapel }));
   }
@@ -161,10 +165,23 @@ try {
   await b.screenshot('scanner-05-gemeldet');
   await b.evaluate(`${scanner}.reviewRows.find((r) => r.part === 'STAPELLEISTE 10G').qty = 5`);
 
+  // Vergessene Position: nicht zugeordnete Zeile als neue Position nachtragen
+  const unmatchedParts = await b.evaluate(`JSON.stringify(${scanner}.unmatched.map((u) => u.qty + '×' + u.part))`);
+  if (unmatchedParts !== JSON.stringify([FORGOTTEN[0] + '×' + FORGOTTEN[1]])) throw new Error('Nicht zugeordnet: ' + unmatchedParts);
+  await b.fill('[data-unmatched="0"] select', '__new');
+  await b.waitFor(`document.querySelector('[data-unmatched="0"] input[aria-label^="Bezeichnung"]')?.offsetParent`, 'Felder zum Nachtragen');
+  await b.fill('[data-unmatched="0"] input[aria-label^="Bezeichnung"]', 'LED rot');
+  await b.screenshot('scanner-06-nachtragen');
+  ok('nicht zugeordnete Zeile zum Nachtragen markiert');
+
   await b.evaluate('window.confirm = () => true');
   await b.clickText('[x-data=deliveryScanner] button', 'Lieferung buchen');
-  await b.waitFor(`document.body.innerText.includes('Lieferung mit 12 Position(en) gebucht')`, 'Buchung', 30000);
-  ok('Lieferung gebucht');
+  await b.waitFor(`document.body.innerText.includes('Lieferung mit 13 Position(en) gebucht, davon 1 nachgetragen')`, 'Buchung', 30000);
+  const [late] = await listRecords('order_items', `part_number = "${FORGOTTEN[1]}"`);
+  if (!late || late.order !== orderId || late.qty_ordered !== 2 || late.qty_delivered !== 2 || !late.added_later_by || late.name !== 'LED rot') {
+    throw new Error('Nachgetragene Position: ' + JSON.stringify(late));
+  }
+  ok('Lieferung gebucht, vergessene Position nachgetragen (gekennzeichnet, bestellt = geliefert = 2)');
 
   const [delivery] = await listRecords('deliveries', `order = "${orderId}"`);
   if (!/^lieferschein_reichelt_.*\.pdf$/.test(delivery.receipt)) throw new Error('PDF-Beleg fehlt: ' + delivery.receipt);

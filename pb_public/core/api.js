@@ -53,18 +53,21 @@ export function changeOrderStatus(orderId, action, numbers = {}) {
 
 /**
  * Lieferung buchen.
- * lines: [{ item, qty }] (qty ≠ 0, negativ = Korrektur), receipt: optionale Datei.
+ * lines: [{ item, qty }] (qty ≠ 0, negativ = Korrektur), receipt: optionale Datei,
+ * newItems: vergessene Positionen [{ part_number, name?, qty, group? }] – werden nachgetragen und mitgeliefert.
  * → { delivery, status }
  */
-export function bookDelivery(orderId, lines, { note = '', receipt = null } = {}) {
+export function bookDelivery(orderId, lines, { note = '', receipt = null, newItems = [] } = {}) {
   let body;
   if (receipt) {
     body = new FormData();
     body.append('lines', JSON.stringify(lines));
+    if (newItems.length) body.append('newItems', JSON.stringify(newItems));
     body.append('note', note);
     body.append('receipt', receipt);
   } else {
     body = { lines, note };
+    if (newItems.length) body.newItems = newItems;
   }
   return pb.send(`/api/lab/orders/${orderId}/deliveries`, { method: 'POST', body });
 }
@@ -95,7 +98,16 @@ export function listOrderItems(orderId) {
   return pb.collection('order_items').getFullList({
     filter: pb.filter('order = {:id}', { id: orderId }),
     sort: 'created',
+    expand: 'added_later_by',
   });
+}
+
+/**
+ * Vergessene Position bei einer bestellten Bestellung nachtragen (gekennzeichnet).
+ * data: { part_number, name?, qty, group? } → { item, status }
+ */
+export function addLateItem(orderId, data) {
+  return pb.send(`/api/lab/orders/${orderId}/items`, { method: 'POST', body: data });
 }
 
 /** Freigegebene Felder: internal_order_no, supplier_order_no, notes, shipping_cost, invoice_total, custom_fields, … */
