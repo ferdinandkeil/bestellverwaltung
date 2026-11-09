@@ -34,7 +34,8 @@ function allocationNote(allocations) {
  * Position in den offenen Sammelkorb buchen bzw. mit vorhandener Position zusammenführen.
  * Muss innerhalb einer Transaktion aufgerufen werden.
  *
- * input: { supplier, supplier_custom_name?, part_number, name, qty, group?, url?, price_unit? }
+ * input: { supplier, supplier_custom_name?, part_number, name?, qty, group?, url?, price_unit? }
+ * Die Bezeichnung ist optional; eine später gelieferte Bezeichnung wird bei leerer Position übernommen.
  */
 function addItemToSupplierCart(app, input, userId) {
   const supplier = String(input.supplier || "");
@@ -73,7 +74,6 @@ function addItemToSupplierCart(app, input, userId) {
   const merged = !!item;
 
   if (!item) {
-    if (!name) throw new BadRequestError("Die Bezeichnung ist erforderlich.");
     item = new Record(app.findCollectionByNameOrId("order_items"));
     item.set("order", order.id);
     item.set("part_number", partNumber);

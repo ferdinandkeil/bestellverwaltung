@@ -96,7 +96,7 @@ const template = /* html */ `
                 <div class="flex items-start gap-2">
                   <div class="min-w-0 flex-1">
                     <div class="font-mono text-sm font-semibold break-all" x-text="it.part_number"></div>
-                    <div class="text-sm text-slate-700" x-text="it.name"></div>
+                    <div class="text-sm" :class="it.name ? 'text-slate-700' : 'italic text-slate-400'" x-text="it.name || 'ohne Bezeichnung'"></div>
                     <a x-show="it.url" :href="it.url" target="_blank" rel="noopener" class="text-xs text-blue-700 hover:underline">Zum Artikel ↗</a>
                     <div x-show="it.group_allocation_note" class="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900" x-text="it.group_allocation_note"></div>
                   </div>
@@ -137,8 +137,8 @@ const template = /* html */ `
                       <input class="input font-mono" x-model="edit.part_number" required maxlength="100">
                     </div>
                     <div>
-                      <label class="label">Bezeichnung</label>
-                      <input class="input" x-model="edit.name" required maxlength="300">
+                      <label class="label">Bezeichnung <span class="font-normal text-slate-500">(empfohlen)</span></label>
+                      <input class="input" x-model="edit.name" maxlength="300">
                     </div>
                     <div class="sm:col-span-2">
                       <label class="label">Link</label>
@@ -280,7 +280,7 @@ const template = /* html */ `
               <li class="flex items-center gap-2 py-2">
                 <div class="min-w-0 flex-1">
                   <div class="truncate font-mono text-xs font-semibold" x-text="it.part_number"></div>
-                  <div class="truncate text-xs text-slate-500" x-text="it.name"></div>
+                  <div x-show="it.name" class="truncate text-xs text-slate-500" x-text="it.name"></div>
                   <div class="text-xs text-slate-500" x-text="'Rückstand ' + backlogOf(it)"></div>
                 </div>
                 <button type="button" class="btn btn-ghost btn-sm" @click="delivery.qty[it.id] = backlogOf(it)" :disabled="!backlogOf(it)">Rest</button>
