@@ -13,7 +13,7 @@
 - [ ] Proxy-Header gesetzt und in den Logs geprüft; Rate limiting aktiv
 - [ ] Postfach angelegt, Test-Mail an TH-Adresse kommt im Posteingang an
 - [ ] MFA für den Admin aktiv (erst nach funktionierendem Mailversand)
-- [ ] App deployt (Kap. 3)
+- [ ] App deployt und Dienst neu gestartet; Hook-Prüfung liefert `401` (Kap. 3)
 - [ ] Auto-Backups aktiv, ein Backup manuell erzeugt, heruntergeladen und geprüft
 
 **Abnahme im Betrieb**
@@ -106,7 +106,15 @@ rsync -av --delete pb_hooks/  <user>@<host>.uberspace.de:bestellverwaltung/pb_ho
 rsync -av pb_schema.json      <user>@<host>.uberspace.de:bestellverwaltung/
 ```
 
-* Änderungen in `pb_hooks/` lädt PocketBase automatisch neu (Hooks-Watcher). Im Zweifel: `supervisorctl restart bestellverwaltung`.
+Danach **immer** den Dienst neu starten und prüfen, ob die Hooks geladen sind:
+
+```bash
+ssh <user>@<host>.uberspace.de supervisorctl restart bestellverwaltung
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<domain>/api/lab/cart-items   # erwartet: 401
+```
+
+* `401` (Anmeldung erforderlich) heißt: Die eigenen Routen sind geladen. **`404`** heißt: Die Hooks fehlen – dann `supervisorctl tail bestellverwaltung stderr` prüfen.
+* Warum immer neu starten: PocketBase lädt `pb_hooks/` beim Start und überwacht den Ordner nur, wenn er beim Start schon existierte. Lief der Dienst vor dem ersten Deploy, bleiben die Hooks bis zum Neustart ungeladen (11/2026: „Artikel anlegen“ schlug mit 404 fehl).
 * Bei Schema-Änderungen anschließend erneut importieren (Schritt 2.2). **Vorher ein Backup ziehen.**
 * **Einführung der internen Bestellnummer (11/2026):** Bestellungen, die schon vorher auf „bestellt“ standen, haben noch keine. Sie bleiben bearbeitbar; die Nummer in der Bestell-Detailansicht nachtragen (stand sie bisher im Feld „Auftragsnummer“, dorthin verschieben), damit der Lieferschein-Scanner sie findet.
 * **Achtung:** Der Import mit „Merge“ ergänzt und ändert Felder, **entfernt aber keine Felder**, die im Schema weggefallen sind. Solche Felder im Admin-UI (Collection → Feld → Löschen) von Hand entfernen. Die betroffenen Felder stehen in der jeweiligen Commit-Nachricht.
