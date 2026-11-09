@@ -1,7 +1,8 @@
 // Lieferanten-Profil Reichelt (abgestimmt auf Lieferscheine von reichelt elektronik, Stand 11/2026).
 //
 // Aufbau des Lieferscheins:
-//   Kopf:     Logo „reichelt elektronik“, „Bestellnummer“ (z. B. 2026IW01047) = unsere supplier_order_no
+//   Kopf:     Logo „reichelt elektronik“, „Bestellnummer“ (z. B. 2026IW01047) = unsere interne Bestellnummer
+//             (wird lieferantenunabhängig über matcher.findInternalOrderNumbers gefunden)
 //   Tabelle:  Menge | Artikelnummer | Bezeichnung   (Artikelnummer = Reichelt-Bestellnummer, kann Leerzeichen enthalten)
 //   Es gibt keine Spalten für bestellte Menge oder Rückstand.
 

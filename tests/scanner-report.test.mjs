@@ -2,9 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assessRecognition, buildAnalysis, REPORT_VERSION } from '../pb_public/modules/delivery-scanner/report.js';
-import { profileForSupplier } from '../pb_public/modules/delivery-scanner/profiles/index.js';
+import { profileById } from '../pb_public/modules/delivery-scanner/profiles/index.js';
 
-const reichelt = profileForSupplier('reichelt');
+const reichelt = profileById('reichelt');
 const order = { id: 'o1', supplier: 'reichelt', supplier_order_no: '2026IW01047' };
 const ok = { pages: [{ cornersDetected: true }], detectedProfile: reichelt, order, orderProfile: reichelt };
 const row = (part) => ({ qty: 1, part, page: 0, box: { x0: 0, y0: 0, x1: 0.1, y1: 0.01 }, conf: 90 });
@@ -56,7 +56,7 @@ test('Analyse-Daten: Seiten, OCR gekürzt, erkannte und eingetragene Mengen', ()
   });
   assert.equal(a.version, REPORT_VERSION);
   assert.equal(a.profile, 'reichelt');
-  assert.deepEqual(Object.keys(a.order).sort(), ['id', 'supplier', 'supplier_custom_name', 'supplier_order_no']);
+  assert.deepEqual(Object.keys(a.order).sort(), ['id', 'internal_order_no', 'supplier', 'supplier_custom_name', 'supplier_order_no']);
   assert.deepEqual(a.pages[0].ocr.words[0], { text: 'Menge', conf: 91, bbox: { x0: 0.1235, y0: 0.2, x1: 0.3, y1: 0.21 } });
   assert.equal(a.items[0].group_allocation_note, undefined, 'Gruppenaufteilung wird nicht mitgesendet');
   assert.deepEqual(a.review, [{ itemId: 'i1', part: 'A', recognized: 1, entered: 3, status: 'sure' }]);

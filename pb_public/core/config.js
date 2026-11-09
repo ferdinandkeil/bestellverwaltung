@@ -39,6 +39,18 @@ export function supplierLabel(order) {
   return SUPPLIERS.find((s) => s.value === order.supplier)?.label ?? order.supplier;
 }
 
+/** Interne Bestellnummer der Hochschule: JJJJIW##### (z. B. 2026IW01047). */
+export const INTERNAL_ORDER_NO_RE = /^[0-9]{4}IW[0-9]{5}$/;
+
+/** Kurzbezeichnung der Nummern einer Bestellung für Listen und Auswahlfelder. */
+export function orderNumbersLabel(order) {
+  if (!order) return '';
+  const parts = [];
+  if (order.internal_order_no) parts.push(order.internal_order_no);
+  if (order.supplier_order_no) parts.push('Shop-Auftrag ' + order.supplier_order_no);
+  return parts.join(' · ') || 'ohne Bestellnummer';
+}
+
 export function statusMeta(value) {
   return STATUSES.find((s) => s.value === value) ?? { value, label: value, badge: 'bg-slate-100 text-slate-700 ring-slate-300' };
 }

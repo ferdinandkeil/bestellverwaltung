@@ -20,7 +20,8 @@ routerAdd("POST", "/api/lab/cart-items", (e) => {
 
 /**
  * POST /api/lab/orders/{id}/status
- * Body: { action: "advance" | "back", supplier_order_no? }
+ * Body: { action: "advance" | "back", internal_order_no?, supplier_order_no? }
+ *   internal_order_no ist beim Schritt angefragt → bestellt Pflicht (falls noch nicht gesetzt).
  * Antwort: order
  */
 routerAdd("POST", "/api/lab/orders/{id}/status", (e) => {
@@ -29,7 +30,10 @@ routerAdd("POST", "/api/lab/orders/{id}/status", (e) => {
   const body = e.requestInfo().body || {};
   let order;
   $app.runInTransaction((txApp) => {
-    order = changeStatus(txApp, id, String(body.action || ""), body.supplier_order_no);
+    order = changeStatus(txApp, id, String(body.action || ""), {
+      internal_order_no: body.internal_order_no,
+      supplier_order_no: body.supplier_order_no,
+    });
   });
   return e.json(200, order);
 }, $apis.requireAuth("users"));

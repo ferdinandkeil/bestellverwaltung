@@ -1,6 +1,6 @@
 // Bestell-Detail: Positionen, Lieferbuchungen, Storno, Status, Kosten, Anhänge, Plugin-Slot.
 import {
-  supplierLabel, statusMeta, EDITABLE_STATUSES, DELIVERY_STATUSES, ADVANCE_LABELS, BACK_ALLOWED, VAT_RATE,
+  supplierLabel, statusMeta, INTERNAL_ORDER_NO_RE, EDITABLE_STATUSES, DELIVERY_STATUSES, ADVANCE_LABELS, BACK_ALLOWED, VAT_RATE,
 } from '../core/config.js';
 import {
   getOrder, listOrderItems, listDeliveries, updateOrder, deleteOrder, updateItem, deleteItem,
@@ -38,11 +38,17 @@ const template = /* html */ `
 
         <div class="mt-4 grid gap-3 sm:grid-cols-2">
           <div>
-            <label class="label">Auftragsnummer des Lieferanten</label>
-            <input class="input" x-model="orderForm.supplier_order_no" @change="saveOrder('supplier_order_no')" maxlength="100"
-                   placeholder="nach der Bestellung eintragen">
+            <label class="label" for="internal-order-no">Interne Bestellnummer</label>
+            <input id="internal-order-no" class="input font-mono" x-model="orderForm.internal_order_no" @change="saveOrder('internal_order_no')"
+                   maxlength="11" placeholder="z. B. 2026IW01047" autocapitalize="characters" spellcheck="false">
+            <p class="hint" x-show="order.status === 'angefragt'">Pflicht für „Als bestellt markieren“.</p>
           </div>
           <div>
+            <label class="label" for="supplier-order-no">Auftragsnummer des Shops <span class="font-normal text-slate-500">(optional)</span></label>
+            <input id="supplier-order-no" class="input" x-model="orderForm.supplier_order_no" @change="saveOrder('supplier_order_no')" maxlength="100"
+                   placeholder="aus der Bestellbestätigung">
+          </div>
+          <div class="sm:col-span-2">
             <label class="label">Notizen</label>
             <textarea class="input" rows="1" x-model="orderForm.notes" @change="saveOrder('notes')" maxlength="2000"></textarea>
           </div>
@@ -345,6 +351,7 @@ function component() {
         this.items = items;
         this.deliveries = deliveries;
         this.orderForm = {
+          internal_order_no: order.internal_order_no || '',
           supplier_order_no: order.supplier_order_no || '',
           notes: order.notes || '',
           shipping_cost: order.shipping_cost ? String(order.shipping_cost).replace('.', ',') : '',
@@ -382,6 +389,14 @@ function component() {
     // ---- Bestellung --------------------------------------------------------
     async saveOrder(field) {
       let value = this.orderForm[field];
+      if (field === 'internal_order_no') {
+        value = value.trim().toUpperCase();
+        this.orderForm.internal_order_no = value;
+        if (value && !INTERNAL_ORDER_NO_RE.test(value)) {
+          toast.error('Die interne Bestellnummer hat das Format JJJJIW##### (z. B. 2026IW01047).');
+          return;
+        }
+      }
       if (field === 'shipping_cost' || field === 'invoice_total') {
         value = numberOrNull(value);
         if (this.orderForm[field] !== '' && value === null) {
@@ -399,10 +414,19 @@ function component() {
     },
 
     async advance() {
-      const no = this.order.status === 'angefragt' ? this.orderForm.supplier_order_no.trim() : '';
-      if (this.order.status === 'angefragt' && !confirmAction(
-        'Warenkorb als bestellt markieren? Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.')) return;
-      await this.runStatus('advance', no);
+      let numbers = {};
+      if (this.order.status === 'angefragt') {
+        const internal = this.orderForm.internal_order_no.trim().toUpperCase();
+        if (!INTERNAL_ORDER_NO_RE.test(internal)) {
+          toast.error('Bitte zuerst die interne Bestellnummer eintragen (Format JJJJIW#####, z. B. 2026IW01047).');
+          document.getElementById('internal-order-no')?.focus();
+          return;
+        }
+        if (!confirmAction(
+          'Warenkorb als bestellt markieren? Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.')) return;
+        numbers = { internal_order_no: internal, supplier_order_no: this.orderForm.supplier_order_no.trim() };
+      }
+      await this.runStatus('advance', numbers);
     },
 
     async back() {
@@ -410,10 +434,10 @@ function component() {
       await this.runStatus('back');
     },
 
-    async runStatus(action, supplierOrderNo) {
+    async runStatus(action, numbers) {
       this.busy = true;
       try {
-        await changeOrderStatus(this.order.id, action, supplierOrderNo);
+        await changeOrderStatus(this.order.id, action, numbers);
         await this.reload();
         toast.success(`Status: ${statusMeta(this.order.status).label}`);
       } catch (err) {

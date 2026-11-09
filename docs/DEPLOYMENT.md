@@ -108,6 +108,7 @@ rsync -av pb_schema.json      <user>@<host>.uberspace.de:bestellverwaltung/
 
 * Änderungen in `pb_hooks/` lädt PocketBase automatisch neu (Hooks-Watcher). Im Zweifel: `supervisorctl restart bestellverwaltung`.
 * Bei Schema-Änderungen anschließend erneut importieren (Schritt 2.2). **Vorher ein Backup ziehen.**
+* **Einführung der internen Bestellnummer (11/2026):** Bestellungen, die schon vorher auf „bestellt“ standen, haben noch keine. Sie bleiben bearbeitbar; die Nummer in der Bestell-Detailansicht nachtragen (stand sie bisher im Feld „Auftragsnummer“, dorthin verschieben), damit der Lieferschein-Scanner sie findet.
 * **Achtung:** Der Import mit „Merge“ ergänzt und ändert Felder, **entfernt aber keine Felder**, die im Schema weggefallen sind. Solche Felder im Admin-UI (Collection → Feld → Löschen) von Hand entfernen. Die betroffenen Felder stehen in der jeweiligen Commit-Nachricht.
 
 ## 4. Backups

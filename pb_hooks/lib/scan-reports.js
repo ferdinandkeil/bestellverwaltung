@@ -41,7 +41,8 @@ function buildMail(app, record) {
     try {
       const order = app.findRecordById("orders", orderId);
       const shop = order.getString("supplier") === "other" ? order.getString("supplier_custom_name") : order.getString("supplier");
-      orderText = shop + (order.getString("supplier_order_no") ? " · Auftrag " + order.getString("supplier_order_no") : "");
+      const no = order.getString("internal_order_no") || order.getString("supplier_order_no");
+      orderText = shop + (no ? " · " + no : "");
     } catch (_) { orderText = "gelöscht"; }
   }
   const link = adminLink(app, record);

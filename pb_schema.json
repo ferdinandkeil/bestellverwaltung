@@ -345,12 +345,26 @@
         "primaryKey": false
       },
       {
+        "id": "ord_internal_no",
+        "name": "internal_order_no",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": true,
+        "hidden": false,
+        "min": 0,
+        "max": 11,
+        "pattern": "^[0-9]{4}IW[0-9]{5}$",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
         "id": "ord_number",
         "name": "supplier_order_no",
         "type": "text",
         "system": false,
         "required": false,
-        "presentable": true,
+        "presentable": false,
         "hidden": false,
         "min": 0,
         "max": 100,
@@ -480,7 +494,8 @@
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX `idx_orders_one_open_cart` ON `orders` (`supplier`, `supplier_custom_name` COLLATE NOCASE) WHERE `status` = 'angefragt'"
+      "CREATE UNIQUE INDEX `idx_orders_one_open_cart` ON `orders` (`supplier`, `supplier_custom_name` COLLATE NOCASE) WHERE `status` = 'angefragt'",
+      "CREATE UNIQUE INDEX `idx_orders_internal_no` ON `orders` (`internal_order_no`) WHERE `internal_order_no` != ''"
     ],
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",

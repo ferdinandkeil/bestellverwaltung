@@ -1,5 +1,5 @@
 // Übersicht aller Bestellungen mit Filtern, Erfassung neuer Positionen und Plugin-Slot.
-import { SUPPLIERS, STATUSES, supplierLabel, statusMeta, groupsByCourse, groupLabel } from '../core/config.js';
+import { SUPPLIERS, STATUSES, supplierLabel, orderNumbersLabel, statusMeta, groupsByCourse, groupLabel } from '../core/config.js';
 import { listOrders, listGroups, orderTotals, subscribe, errorMessage } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast } from '../core/ui.js';
@@ -74,7 +74,7 @@ const template = /* html */ `
             <div class="min-w-0 flex-1">
               <div class="truncate font-semibold" x-text="supplierLabel(o)"></div>
               <div class="text-xs text-slate-500">
-                <span x-text="o.supplier_order_no ? 'Auftrag ' + o.supplier_order_no : 'ohne Auftragsnummer'"></span>
+                <span x-text="orderNumbersLabel(o)"></span>
                 · <span x-text="fmt.date(o.created)"></span>
               </div>
             </div>
@@ -125,6 +125,7 @@ function component() {
     statuses: STATUSES,
     suppliers: SUPPLIERS,
     supplierLabel,
+    orderNumbersLabel,
     statusMeta,
     groupsByCourse,
     fmt,

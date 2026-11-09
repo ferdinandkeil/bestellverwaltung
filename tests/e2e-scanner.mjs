@@ -56,10 +56,10 @@ async function seed() {
     order = (await addItem(owner.token, { supplier: 'reichelt', part_number: part, name, qty })).order;
   }
   await addItem(owner.token, { supplier: 'reichelt', part_number: 'NICHT GELIEFERT 1', name: 'fehlt auf dem Lieferschein', qty: 1 });
-  await changeStatus(owner.token, order.id, 'advance', { supplier_order_no: ORDER_NO });
-  // Zweite offene Reichelt-Bestellung: Zuordnung muss über die Auftragsnummer erfolgen.
+  await changeStatus(owner.token, order.id, 'advance', { internal_order_no: ORDER_NO });
+  // Zweite offene Reichelt-Bestellung: Zuordnung muss über die interne Bestellnummer erfolgen.
   const other = await addItem(owner.token, { supplier: 'reichelt', part_number: 'XIAO ESP32C6', name: 'andere Bestellung', qty: 1 });
-  await changeStatus(owner.token, other.order.id, 'advance', { supplier_order_no: '2026IW00999' });
+  await changeStatus(owner.token, other.order.id, 'advance', { internal_order_no: '2026IW00999' });
   return { orderId: order.id, login: await createUser('Scanner-Tester') };
 }
 
@@ -119,7 +119,9 @@ try {
   await b.waitFor(`${scanner}.step === 'review' && ${scanner}.order`, 'Prüfmaske', 120000);
   const selected = await b.evaluate(`${scanner}.selectedOrderId`);
   if (selected !== orderId) throw new Error('Falsche Bestellung zugeordnet: ' + selected);
-  ok('Bestellung über die Auftragsnummer gefunden (2 offene Reichelt-Bestellungen)');
+  const hint = await b.evaluate(`${scanner}.detectedOrderHint`);
+  if (!hint.includes('über die interne Bestellnummer ' + ORDER_NO)) throw new Error('Zuordnung nicht über die interne Bestellnummer: ' + hint);
+  ok('Bestellung über die interne Bestellnummer gefunden (2 offene Reichelt-Bestellungen)');
 
   const rows = await b.evaluate(`JSON.parse(JSON.stringify(${scanner}.reviewRows))`);
   const wrong = [];

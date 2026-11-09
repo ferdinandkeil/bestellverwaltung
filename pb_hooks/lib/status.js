@@ -1,6 +1,6 @@
 // Status-Workflow & automatischer Lieferstatus (ARCHITECTURE.md Kap. 4.3).
 
-const { STATUSES, AUTO_STATUSES } = require(`${__hooks}/lib/util.js`);
+const { STATUSES, AUTO_STATUSES, normalizeInternalOrderNo } = require(`${__hooks}/lib/util.js`);
 
 /**
  * Lieferstatus aus den Positionen ableiten.
@@ -62,7 +62,8 @@ function otherOpenCartExists(app, order) {
  * action "advance": angefragt→bestellt, geliefert→geprueft, geprueft→abgerechnet
  * action "back":    bestellt→angefragt, geprueft→(Lieferstatus), abgerechnet→geprueft
  */
-function changeStatus(app, orderId, action, supplierOrderNo) {
+function changeStatus(app, orderId, action, numbers) {
+  numbers = numbers || {};
   const order = app.findRecordById("orders", orderId);
   const current = order.getString("status");
   let next;
@@ -73,8 +74,13 @@ function changeStatus(app, orderId, action, supplierOrderNo) {
         throw new BadRequestError("Ein leerer Warenkorb kann nicht bestellt werden.");
       }
       next = "bestellt";
-      if (supplierOrderNo != null && String(supplierOrderNo).trim() !== "") {
-        order.set("supplier_order_no", String(supplierOrderNo).trim());
+      const internalNo = normalizeInternalOrderNo(numbers.internal_order_no) || order.getString("internal_order_no");
+      if (!internalNo) {
+        throw new BadRequestError("Bitte die interne Bestellnummer angeben (Format JJJJIW#####, z. B. 2026IW01047).");
+      }
+      order.set("internal_order_no", internalNo); // Format und Eindeutigkeit prüft der Validierungs-Hook
+      if (numbers.supplier_order_no != null && String(numbers.supplier_order_no).trim() !== "") {
+        order.set("supplier_order_no", String(numbers.supplier_order_no).trim());
       }
     } else if (current === "geliefert") {
       next = "geprueft";
