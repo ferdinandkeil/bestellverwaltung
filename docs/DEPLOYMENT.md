@@ -92,6 +92,18 @@ Die Meldungen landen in `samples/scan-reports/` (nicht im Repo, enthält echte B
 
 ## 3. Deploy (vom Entwicklungsrechner)
 
+**Mit Skript** (empfohlen):
+
+```bash
+cp scripts/deploy.env.example scripts/deploy.env   # einmalig: SSH-Ziel und Adresse eintragen (nicht im Repo)
+scripts/deploy.sh --dry-run                        # zeigt, was sich auf dem Server ändern würde
+scripts/deploy.sh                                  # Tests → Schema → Hooks/Oberfläche → Neustart → Prüfung
+```
+
+Das Skript deployt nur von `main` mit sauberem Arbeitsverzeichnis und merkt sich den Stand in `~/bestellverwaltung/DEPLOYED_REVISION`. Hat sich `pb_schema.json` seitdem geändert (oder ist der Stand unbekannt, z. B. beim ersten Lauf), kopiert es zuerst das Schema und **hält an**: dann im Admin-UI ein Backup erstellen und das Schema importieren (Schritt 2.2), danach mit Enter fortfahren. Am Ende prüft es, dass die Hooks geladen sind (`401`).
+
+**Von Hand** (gleiche Schritte):
+
 Immer vom Branch `main` deployen:
 
 ```bash
