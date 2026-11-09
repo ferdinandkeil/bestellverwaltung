@@ -3,7 +3,7 @@
 // nach samples/scan-reports/ (in .gitignore – enthält echte Belege) und löscht sie danach dort.
 //
 //   node scripts/fetch-scan-reports.mjs https://labor.example.uber.space
-//   node scripts/fetch-scan-reports.mjs http://127.0.0.1:8090 --keep     # nicht löschen
+//   node scripts/fetch-scan-reports.mjs http://127.0.0.1:8090 --keep     # lokal, nicht löschen
 //
 // Anmeldung als Superuser: E-Mail und Passwort (oder PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD),
 // bei aktivierter MFA zusätzlich der Code aus der Mail. Nur Node-Bordmittel, kein npm.
@@ -16,7 +16,12 @@ const args = process.argv.slice(2);
 const keep = args.includes('--keep');
 const outIdx = args.indexOf('--out');
 const outDir = outIdx >= 0 ? args[outIdx + 1] : join(dirname(fileURLToPath(import.meta.url)), '..', 'samples', 'scan-reports');
-const baseUrl = (args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--out') ?? 'http://127.0.0.1:8090').replace(/\/+$/, '');
+const urlArg = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--out');
+if (!urlArg || !/^https?:\/\//.test(urlArg)) {
+  console.error('Aufruf: node scripts/fetch-scan-reports.mjs <URL der App, z. B. https://labor.example.uber.space> [--keep]');
+  process.exit(2);
+}
+const baseUrl = new URL(urlArg).origin;
 
 // ---- Eingabe -------------------------------------------------------------------
 let rl = null;
@@ -24,7 +29,10 @@ const lines = [];
 let waiting = null;
 function input() {
   if (!rl) {
-    rl = createInterface({ input: process.stdin, terminal: process.stdin.isTTY });
+    // Mit Terminal braucht readline den Ausgabekanal, sonst wird die Eingabe nicht angezeigt.
+    rl = process.stdin.isTTY
+      ? createInterface({ input: process.stdin, output: process.stdout, terminal: true })
+      : createInterface({ input: process.stdin, terminal: false });
     rl.on('line', (l) => (waiting ? (waiting(l), (waiting = null)) : lines.push(l)));
   }
   return rl;
@@ -49,7 +57,12 @@ async function api(method, path, { token, json } = {}) {
   const headers = {};
   if (token) headers.Authorization = token;
   if (json) headers['Content-Type'] = 'application/json';
-  const res = await fetch(baseUrl + path, { method, headers, body: json ? JSON.stringify(json) : undefined });
+  let res;
+  try {
+    res = await fetch(baseUrl + path, { method, headers, body: json ? JSON.stringify(json) : undefined });
+  } catch (err) {
+    throw new Error(`Server ${baseUrl} nicht erreichbar (${err.cause?.code ?? err.cause?.message ?? err.message}).`);
+  }
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   return { ok: res.ok, status: res.status, data };
