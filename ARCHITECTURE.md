@@ -17,7 +17,7 @@
 ## 2. Authentifizierung, Rollen & Sicherheit
 1. **System-Admin (`_superusers`):** Ausschließlich über das PocketBase Admin-UI (`/_/`), Passwort + zweiter Faktor per E-Mail-Code (PocketBase-MFA; TOTP-Apps unterstützt PocketBase nicht). Legt Labor-Nutzer an.
 2. **Labor-Nutzer (`users`):**
-   * **Login:** Passwortlos per **Email-OTP** (`requestOTP(email)` → `authWithOTP(otpId, code)`). Passwort-Login deaktiviert. OTP-Gültigkeit **10 Minuten**, OTP-Mail **auf Deutsch** (beides in `pb_schema.json`).
+   * **Login:** Passwortlos per **Email-OTP** (`requestOTP(email)` → `authWithOTP(otpId, code)`). Passwort-Login deaktiviert. OTP-Gültigkeit **10 Minuten**, OTP-Mail **auf Deutsch** (beides in `pb_schema.json`). **Groß-/Kleinschreibung der Adresse ist egal:** PocketBase sucht das Konto exakt; findet es keins, sucht `pb_hooks/auth-hooks.pb.js` schreibweisenunabhängig. Der Index `idx_users_email_nocase` verhindert zwei Konten mit derselben Adresse in anderer Schreibweise.
    * **Keine Selbstregistrierung** (`createRule: null`). Für unbekannte Adressen verschickt PocketBase bewusst keinen Code (Schutz vor Konten-Ausspähung); die Login-Maske weist darauf hin: *„Kein Code erhalten? Ihr Konto muss vom Admin angelegt sein.“*
    * **Lange Sessions:** Auth-Token-Dauer 30 Tage (2592000 s); beim App-Start wird das Token per `authRefresh()` verlängert.
 3. **Berechtigungen (API-Rules), Grundsatz „volle Transparenz im Labor“:** Alle eingeloggten Nutzer sehen alles. Einschränkungen:
@@ -38,6 +38,7 @@ Projekt/
 │   ├── routes.pb.js                # Registrierung der /api/lab/* Routen
 │   ├── mcp.pb.js                   # MCP-Endpunkt /mcp für Claude Code (Phase 7, geplant)
 │   ├── record-hooks.pb.js          # created_by setzen, Status nach Positionsänderung neu berechnen
+│   ├── auth-hooks.pb.js            # Login-Code: Konto unabhängig von Groß-/Kleinschreibung finden
 │   ├── scan-reports.pb.js          # Problem-Meldungen des Scanners: Validierung, Mail an Superuser
 │   └── lib/
 │       ├── cart.js                 # Sammel-Warenkorb-Merge
@@ -100,7 +101,7 @@ Projekt/
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
 * **`scan_reports`** (Problem-Meldungen der Lieferschein-Erfassung): `reported_by`, `order` (optional), `note`, `photos` (Originalfotos, JPEG ≤ 3200 px, geschützt, max. 30), `analysis` (JSON: Ecken automatisch/final, OCR-Wörter mit Koordinaten, gelesene Zeilen, Zuordnung, erkannte und eingetragene Mengen, erkannte Probleme; Format-Version `REPORT_VERSION` in `report.js`), `created`. Kurzlebig: werden nach dem Abholen auf dem Server gelöscht.
 
-**Artikelnummer-Regel:** `part_number` ist **immer die Shop-Bestellnummer** des jeweiligen Lieferanten (z. B. `595-SN74HC595N` bei Mouser), nicht die Herstellernummer. Eingabemaske und Moodle-Formular weisen darauf hin. Gespeichert wird normalisiert (Trim + Großbuchstaben). Eine spätere Prüf-/Korrektur-Erweiterung ist als Modul denkbar.
+**Artikelnummer-Regel:** `part_number` ist **immer die Shop-Bestellnummer** des jeweiligen Lieferanten (z. B. `595-SN74HC595N` bei Mouser), nicht die Herstellernummer. Eingabemaske und Moodle-Formular weisen darauf hin. Gespeichert wird normalisiert: Großbuchstaben, außen getrimmt, mehrfacher bzw. „unsichtbarer“ Leerraum (Tabulator, geschützte Leerzeichen aus kopierten Texten) zu **einem** Leerzeichen zusammengefasst. Einzelne Leerzeichen bleiben, weil sie z. B. bei Reichelt zur Nummer gehören (`MKDS 1,5 3 5,08`). Der Sammelkorb vergleicht ebenfalls normalisiert, auch gegen ältere Positionen. Eine spätere Prüf-/Korrektur-Erweiterung ist als Modul denkbar.
 
 **Gruppennamen in `group_allocations`/`group_allocation_note`** enthalten nur den Gruppennamen (ohne Veranstaltung) und sind eine Momentaufnahme zum Zeitpunkt der Erfassung; Umbenennungen werden nicht nachgezogen.
 

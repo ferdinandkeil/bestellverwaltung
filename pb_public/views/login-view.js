@@ -11,7 +11,7 @@ const template = /* html */ `
     <form x-show="step === 'email'" @submit.prevent="sendCode" class="mt-6 space-y-4">
       <div>
         <label class="label" for="login-email">E-Mail-Adresse</label>
-        <input id="login-email" class="input" type="email" autocomplete="email" required
+        <input id="login-email" class="input" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" required
                x-model="email" x-ref="email" placeholder="name@hochschule.de">
       </div>
       <button type="submit" class="btn btn-primary w-full" :disabled="busy">
