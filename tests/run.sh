@@ -65,6 +65,10 @@ if [ "$status" -eq 0 ] && [ "$E2E" -eq 1 ]; then
     echo "--- Browser-Durchlauf Lieferschein-Erfassung ---"
     node "$ROOT/tests/e2e-scanner.mjs" || status=$?
   fi
+  if [ "$status" -eq 0 ]; then
+    echo "--- Browser-Durchlauf Moodle-Import ---"
+    node "$ROOT/tests/e2e-moodle.mjs" || status=$?
+  fi
 fi
 if [ "$status" -ne 0 ]; then
   echo "--- pocketbase.log (letzte 40 Zeilen) ---" >&2

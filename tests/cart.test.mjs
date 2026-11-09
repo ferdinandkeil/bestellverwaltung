@@ -95,10 +95,19 @@ test('gleichzeitige Buchungen verlieren keine Mengen und erzeugen nur einen Korb
   assert.equal(it.group_allocations.length, 5);
 });
 
+test('Bezeichnung ist optional und wird später ergänzt, wenn sie fehlt', async () => {
+  const a = await addItem(u.token, { supplier: 'mouser', part_number: 'OHNE-NAME', qty: 1 });
+  assert.equal(a.item.name, '');
+  const b = await addItem(u.token, { supplier: 'mouser', part_number: 'ohne-name', name: 'Nachgetragen', qty: 1 });
+  assert.equal(b.item.id, a.item.id);
+  assert.equal(b.item.name, 'Nachgetragen');
+  const c = await addItem(u.token, { supplier: 'mouser', part_number: 'OHNE-NAME', name: 'Anders', qty: 1 });
+  assert.equal(c.item.name, 'Nachgetragen', 'vorhandene Bezeichnung wird nicht überschrieben');
+});
+
 test('Validierung: Pflichtfelder, Menge, Lieferant, Gruppe', async () => {
   await expectHttpError(addItem(u.token, { supplier: 'amazon', part_number: 'A', name: 'A', qty: 1 }), 400);
   await expectHttpError(addItem(u.token, { supplier: 'mouser', part_number: '  ', name: 'A', qty: 1 }), 400);
-  await expectHttpError(addItem(u.token, { supplier: 'mouser', part_number: 'A', name: '', qty: 1 }), 400);
   await expectHttpError(addItem(u.token, { supplier: 'mouser', part_number: 'A', name: 'A', qty: 0 }), 400);
   await expectHttpError(addItem(u.token, { supplier: 'mouser', part_number: 'A', name: 'A', qty: 1.5 }), 400);
   await expectHttpError(addItem(u.token, { supplier: 'mouser', part_number: 'A', name: 'A', qty: 1, group: 'gibtesnicht1234' }), 400);

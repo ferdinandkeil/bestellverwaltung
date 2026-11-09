@@ -42,6 +42,7 @@ Projekt/
 │   ├── scan-reports.pb.js          # Problem-Meldungen des Scanners: Validierung, Mail an Superuser
 │   └── lib/
 │       ├── cart.js                 # Sammel-Warenkorb-Merge
+│       ├── import.js               # Sammel-Import mehrerer Positionen (alles oder nichts)
 │       ├── deliveries.js           # Lieferbuchungen, qty_delivered-Summen
 │       └── status.js               # Status-Workflow & Auto-Lieferstatus
 ├── pb_public/
@@ -64,7 +65,9 @@ Projekt/
 │   │   └── item-form.js            # Formular „Position erfassen“ (Dashboard + Detail)
 │   └── modules/                    # Isolierte Erweiterungsmodule (über plugin-registry)
 │       ├── shop-export/
-│       ├── moodle-import/
+│       ├── moodle-import/          # Moodle-CSV-Import (Kap. 6)
+│       │   ├── moodle-importer.js  # Oberfläche: Datei, Zuordnung, Vorschau, Buchung
+│       │   └── moodle-csv.js       # Auswertung der CSV (reine Logik, getestet)
 │       ├── word-export/
 │       ├── delivery-scanner/       # Lieferschein-Erfassung (Kap. 6)
 │       │   ├── scanner-modal.js    # Oberfläche: Aufnahme, Ecken, Prüfmaske, Buchung
@@ -96,7 +99,7 @@ Projekt/
 ### 4.1 Collections (Details: `pb_schema.json`)
 * **`groups`:** `name`, **`course`** (Veranstaltung, Pflicht), `semester` (Pflicht, Format `WS 2026/27` bzw. `SS 2027`), `is_active`. **Bewusst keine Kontaktdaten von Studierenden** (kein Name/E-Mail-Feld) – es werden keine personenbezogenen Daten Studierender gespeichert. Der Gruppenname ist nur **innerhalb von Veranstaltung + Semester eindeutig** (Unique-Index `idx_groups_unique_name`, Groß-/Kleinschreibung egal). Bei der Eingabe werden bestehende Veranstaltungen vorgeschlagen; in Auswahllisten erscheinen Gruppen nach Veranstaltung/Semester gegliedert.
 * **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|other`), `supplier_custom_name` (nur bei `other`, sonst leer), **`internal_order_no`** (interne Bestellnummer der Hochschule, Format `JJJJIW#####`, z. B. `2026IW01047`; eindeutig, Pflicht ab „bestellt“, danach korrigierbar, aber nicht mehr leer; ältere Bestellungen ohne Nummer bleiben bearbeitbar), `supplier_order_no` (optionale Auftragsnummer des Shops), `status`, `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
-* **`order_items`:** `order`, `part_number`, `name`, `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
+* **`order_items`:** `order`, `part_number`, `name` (**Bezeichnung, optional** – der Moodle-Export enthält keine; Formulare kennzeichnen sie als „empfohlen“, die Detailansicht zeigt „ohne Bezeichnung“), `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
 * **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (genau eine Datei, optional: Bild oder PDF; mehrseitige Belege als PDF, max. 15 MB ≈ 30 Seiten), `created`.
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
 * **`scan_reports`** (Problem-Meldungen der Lieferschein-Erfassung): `reported_by`, `order` (optional), `note`, `photos` (Originalfotos, JPEG ≤ 3200 px, geschützt, max. 30), `analysis` (JSON: Ecken automatisch/final, OCR-Wörter mit Koordinaten, gelesene Zeilen, Zuordnung, erkannte und eingetragene Mengen, erkannte Probleme; Format-Version `REPORT_VERSION` in `report.js`), `created`. Kurzlebig: werden nach dem Abholen auf dem Server gelöscht.
@@ -115,6 +118,7 @@ Projekt/
    * **nicht vorhanden:** neue Position anlegen;
    * **vorhanden (Merge):** `qty_ordered` += Menge; Gruppe zu `groups` hinzufügen; Eintrag in `group_allocations` erhöhen bzw. anlegen; `group_allocation_note` neu erzeugen. Name/URL/Preis werden nur ergänzt, wenn bisher leer.
 3. Antwort: `{order, item, merged: bool}`.
+4. **Sammel-Import** (Route `POST /api/lab/cart-items/batch`, Moodle-Import): `{groups: [{ref, name, course, semester}], items: [{line, …, group | groupRef}]}`. Legt neue Gruppen an und bucht jede Position nach 1.–2. – **alles oder nichts** in einer Transaktion; Fehler nennen die CSV-Zeile.
 
 ### 4.3 Status-Workflow
 * Kette: `angefragt` → `bestellt` → `teilgeliefert` → `geliefert` → `geprueft` → `abgerechnet`.
@@ -156,7 +160,12 @@ registerPlugin({
 
 ## 6. Module (Überblick)
 * **shop-export:** Copy&Paste-Text und CSV je Lieferant. Die Formate werden vor der Umsetzung an den echten Schnellbestell-/Upload-Masken der Shops verifiziert.
-* **moodle-import:** CSV per Drag & Drop (PapaParse), Spalten-Mapping, Vorschau. **Gruppen werden interaktiv zugewiesen:** Für jede in der CSV vorkommende Gruppenbezeichnung wählt der Nutzer eine bestehende Gruppe (mit Veranstaltung/Semester) oder legt sie neu an – es gibt keine stillschweigende automatische Zuordnung. **Kein gespeicherter Import-Bezug:** Nach dem Buchen ist die Zuordnung zu Moodle-Einträgen nicht mehr vorhanden. Die Vorschau **warnt**, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen. Gebucht wird über `POST /api/lab/cart-items`. Benötigt eine Beispiel-CSV.
+* **moodle-import (Beta):** CSV-Export der Moodle-Datenbank „Bauteilbestellung“ (Spalten Lieferant, Anzahl, Bestellnummer, Kommentar, Gruppe, Tags; Bezeichnung und Link optional, falls das Formular später ergänzt wird), eingelesen mit Papa Parse. Ablauf:
+  1. **Datei** wählen oder hineinziehen; Spalten werden über die Überschriften erkannt und sind änderbar.
+  2. **Zuordnung:** Veranstaltung und Semester einmal für den ganzen Import. **Lieferanten** je Angabe (Mouser/Farnell/Reichelt/Voelkner direkt, sonst „sonstige“ mit Shop-Namen, z. B. TME). **Gruppen interaktiv** je Bezeichnung: bestehende Gruppe der Veranstaltung, neu anlegen, ohne Gruppe oder „je Zeile wählen“ (für fehlerhafte Einträge, z. B. von Dozenten angelegte). Eine gleichnamige Gruppe der Veranstaltung ist **vorausgewählt und als Vorschlag markiert** – nichts geschieht stillschweigend; weiter erst, wenn alles zugeordnet ist.
+  3. **Vorschau** je Zeile: übernehmen ja/nein, Menge, Bestellnummer, Bezeichnung, Gruppe änderbar. **Fehler** (fehlende Nummer, ungültige Menge, offene Zuordnung) blockieren das Buchen; **Hinweise**, wenn Nummer + Gruppe schon im offenen Korb stehen oder in der Datei doppelt vorkommen.
+  4. **Buchen** über den Sammel-Import (Kap. 4.2) – alles oder nichts.
+  Der **Moodle-Kommentar** wird nur angezeigt, nicht gespeichert (auch nicht der Link darin); **Tags** werden ignoriert. **Kein gespeicherter Import-Bezug:** Nach dem Buchen ist die Zuordnung zu Moodle-Einträgen nicht mehr vorhanden.
 * **word-export:** PizZip + docxtemplater, Zusatzfelder in `orders.custom_fields`. Benötigt die `.docx`-Vorlage.
 * **delivery-scanner:** Komplett im Browser, keine Daten an Dritte (OCR-Dienste/KI-APIs bewusst ausgeschlossen). Die Entzerrung ist fester Bestandteil, weil direkt aus der Web-App fotografiert wird und keine Scan-App vorausgesetzt werden kann. Bewertung am echten Reichelt-Beleg: mit Entzerrung 12/12 Positionen und Mengen korrekt (auch bei schrägem Foto), ohne Entzerrung 0/12. Ablauf:
   1. **Start** aus der Bestellung (Bestellung fest; Warnung, wenn auf dem Lieferschein eine andere interne Bestellnummer steht) oder aus dem Dashboard. Die Bestellung wird dann **über die interne Bestellnummer** zugeordnet, die bei allen Lieferanten auf dem Lieferschein steht (z. B. Reichelt „Bestellnummer“, TME „Bestellnummer des Kunden“): Suche auf allen Seiten, tolerant gegenüber OCR-Verwechslungen (`I`→`1`, `O`→`0`, `W`→`VV`), auch ohne Lieferanten-Profil. Rückfall: unscharfer Vergleich mit interner und Shop-Auftragsnummer der offenen Bestellungen. Der Nutzer bestätigt.

@@ -556,7 +556,7 @@
         "name": "name",
         "type": "text",
         "system": false,
-        "required": true,
+        "required": false,
         "presentable": true,
         "hidden": false,
         "min": 1,

@@ -1,6 +1,6 @@
 # Implementierungsplan
 
-> Stand: 2026-11-08. Phase 1 abgenommen; Phase 2 als Beta in `main` (Abnahme nach Handytest). Nächste Schritte: Go-Live, dann Phase 3.
+> Stand: 2026-11-09. Phase 1 abgenommen; Go-Live erfolgt; Phase 2 und 3 als Beta (Abnahme nach Erprobung im Betrieb). Nächster Schritt: Phase 4.
 >
 > Phasenweise arbeiten, nach jeder Phase Feedback einholen. Kein JS-Build (kein npm/Vite/Webpack); einzige Ausnahme ist der CSS-Build mit dem Tailwind Standalone CLI. Vorgaben: `ARCHITECTURE.md`, `pb_schema.json`, `CLAUDE.md`.
 
@@ -52,10 +52,14 @@
    * TME und Würth sind nur an je einem echten Beleg geprüft (11/2026); weitere Meldungen abwarten.
 
 ## Phase 3: Moodle-Import (Branch `phase-3-moodle-import`)
-1. Vorab: Beispiel-CSV aus Moodle beschaffen (Spalten, Lieferantenangabe, Gruppen-Schreibweisen).
-2. `modules/moodle-import/moodle-importer.js` (PapaParse aus `vendor/`) im Slot `dashboard-actions`: Drag & Drop, Spalten-Mapping, Vorschau.
-3. **Interaktive Gruppenzuweisung:** Für jede Gruppenbezeichnung aus der CSV wählt der Nutzer eine bestehende Gruppe (Veranstaltung/Semester) oder legt sie neu an. Keine automatische Zuordnung.
-4. Warnung, wenn Artikelnummer + Gruppe bereits im offenen Korb stehen; Buchen über `POST /api/lab/cart-items`.
+
+**Status:** als **Beta** umgesetzt (in der App gekennzeichnet); Abnahme nach dem ersten echten Import.
+1. ✔ Beispiel-CSV ausgewertet (11/2026): keine Bezeichnung → **Bezeichnung überall optional**; Gruppe steht in der Spalte „Gruppe“ (bei von Dozenten angelegten Einträgen fehlerhaft → von Hand zuweisen).
+2. ✔ `modules/moodle-import/` (Papa Parse 5.7.0 aus `vendor/`) im Slot `dashboard-actions`: Datei, Zuordnung (Veranstaltung/Semester, Spalten, Lieferanten, Gruppen), Vorschau.
+3. ✔ **Interaktive Gruppenzuweisung** mit markiertem Vorschlag bei gleichnamiger Gruppe; Zuweisung je Zeile möglich.
+4. ✔ Hinweise auf offenen Korb und Dubletten; Buchen über `POST /api/lab/cart-items/batch` (alles oder nichts, inkl. neuer Gruppen).
+5. ✔ Tests: Route (Rollback, Zeilennummern), CSV-Auswertung, Browser-Durchlauf mit synthetischer CSV.
+6. Offen: erster echter Import im Semesterbetrieb; ggf. Moodle-Formular um „Bezeichnung“ ergänzen (wird automatisch erkannt).
 
 ## Phase 4: Shop-Export (Branch `phase-4-shop-export`)
 1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.

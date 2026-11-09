@@ -19,6 +19,22 @@ routerAdd("POST", "/api/lab/cart-items", (e) => {
 }, $apis.requireAuth("users"));
 
 /**
+ * POST /api/lab/cart-items/batch   (Moodle-Import)
+ * Body: { groups: [{ ref, name, course, semester }], items: [{ line?, supplier, …, group? | groupRef? }] }
+ * Alles oder nichts: neue Gruppen und alle Positionen in einer Transaktion.
+ * Antwort: { items, merged, orders, groups }
+ */
+routerAdd("POST", "/api/lab/cart-items/batch", (e) => {
+  const { importItems } = require(`${__hooks}/lib/import.js`);
+  const body = e.requestInfo().body || {};
+  let result;
+  $app.runInTransaction((txApp) => {
+    result = importItems(txApp, body, e.auth.id);
+  });
+  return e.json(200, result);
+}, $apis.requireAuth("users"));
+
+/**
  * POST /api/lab/orders/{id}/status
  * Body: { action: "advance" | "back", internal_order_no?, supplier_order_no? }
  *   internal_order_no ist beim Schritt angefragt → bestellt Pflicht (falls noch nicht gesetzt).

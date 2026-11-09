@@ -139,7 +139,7 @@ const template = /* html */ `
                             :class="{ 'bg-emerald-600': r.status === 'sure', 'bg-amber-600': r.status === 'check', 'bg-slate-300': r.status === 'missing' }"></span>
                       <div class="min-w-0 flex-1">
                         <div class="font-mono text-sm font-semibold break-all" x-text="r.part"></div>
-                        <div class="truncate text-xs text-slate-600" x-text="r.name"></div>
+                        <div x-show="r.name" class="truncate text-xs text-slate-600" x-text="r.name"></div>
                         <div x-show="r.note" class="mt-1 rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-900" x-text="r.note"></div>
                         <div x-show="r.reasons.length" class="mt-1 text-xs text-amber-800" x-text="r.reasons.join(' · ')"></div>
                       </div>

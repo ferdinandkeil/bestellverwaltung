@@ -72,7 +72,7 @@ const template = /* html */ `
               <a :href="'#/orders/' + it.order" class="flex items-start gap-2 hover:text-blue-700">
                 <div class="min-w-0 flex-1">
                   <div class="font-mono text-sm font-semibold break-all" x-text="it.part_number"></div>
-                  <div class="text-sm text-slate-700" x-text="it.name"></div>
+                  <div x-show="it.name" class="text-sm text-slate-700" x-text="it.name"></div>
                   <div class="text-xs text-slate-500" x-text="supplierLabel(it.expand?.order)"></div>
                 </div>
                 <div class="shrink-0 text-right">

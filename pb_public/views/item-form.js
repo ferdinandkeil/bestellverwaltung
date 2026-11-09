@@ -31,8 +31,8 @@ export const itemFormFields = /* html */ `
   </div>
 
   <div>
-    <label class="label">Bezeichnung</label>
-    <input class="input" x-model="form.name" required maxlength="300" placeholder="z. B. Schieberegister 8 Bit, DIP-16">
+    <label class="label">Bezeichnung <span class="font-normal text-slate-500">(empfohlen)</span></label>
+    <input class="input" x-model="form.name" maxlength="300" placeholder="z. B. Schieberegister 8 Bit, DIP-16">
   </div>
 
   <div class="grid grid-cols-2 gap-3">

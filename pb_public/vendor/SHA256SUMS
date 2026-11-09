@@ -1,6 +1,8 @@
 a33d2b1ce6ff039700cc5cb4e0850502db8b44be7cdbe5efbcb4a5f7faa2cfc4  alpinejs@3.17.5/dist/module.esm.js
 5a4b4d2c8d93589a1f59d350d0b7fdde81e6d1892ed468eee9b4740d190d1939  jscanify@1.4.3/LICENSE
 a09dadd36ad4103e693523677f1aba3740d06f2dcdeb3ed87c66022e6ac0d13d  jscanify@1.4.3/src/jscanify.js
+99aa68e4b42758b09828a46515f70369e5463458ab7a990189f641af2b8d9b4e  papaparse@5.7.0/LICENSE
+4d5d2d6e3282b66aafaa5e6de8ca3ae06f8d3440111ae99c6a30f6c00cfac33e  papaparse@5.7.0/papaparse.min.js
 73a94f485cdb408317dab6e3c2e6ada6325a1445b35256df4c347d369aa3404a  pocketbase@0.28.1/dist/pocketbase.es.mjs
 3ea0000fbc6236a35995f12718aa6d3913c795f02223ffadc937c421e1237990  pocketbase@0.28.1/dist/pocketbase.es.mjs.map
 efa4c6c6d4e5989ce58a349f900be406368eddd7b1474757db9b6eb46afc1b43  pocketbase@0.28.1/LICENSE.md
