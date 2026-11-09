@@ -45,7 +45,8 @@
 2. ✔ `modules/delivery-scanner/` in den Slots `order-detail-actions` und `dashboard-actions` (Details ARCHITECTURE Kap. 6), Profile Reichelt, TME, Würth Elektronik.
 3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.
 4. ✔ **Problem melden:** fehlgeschlagene Erkennungen landen mit Originalfotos und OCR-Ergebnis in `scan_reports`, Mail mit Link an die Superuser; Abholen zur Analyse mit `scripts/fetch-scan-reports.mjs` (löscht danach auf dem Server).
-5. Offen:
+5. ✔ **Positionen nachtragen** (11/2026): nicht zugeordnete Lieferschein-Zeile als vergessene Position nachtragen und mitbuchen; ebenso in der Detailansicht; gekennzeichnet (ARCHITECTURE Kap. 4.5).
+6. Offen:
    * Gemeldete Lieferscheine auswerten und Erkennung/Profile nachbessern (erste Auswertung 11/2026: TME und Würth ohne Profil, OCR gut; daraus die Zuordnung über die interne Bestellnummer).
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
    * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege vorliegen (am einfachsten per „Problem melden“).
