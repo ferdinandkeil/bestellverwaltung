@@ -96,8 +96,21 @@ export function addItem(token, data) {
   return http('POST', '/api/lab/cart-items', { token, json: data });
 }
 
+let internalNoCounter = 0;
+/** Neue, im Testlauf eindeutige interne Bestellnummer (JJJJIW#####). */
+export function nextInternalNo() {
+  return `2026IW${String(50000 + (++internalNoCounter)).padStart(5, '0')}`;
+}
+
+/**
+ * Statusschritt. Bei „advance“ ohne Angabe wird eine frische interne Bestellnummer mitgeschickt
+ * (Pflicht beim Schritt angefragt → bestellt; bei anderen Schritten ignoriert der Server sie).
+ * Für Tests ohne Nummer explizit `internal_order_no: ''` übergeben.
+ */
 export function changeStatus(token, orderId, action, extra = {}) {
-  return http('POST', `/api/lab/orders/${orderId}/status`, { token, json: { action, ...extra } });
+  const json = { action, ...extra };
+  if (action === 'advance' && !('internal_order_no' in extra)) json.internal_order_no = nextInternalNo();
+  return http('POST', `/api/lab/orders/${orderId}/status`, { token, json });
 }
 
 export function bookDelivery(token, orderId, lines, note = '') {

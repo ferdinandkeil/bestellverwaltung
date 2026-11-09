@@ -11,6 +11,13 @@ function normalizePartNumber(value) {
   return String(value == null ? "" : value).trim().toUpperCase();
 }
 
+/** Interne Bestellnummer der Hochschule: JJJJIW##### (z. B. 2026IW01047). */
+const INTERNAL_ORDER_NO_RE = /^[0-9]{4}IW[0-9]{5}$/;
+
+function normalizeInternalOrderNo(value) {
+  return String(value == null ? "" : value).trim().toUpperCase();
+}
+
 function normalizeShopName(value) {
   return String(value == null ? "" : value).trim();
 }
@@ -51,6 +58,8 @@ module.exports = {
   DELIVERY_STATUSES,
   normalizePartNumber,
   normalizeShopName,
+  INTERNAL_ORDER_NO_RE,
+  normalizeInternalOrderNo,
   readJSON,
   positiveInt,
   nonZeroInt,

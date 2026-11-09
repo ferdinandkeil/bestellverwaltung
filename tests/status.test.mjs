@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setup, resetData, createUser, addItem, changeStatus, bookDelivery, getRecord, http, expectHttpError,
+  setup, resetData, createUser, addItem, changeStatus, bookDelivery, getRecord, http, expectHttpError, admin,
 } from './helpers.mjs';
 
 let u;
@@ -19,21 +19,55 @@ async function orderedCart(items = [['A', 2], ['B', 3]]) {
     order = r.order;
     ids[pn] = r.item.id;
   }
-  await changeStatus(u.token, order.id, 'advance', { supplier_order_no: ' 12345 ' });
+  await changeStatus(u.token, order.id, 'advance', { internal_order_no: ' 2026iw01047 ', supplier_order_no: ' 12345 ' });
   return { orderId: order.id, ids };
 }
 
 const statusOf = async (id) => (await getRecord('orders', id)).status;
 
-test('angefragt → bestellt setzt Auftragsnummer; neuer Artikel landet in neuem Korb', async () => {
+test('angefragt → bestellt setzt interne Bestellnummer (normalisiert) und Shop-Auftragsnummer; neuer Artikel landet in neuem Korb', async () => {
   const { orderId } = await orderedCart();
   const o = await getRecord('orders', orderId);
   assert.equal(o.status, 'bestellt');
+  assert.equal(o.internal_order_no, '2026IW01047');
   assert.equal(o.supplier_order_no, '12345');
 
   const r = await addItem(u.token, { supplier: 'mouser', part_number: 'A', name: 'A', qty: 1 });
   assert.notEqual(r.order.id, orderId);
   assert.equal(r.merged, false);
+});
+
+test('interne Bestellnummer: Pflicht bei „bestellt“, Format, eindeutig, danach nicht mehr leer', async () => {
+  const a = await addItem(u.token, { supplier: 'reichelt', part_number: 'A', name: 'A', qty: 1 });
+  const b = await addItem(u.token, { supplier: 'farnell', part_number: 'B', name: 'B', qty: 1 });
+
+  const missing = await expectHttpError(changeStatus(u.token, a.order.id, 'advance', { internal_order_no: '' }), 400);
+  assert.match(missing.body.message, /interne Bestellnummer angeben/);
+  const format = await expectHttpError(changeStatus(u.token, a.order.id, 'advance', { internal_order_no: '2026-4711' }), 400);
+  assert.match(format.body.message, /Format JJJJIW#####/);
+  assert.equal(await statusOf(a.order.id), 'angefragt', 'Transaktion zurückgerollt');
+
+  // im offenen Korb vorab eintragbar, dann genügt der Schritt ohne Angabe
+  await http('PATCH', `/api/collections/orders/records/${a.order.id}`, { token: u.token, json: { internal_order_no: '2026IW00001' } });
+  await changeStatus(u.token, a.order.id, 'advance', { internal_order_no: '' });
+  assert.equal((await getRecord('orders', a.order.id)).internal_order_no, '2026IW00001');
+
+  const dup = await expectHttpError(changeStatus(u.token, b.order.id, 'advance', { internal_order_no: '2026iw00001' }), 400);
+  assert.match(dup.body.message, /bereits einer anderen Bestellung/);
+
+  // korrigieren ja, leeren nein
+  await http('PATCH', `/api/collections/orders/records/${a.order.id}`, { token: u.token, json: { internal_order_no: '2026IW00002' } });
+  const clear = await expectHttpError(http('PATCH', `/api/collections/orders/records/${a.order.id}`, { token: u.token, json: { internal_order_no: '' } }), 400);
+  assert.match(clear.body.message, /nicht mehr entfernt/);
+});
+
+test('ältere Bestellungen ohne interne Bestellnummer bleiben bearbeitbar', async () => {
+  const { orderId } = await orderedCart();
+  // Altbestand simulieren: Nummer als Admin entfernen (vor Einführung des Feldes)
+  await http('PATCH', `/api/collections/orders/records/${orderId}`, { token: await admin(), json: { internal_order_no: '', status: 'angefragt' } });
+  await http('PATCH', `/api/collections/orders/records/${orderId}`, { token: await admin(), json: { status: 'bestellt' } });
+  await http('PATCH', `/api/collections/orders/records/${orderId}`, { token: u.token, json: { notes: 'Altbestand' } });
+  assert.equal((await getRecord('orders', orderId)).notes, 'Altbestand');
 });
 
 test('leerer Korb kann nicht bestellt werden', async () => {
