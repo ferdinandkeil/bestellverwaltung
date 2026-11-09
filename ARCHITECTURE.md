@@ -43,6 +43,7 @@ Projekt/
 │   └── lib/
 │       ├── cart.js                 # Sammel-Warenkorb-Merge
 │       ├── import.js               # Sammel-Import mehrerer Positionen (alles oder nichts)
+│       ├── late-items.js           # Positionen nachtragen (vergessen beim Erfassen)
 │       ├── deliveries.js           # Lieferbuchungen, qty_delivered-Summen
 │       └── status.js               # Status-Workflow & Auto-Lieferstatus
 ├── pb_public/
@@ -99,7 +100,7 @@ Projekt/
 ### 4.1 Collections (Details: `pb_schema.json`)
 * **`groups`:** `name`, **`course`** (Veranstaltung, Pflicht), `semester` (Pflicht, Format `WS 2026/27` bzw. `SS 2027`), `is_active`. **Bewusst keine Kontaktdaten von Studierenden** (kein Name/E-Mail-Feld) – es werden keine personenbezogenen Daten Studierender gespeichert. Der Gruppenname ist nur **innerhalb von Veranstaltung + Semester eindeutig** (Unique-Index `idx_groups_unique_name`, Groß-/Kleinschreibung egal). Bei der Eingabe werden bestehende Veranstaltungen vorgeschlagen; in Auswahllisten erscheinen Gruppen nach Veranstaltung/Semester gegliedert.
 * **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|other`), `supplier_custom_name` (nur bei `other`, sonst leer), **`internal_order_no`** (interne Bestellnummer der Hochschule, Format `JJJJIW#####`, z. B. `2026IW01047`; eindeutig, Pflicht ab „bestellt“, danach korrigierbar, aber nicht mehr leer; ältere Bestellungen ohne Nummer bleiben bearbeitbar), `supplier_order_no` (optionale Auftragsnummer des Shops), `status`, `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
-* **`order_items`:** `order`, `part_number`, `name` (**Bezeichnung, optional** – der Moodle-Export enthält keine; Formulare kennzeichnen sie als „empfohlen“, die Detailansicht zeigt „ohne Bezeichnung“), `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
+* **`order_items`:** `order`, `part_number`, `name` (**Bezeichnung, optional** – der Moodle-Export enthält keine; Formulare kennzeichnen sie als „empfohlen“, die Detailansicht zeigt „ohne Bezeichnung“), `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), **`added_later_by`/`added_later_at`** (Kennzeichnung nachgetragener Positionen, Kap. 4.5), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
 * **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (genau eine Datei, optional: Bild oder PDF; mehrseitige Belege als PDF, max. 15 MB ≈ 30 Seiten), `created`.
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
 * **`scan_reports`** (Problem-Meldungen der Lieferschein-Erfassung): `reported_by`, `order` (optional), `note`, `photos` (Originalfotos, JPEG ≤ 3200 px, geschützt, max. 30), `analysis` (JSON: Ecken automatisch/final, OCR-Wörter mit Koordinaten, gelesene Zeilen, Zuordnung, erkannte und eingetragene Mengen, erkannte Probleme; Format-Version `REPORT_VERSION` in `report.js`), `created`. Kurzlebig: werden nach dem Abholen auf dem Server gelöscht.
@@ -140,6 +141,12 @@ Projekt/
 * In einer Transaktion: `deliveries` + `delivery_items` anlegen, `qty_delivered` jeder betroffenen Position = Σ `delivery_items.qty` neu berechnen (darf nicht < 0 werden), danach Auto-Lieferstatus.
 * Schnellbuttons im UI („+1“, „Rest komplett“) erzeugen ebenfalls Buchungen; mehrere schnelle Klicks werden im UI kurz gesammelt, bevor gebucht wird.
 
+### 4.5 Positionen nachtragen (Route `POST /api/lab/orders/{id}/items`)
+* Für Ware, die bestellt, aber beim Erfassen vergessen wurde (typisch: auf dem Lieferschein entdeckt). Erlaubt in `bestellt`, `teilgeliefert`, `geliefert`; im offenen Korb wird normal erfasst, ab `geprueft` ist die Bestellung gesperrt.
+* Neue Position mit bestellter Menge, Bezeichnung und Gruppe optional; eine schon vorhandene Bestellnummer wird abgelehnt (dort die Menge anpassen). Danach Auto-Lieferstatus (eine offene neue Position macht aus „geliefert“ wieder „teilgeliefert“).
+* **Kennzeichnung:** `order_items.added_later_by` / `added_later_at`, serverseitig gesetzt und per Rule nicht änderbar; die Detailansicht zeigt „nachgetragen am … von …“.
+* Die Lieferbuchung nimmt zusätzlich `newItems: [{part_number, name?, qty, group?}]` an: Positionen werden in derselben Transaktion nachgetragen und mit `qty` geliefert (Scanner, Option „gleich als geliefert buchen“ in der Detailansicht).
+
 ## 5. Modul-Schnittstelle (`core/plugin-registry.js`)
 Module registrieren sich beim App-Start an festen Slots:
 * **`dashboard-actions`:** Buttons oben im Dashboard (z. B. „Moodle-CSV importieren“).
@@ -176,7 +183,7 @@ registerPlugin({
      * **Kopfzeile** (Reichelt): Spaltengrenzen aus den Überschriften (z. B. Menge | Artikelnummer | Bezeichnung).
      * **Mengeneinheit** (TME „4 ST“, Würth „2 STK“): jede Einheit markiert eine Positionszeile; Menge = Zahl direkt davor, Bestellnummer = Anfang der Zeile mit Positionsnummer. Braucht keine Kopfzeile (bei TME von der OCR oft nicht gelesen) und zählt Begleitdokumente ohne Einheit (Würth: Chargen- und Packliste) nicht doppelt.
      Mengen mit OCR-Korrektur (O→0, I/l→1) nur bei sonst rein numerischem Text. Profile gehören zu einem Lieferanten, bei „sonstige“ zusätzlich zu einem Shop-Namen (z. B. TME, Würth/WE).
-  6. **Abgleich:** Ähnlichkeit der normierten Bestellnummern (Levenshtein) gegen die Positionen der Bestellung. *Sicher* ab 0,85 mit Abstand ≥ 0,08 zum Zweitbesten, sonst *prüfen*; zusätzlich *prüfen* bei Menge > Rückstand oder mehreren Zeilen je Position. Nicht zugeordnete Zeilen weist der Nutzer von Hand zu.
+  6. **Abgleich:** Ähnlichkeit der normierten Bestellnummern (Levenshtein) gegen die Positionen der Bestellung. *Sicher* ab 0,85 mit Abstand ≥ 0,08 zum Zweitbesten, sonst *prüfen*; zusätzlich *prüfen* bei Menge > Rückstand oder mehreren Zeilen je Position. Nicht zugeordnete Zeilen weist der Nutzer von Hand einer Position zu oder **trägt sie als vergessene Position nach** (Kap. 4.5; Bestellnummer vor dem Buchen prüfbar, Lieferung und neue Position in einer Buchung).
   7. **Buchung** über die Lieferbuchungs-Route; alle Seiten als ein PDF (Graustufen-JPEG) in `receipt`. Ohne Mengen wird das PDF nur an `orders.attachments` gehängt.
   8. **Problem melden** (Beta-Rückmeldung): Knopf in der Prüfansicht, unabhängig von der Buchung. Bei offensichtlichem Scheitern (Lieferant nicht erkannt, kein Profil, Positionstabelle nicht gefunden, keine Zeile zugeordnet) wird die Meldung hervorgehoben angeboten; kleinere Auffälligkeiten (Ecken von Hand, einzelne Zeilen ohne Zuordnung) werden nur mitgeschickt. Die Meldung landet in `scan_reports` auf dem eigenen Server; alle Superuser bekommen eine Mail mit **Link in die Admin-UI, ohne Anhang** (in der Mail nur Bestellung, Probleme, Notiz). Analyse: `node scripts/fetch-scan-reports.mjs <URL>` holt die Meldungen nach `samples/scan-reports/` (nie committen) und löscht sie danach auf dem Server; daraus werden synthetische Testfälle abgeleitet.
   Neue Lieferanten: Profil in `profiles/` anlegen (Erkennungsmuster + Lesart), sobald Beispielbelege vorliegen – am einfachsten aus einer Problem-Meldung.
