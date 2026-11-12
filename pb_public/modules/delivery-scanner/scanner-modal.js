@@ -84,10 +84,18 @@ const template = /* html */ `
             <span x-show="cornersDetected">Blattkanten erkannt. Bei Bedarf die Eckpunkte verschieben.</span>
             <span x-show="!cornersDetected" class="text-amber-700">Blattkanten nicht sicher erkannt – bitte die vier Eckpunkte auf die Ecken des Lieferscheins ziehen.</span>
           </p>
-          <canvas x-ref="cornerCanvas" class="w-full touch-none rounded-lg border border-slate-200"
-                  @pointerdown="cornerDown($event)" @pointermove="cornerMove($event)"
-                  @pointerup="cornerUp($event)" @pointercancel="cornerUp($event)"></canvas>
-          <div class="mt-3 flex flex-wrap justify-end gap-2">
+          <!-- Bild in die verfügbare Höhe eingepasst (Seitenverhältnis bleibt), damit alle Ecken ohne Scrollen sichtbar sind -->
+          <div class="relative mx-auto w-fit max-w-full">
+            <canvas x-ref="cornerCanvas" class="block h-auto max-h-[calc(100dvh-13rem)] w-auto max-w-full touch-none rounded-lg border border-slate-200"
+                    @pointerdown="cornerDown($event)" @pointermove="cornerMove($event)"
+                    @pointerup="cornerUp($event)" @pointercancel="cornerUp($event)"></canvas>
+            <!-- Lupe beim Ziehen: Ausschnitt um den Eckpunkt aus dem Originalfoto, oben auf der dem Punkt abgewandten Seite -->
+            <canvas x-ref="loupe" x-show="loupeSide" data-loupe
+                    class="pointer-events-none absolute top-2 size-[130px] rounded-full border-2 border-white shadow-lg ring-1 ring-slate-400"
+                    :class="loupeSide === 'right' ? 'right-2' : 'left-2'"></canvas>
+          </div>
+          <!-- Knöpfe als feste Leiste am unteren Rand des Scrollbereichs -->
+          <div class="sticky bottom-0 -mx-4 mt-3 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white/95 px-4 py-3" data-corner-actions>
             <button type="button" class="btn btn-ghost" @click="discardPhoto()">Verwerfen</button>
             <button type="button" class="btn btn-secondary" @click="useWholeImage()">Ganzes Bild</button>
             <button type="button" class="btn btn-primary" @click="acceptCorners()" :disabled="!!busyText">Übernehmen</button>
@@ -366,6 +374,7 @@ function component() {
     busyText: '',
     pages: [], // [{ id, thumb }]
     cornersDetected: true,
+    loupeSide: '', // '' = Lupe ausgeblendet, sonst 'left'/'right'
     progress: { value: 0, label: '' },
     order: null,
     items: [],
@@ -428,7 +437,7 @@ function component() {
       detectedProfile = null;
       internalNos = [];
       Object.assign(this, {
-        step: 'pages', busyText: '', pages: [], cornersDetected: true, progress: { value: 0, label: '' },
+        step: 'pages', busyText: '', pages: [], cornersDetected: true, loupeSide: '', progress: { value: 0, label: '' },
         order: null, items: [], lockedOrder: false, orderCandidates: [], selectedOrderId: '', detectedOrderHint: '',
         warnings: [], reviewRows: [], unmatched: [], note: '', busy: false,
         profileLabel: '', noOrder: { mode: '' }, create: { items: [] }, archive: {},
@@ -512,6 +521,15 @@ function component() {
       return { x: x / source.display.scale, y: y / source.display.scale, cssPerImage: rect.width / view.width * source.display.scale };
     },
 
+    /** Bildschirmposition (CSS-Pixel im Viewport) eines Eckpunkts – für Bedienhilfen und den Browser-Test. */
+    cornerScreenPoint(key) {
+      const view = this.$refs.cornerCanvas;
+      if (!view || !source?.display) return null;
+      const r = view.getBoundingClientRect();
+      const c = source.corners[key];
+      return { x: r.left + c.x * source.display.scale * r.width / view.width, y: r.top + c.y * source.display.scale * r.height / view.height };
+    },
+
     cornerDown(event) {
       if (!source?.display) return;
       const p = this.pointerToImage(event);
@@ -525,6 +543,7 @@ function component() {
       if (best) {
         source.drag = best.k;
         event.target.setPointerCapture(event.pointerId);
+        this.drawLoupe();
       }
     },
 
@@ -536,11 +555,70 @@ function component() {
         y: Math.min(source.canvas.height, Math.max(0, p.y)),
       };
       this.drawCorners();
+      this.drawLoupe();
     },
 
     cornerUp(event) {
       if (source?.drag) event.target.releasePointerCapture?.(event.pointerId);
       if (source) source.drag = null;
+      this.loupeSide = '';
+    },
+
+    /**
+     * Lupe für den gezogenen Eckpunkt: dreifach vergrößerter Ausschnitt (bezogen auf die Anzeige) aus dem Originalfoto,
+     * mit Blattkanten und Fadenkreuz. Steht oben auf der dem Punkt abgewandten Seite, damit der Finger sie nicht verdeckt.
+     */
+    drawLoupe() {
+      const view = this.$refs.cornerCanvas;
+      const loupe = this.$refs.loupe;
+      if (!source?.drag || !view || !loupe) return;
+      const LOUPE_CSS = 130;
+      const ZOOM = 3;
+      const p = source.corners[source.drag];
+      this.loupeSide = p.x < source.canvas.width / 2 ? 'right' : 'left';
+
+      const dpr = window.devicePixelRatio || 1;
+      const size = Math.round(LOUPE_CSS * dpr);
+      if (loupe.width !== size) { loupe.width = size; loupe.height = size; }
+      const cssPerImage = view.getBoundingClientRect().width / view.width * source.display.scale;
+      const k = (cssPerImage * ZOOM * dpr); // Lupenpixel je Bildpixel
+      const ctx = loupe.getContext('2d');
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(0, 0, size, size);
+
+      // Ausschnitt auf das Bild begrenzen (Rand außerhalb bleibt grau)
+      const half = size / 2 / k;
+      const sx = Math.max(0, p.x - half), sy = Math.max(0, p.y - half);
+      const ex = Math.min(source.canvas.width, p.x + half), ey = Math.min(source.canvas.height, p.y + half);
+      if (ex > sx && ey > sy) {
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(source.canvas, sx, sy, ex - sx, ey - sy,
+          (sx - p.x) * k + size / 2, (sy - p.y) * k + size / 2, (ex - sx) * k, (ey - sy) * k);
+      }
+
+      // Blattkanten der aktuellen Auswahl
+      const toLoupe = (c) => ({ x: (c.x - p.x) * k + size / 2, y: (c.y - p.y) * k + size / 2 });
+      const pts = CORNER_KEYS.map((key) => toLoupe(source.corners[key]));
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      ctx.closePath();
+      ctx.stroke();
+
+      // Fadenkreuz am Eckpunkt (weiß unterlegt, auf hellem und dunklem Grund sichtbar)
+      const c = size / 2, arm = 14 * dpr, gap = 4 * dpr;
+      for (const [color, width] of [['rgba(255,255,255,0.9)', 4 * dpr], ['#dc2626', 1.5 * dpr]]) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(c - arm, c); ctx.lineTo(c - gap, c);
+        ctx.moveTo(c + gap, c); ctx.lineTo(c + arm, c);
+        ctx.moveTo(c, c - arm); ctx.lineTo(c, c - gap);
+        ctx.moveTo(c, c + gap); ctx.lineTo(c, c + arm);
+        ctx.stroke();
+      }
     },
 
     useWholeImage() {

@@ -94,6 +94,10 @@ export async function launchBrowser(profileDir) {
     /** Viewport setzen (Standard: Smartphone-Breite). */
     setViewport: (v = VIEWPORT, mobile = true) =>
       send('Emulation.setDeviceMetricsOverride', { ...v, deviceScaleFactor: mobile ? 2 : 1, mobile }),
+    /** Echte Mausereignisse (erzeugen Pointer-Events mit aktivem Zeiger, z. B. für setPointerCapture). */
+    mouse: (type, x, y) => send('Input.dispatchMouseEvent', {
+      type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1,
+    }),
     /** Datei(en) in ein <input type=file> legen (löst change aus). */
     async setFiles(selector, files) {
       const { result: { root } } = await send('DOM.getDocument', { depth: 0 });
