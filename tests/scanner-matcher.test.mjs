@@ -156,8 +156,11 @@ const TME_PAGE = {
     // Position 2: Menge von der OCR eine halbe Zeile tiefer gelesen
     word('2', 0.05, 0.386), word('NTC-10K-1%', 0.10, 0.383), word('ST', 0.902, 0.389), word('10', 0.88, 0.3893),
     ...lineAt(0.392, 0.10, ['Hersteller:', 'BEISPIEL', 'Herstellersymbol:', 'NTC-10K-1%']),
+    // Position 3: OCR liest „3ST“ als ein Wort und verliert die Positionsnummer
+    word('DCDC-X1/CHY', 0.10, 0.431), word('3ST', 0.89, 0.431),
+    ...lineAt(0.438, 0.10, ['Hersteller:', 'BEISPIEL', 'Herstellersymbol:', 'DCDC-X1/CHY']),
     // Fließtext ohne Einheit
-    ...lineAt(0.47, 0.04, ['Die', 'Bestellung', 'wurde', '2', 'Mal', 'geprüft']),
+    ...lineAt(0.47, 0.04, ['Die', 'Bestellung', 'wurde', '2', 'Mal', 'geprüft', 'STATUS']),
   ],
 };
 
@@ -193,10 +196,10 @@ test('Profile TME und Würth: Erkennung über den Kopf, Zuordnung über den Shop
   assert.equal(profileMatchesOrder(tme, other('Wuerth')), false);
 });
 
-test('TME: Zeilen über die Einheit „ST“ – trotz schiefem Blatt, versetzter Menge und fehlender Kopfzeile', () => {
+test('TME: Zeilen über die Einheit „ST“ – trotz schiefem Blatt, versetzter Menge, „3ST“ und fehlender Kopfzeile', () => {
   const { headerFound, rows } = extractRows(TME_PAGE, tme);
   assert.equal(headerFound, null, 'keine Kopfzeile nötig');
-  assert.deepEqual(rows.map((r) => [r.qty, r.part]), [[4, 'TST-ABC123'], [10, 'NTC-10K-1%']]);
+  assert.deepEqual(rows.map((r) => [r.qty, r.part]), [[4, 'TST-ABC123'], [10, 'NTC-10K-1%'], [3, 'DCDC-X1/CHY']]);
 });
 
 test('Würth: nur Lieferschein-Zeilen mit „STK“ zählen, Packliste nicht doppelt', () => {

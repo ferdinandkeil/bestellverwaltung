@@ -16,5 +16,5 @@ export default {
   label: 'Würth Elektronik',
   detect: /W[üuöo]RTH|we-online/i,
   rowAnchor: 'unit',
-  unit: /^STK\.?$/i,
+  unit: 'STK',
 };

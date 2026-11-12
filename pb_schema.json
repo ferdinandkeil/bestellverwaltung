@@ -392,6 +392,20 @@
         ]
       },
       {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "ord_origin",
+        "name": "origin",
+        "type": "select",
+        "required": false,
+        "maxSelect": 1,
+        "values": [
+          "warenkorb",
+          "lieferschein"
+        ]
+      },
+      {
         "id": "ord_created_by",
         "name": "created_by",
         "type": "relation",
@@ -501,7 +515,7 @@
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": null,
-    "updateRule": "@request.auth.id != \"\" && @request.body.status:isset = false && @request.body.created_by:isset = false",
+    "updateRule": "@request.auth.id != \"\" && @request.body.status:isset = false && @request.body.created_by:isset = false && @request.body.origin:isset = false",
     "deleteRule": "@request.auth.id != \"\" && status = \"angefragt\""
   },
   {
@@ -995,5 +1009,117 @@
     "createRule": "@request.auth.id != \"\" && @request.auth.collectionName = \"users\" && reported_by = @request.auth.id",
     "updateRule": null,
     "deleteRule": null
+  },
+  {
+    "id": "pb_unmatched_receipts_col",
+    "name": "unmatched_receipts",
+    "type": "base",
+    "system": false,
+    "indexes": [],
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "primaryKey": true,
+        "min": 15,
+        "max": 15,
+        "pattern": "^[a-z0-9]+$",
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "system": false,
+        "presentable": true,
+        "hidden": false,
+        "id": "urc_supplier_name",
+        "name": "supplier_name",
+        "type": "text",
+        "required": true,
+        "min": 0,
+        "max": 100,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "urc_internal_no",
+        "name": "internal_order_no",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 20,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "urc_note",
+        "name": "note",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "urc_receipt",
+        "name": "receipt",
+        "type": "file",
+        "required": true,
+        "maxSelect": 1,
+        "maxSize": 15728640,
+        "mimeTypes": [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ],
+        "thumbs": [],
+        "protected": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "urc_uploaded_by",
+        "name": "uploaded_by",
+        "type": "relation",
+        "required": true,
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "pb_unmatched_receipts_col_created",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      }
+    ],
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\" && @request.auth.collectionName = \"users\" && uploaded_by = @request.auth.id",
+    "updateRule": null,
+    "deleteRule": "@request.auth.id != \"\" && @request.auth.collectionName = \"users\""
   }
 ]

@@ -65,7 +65,7 @@ export async function setup() {
 /** Alle Fachdaten löschen (Bestellungen kaskadieren auf Positionen & Lieferungen; Scanner-Meldungen zuerst). */
 export async function resetData() {
   const token = await admin();
-  for (const col of ['scan_reports', 'orders', 'groups']) {
+  for (const col of ['scan_reports', 'unmatched_receipts', 'orders', 'groups']) {
     const list = await http('GET', `/api/collections/${col}/records?perPage=500&fields=id`, { token });
     for (const r of list.items) await http('DELETE', `/api/collections/${col}/records/${r.id}`, { token });
   }

@@ -16,5 +16,6 @@ export default {
   detect: /\bTME\b|tme-germany|Transfer Multisort/i,
   /** Positionszeilen: Menge direkt vor der Einheit, Bestellnummer am Zeilenanfang (nach der Positionsnummer). */
   rowAnchor: 'unit',
-  unit: /^ST\.?$/,
+  /** Mengeneinheit (Text, Großbuchstaben); erkannt als eigenes Wort oder an der Menge („3ST“). */
+  unit: 'ST',
 };

@@ -29,7 +29,7 @@ const PARTS = [
 const FORGOTTEN = [2, 'LED 5-4500 RT', 'LED, 5 mm, bedrahtet, rot'];
 
 /** Synthetischer Lieferschein im Layout von Reichelt (keine echten Kundendaten). */
-const NOTE_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+const noteHtml = ({ logo, orderNo, rows }) => `<!doctype html><html><head><meta charset="utf-8"><style>
   body { margin: 0; width: 1240px; height: 1754px; background: #fff; font-family: Arial, Helvetica, sans-serif; color: #111; }
   .logo { position: absolute; left: 700px; top: 80px; font-size: 96px; font-weight: 900; letter-spacing: -2px; }
   .logo small { display: block; font-size: 48px; margin: -18px 0 0 120px; letter-spacing: 0; }
@@ -41,15 +41,26 @@ const NOTE_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
   td { padding: 4px 30px 4px 0; white-space: nowrap; }
   td.q { text-align: right; padding-right: 70px; }
 </style></head><body>
-  <div class="logo">reichelt<small>elektronik</small></div>
+  <div class="logo">${logo}</div>
   <div class="muster">MUSTER-HOCHSCHULE<br>Teststraße 1<br>12345 Musterstadt</div>
   <div class="title">Lieferschein</div>
-  <div class="order">Bestellnummer<br>${ORDER_NO}</div>
+  <div class="order">Bestellnummer<br>${orderNo}</div>
   <table><tr><th>Menge</th><th>Artikelnummer</th><th>Bezeichnung</th></tr>
-  ${PARTS.map(([q, p, d]) => `<tr><td class="q">${q}</td><td>${p}</td><td>${d}</td></tr>`).join('')}
-  <tr><td class="q">${FORGOTTEN[0]}</td><td>${FORGOTTEN[1]}</td><td>${FORGOTTEN[2]}</td></tr>
+  ${rows.map(([q, p, d]) => `<tr><td class="q">${q}</td><td>${p}</td><td>${d}</td></tr>`).join('')}
   </table>
 </body></html>`;
+const NOTE_HTML = noteHtml({ logo: 'reichelt<small>elektronik</small>', orderNo: ORDER_NO, rows: [...PARTS, FORGOTTEN] });
+/** Lieferschein ohne Bestellung im System (Direktkauf) → Bestellung daraus anlegen. */
+const DIRECT_NO = '2026IW08888';
+const DIRECT_HTML = noteHtml({
+  logo: 'reichelt<small>elektronik</small>', orderNo: DIRECT_NO,
+  rows: [[1, 'CLI-581 C', 'Tintenpatrone cyan'], [4, 'KEM X7R0805 100N', 'Vielschicht-Kerko, 100nF']],
+});
+/** Lieferant ohne Profil → Lieferschein in die Ablage. */
+const UNKNOWN_HTML = noteHtml({
+  logo: 'Musterteile<small>Versand</small>', orderNo: 'unbekannt',
+  rows: [[2, 'MT-4711', 'Beispielteil']],
+});
 
 async function seed() {
   await setup();
@@ -68,11 +79,11 @@ async function seed() {
 }
 
 /** Erzeugt mit dem Browser ein „Handyfoto“ des synthetischen Lieferscheins. */
-async function makePhoto(b, dir) {
-  const notePath = join(dir, 'note.png');
+async function makePhoto(b, dir, html = NOTE_HTML, name = 'foto') {
+  const notePath = join(dir, name + '-note.png');
   await b.setViewport({ width: 1240, height: 1754 }, false);
   await b.navigate('about:blank');
-  await b.evaluate(`document.open(); document.write(${JSON.stringify(NOTE_HTML)}); document.close();`);
+  await b.evaluate(`document.open(); document.write(${JSON.stringify(html)}); document.close();`);
   await sleep(300);
   await b.screenshotTo(notePath, 'png');
 
@@ -83,7 +94,7 @@ async function makePhoto(b, dir) {
   </body></html>`)}); document.close();`);
   await b.waitFor(`document.querySelector('img')?.complete`, 'Foto-Seite');
   await sleep(300);
-  const photoPath = join(dir, 'foto.jpg');
+  const photoPath = join(dir, name + '.jpg');
   await b.screenshotTo(photoPath, 'jpeg', 88);
   return photoPath;
 }
@@ -98,6 +109,8 @@ const scanner = `Alpine.$data(document.querySelector('[x-data=deliveryScanner]')
 
 try {
   const photo = await makePhoto(b, work);
+  const directPhoto = await makePhoto(b, work, DIRECT_HTML, 'direkt');
+  const unknownPhoto = await makePhoto(b, work, UNKNOWN_HTML, 'unbekannt');
   ok('synthetischen Lieferschein fotografiert (schräg auf dunklem Tisch)');
 
   await b.setViewport();
@@ -193,6 +206,62 @@ try {
   const order = (await listRecords('orders', `id = "${orderId}"`))[0];
   if (order.status !== 'teilgeliefert') throw new Error('Status sollte teilgeliefert sein: ' + order.status);
   ok(`PDF-Beleg angehängt (${(readFileSync(pdfPath).length / 1024).toFixed(0)} KB, qpdf ok), Status teilgeliefert`);
+
+  // ---- Lieferschein ohne Bestellung im System → Bestellung daraus anlegen ----------------
+  const scanFromDashboard = async (file) => {
+    await b.navigate(PB_URL + '/#/');
+    await b.waitFor(`[...document.querySelectorAll('#view button')].some((e) => e.innerText.includes('Lieferschein scannen'))`, 'Dashboard');
+    await b.clickText('#view button', 'Lieferschein scannen');
+    await b.waitFor(`${scanner}.isOpen && ${scanner}.libState === 'ready'`, 'Scanner bereit', 60000);
+    await b.setFiles('[x-data=deliveryScanner] input[capture]', [file]);
+    await b.waitFor(`${scanner}.step === 'corners'`, 'Eckenprüfung', 30000);
+    await b.clickText('[x-data=deliveryScanner] button', 'Übernehmen');
+    await b.waitFor(`${scanner}.step === 'pages' && ${scanner}.pages.length === 1`, 'Seite übernommen', 20000);
+    await b.clickText('[x-data=deliveryScanner] button', 'Erkennung starten');
+    await b.waitFor(`${scanner}.step === 'review'`, 'Prüfmaske', 120000);
+  };
+
+  await scanFromDashboard(directPhoto);
+  if (await b.evaluate(`!!${scanner}.order`)) throw new Error('Direktkauf fälschlich einer Bestellung zugeordnet');
+  await b.waitFor(`document.querySelector('[data-no-order]')?.offsetParent`, 'Hinweis „Keine passende Bestellung?“');
+  await b.clickText('[data-no-order] button', 'Bestellung aus Lieferschein anlegen');
+  await b.waitFor(`document.querySelector('[data-create-order]')?.offsetParent`, 'Formular Bestellung anlegen');
+  const created = await b.evaluate(`JSON.stringify({ no: ${scanner}.create.internal_order_no, s: ${scanner}.create.supplier, items: ${scanner}.create.items.map((i) => i.qty + '×' + i.part_number) })`);
+  if (created !== JSON.stringify({ no: DIRECT_NO, s: 'reichelt', items: ['1×CLI-581 C', '4×KEM X7R0805 100N'] })) throw new Error('Vorbelegung: ' + created);
+  await b.fill('[data-create-item="0"] input[aria-label="Bezeichnung"]', 'Tinte cyan');
+  await b.screenshot('scanner-07-bestellung-anlegen');
+  await b.clickText('[data-create-order] button', 'Bestellung anlegen und Lieferung buchen');
+  await b.waitFor(`location.hash.startsWith('#/orders/') && document.body.innerText.includes('aus Lieferschein angelegt')`, 'neue Bestellung', 30000);
+  const [direct] = await listRecords('orders', `internal_order_no = "${DIRECT_NO}"`);
+  const directItems = await listRecords('order_items', `order = "${direct.id}"`);
+  const [directDelivery] = await listRecords('deliveries', `order = "${direct.id}"`);
+  if (direct.origin !== 'lieferschein' || direct.status !== 'geliefert' || directItems.length !== 2
+      || !directItems.every((i) => i.qty_delivered === i.qty_ordered) || !/\.pdf$/.test(directDelivery?.receipt ?? '')) {
+    throw new Error('Bestellung aus Lieferschein: ' + JSON.stringify({ direct, directItems, directDelivery }));
+  }
+  ok('Bestellung aus Lieferschein angelegt: Nummer übernommen, 2 Positionen, geliefert, PDF-Beleg');
+
+  // ---- Lieferant ohne Profil → Ablage → im Dashboard einer Bestellung zuordnen ---------------
+  await scanFromDashboard(unknownPhoto);
+  await b.waitFor(`document.querySelector('[data-no-order]')?.offsetParent`, 'Hinweis ohne Profil');
+  if (await b.evaluate(`[...document.querySelectorAll('[data-no-order] button')].some((e) => e.offsetParent && e.innerText.includes('Bestellung aus'))`)) {
+    throw new Error('Ohne Profil darf keine Bestellung angelegt werden');
+  }
+  await b.clickText('[data-no-order] button', 'In Ablage legen');
+  await b.waitFor(`document.querySelector('[data-archive]')?.offsetParent`, 'Ablage-Formular');
+  await b.fill('#archive-supplier', 'Musterteile Versand');
+  await b.clickText('[data-archive] button', 'In Ablage legen');
+  await b.waitFor(`!${scanner}.isOpen`, 'abgelegt', 30000);
+  await b.waitFor(`document.querySelector('[data-unmatched-receipts]')?.offsetParent && document.body.innerText.includes('Musterteile Versand')`, 'Ablage im Dashboard');
+  await b.screenshot('scanner-08-ablage');
+  await b.evaluate(`Alpine.$data(document.querySelector('[data-unmatched-receipts]')).loadOrders()`);
+  await b.waitFor(`document.querySelectorAll('[data-unmatched-receipts] option').length > 1`, 'Bestellungen zur Auswahl');
+  await b.fill('[data-unmatched-receipts] select', direct.id);
+  await b.clickText('[data-unmatched-receipts] button', 'Zuordnen');
+  await b.waitFor(`!document.querySelector('[data-unmatched-receipts]')?.offsetParent`, 'Ablage leer');
+  const assigned = (await listRecords('orders', `id = "${direct.id}"`))[0];
+  if (assigned.attachments.length !== 1 || (await listRecords('unmatched_receipts')).length !== 0) throw new Error('Zuordnung: ' + JSON.stringify(assigned.attachments));
+  ok('Lieferschein ohne Profil abgelegt und im Dashboard einer Bestellung zugeordnet (Anhang)');
 
   const unexpected = b.problems.filter((p) => !/status of 4\d\d.*(auth-with-otp)/.test(p));
   if (unexpected.length) throw new Error('Fehler in der Browser-Konsole:\n  ' + unexpected.join('\n  '));

@@ -46,7 +46,8 @@
 3. ✔ Unit-Tests (Abgleich, PDF) und Browser-Test mit synthetischem, schräg fotografiertem Beleg.
 4. ✔ **Problem melden:** fehlgeschlagene Erkennungen landen mit Originalfotos und OCR-Ergebnis in `scan_reports`, Mail mit Link an die Superuser; Abholen zur Analyse mit `scripts/fetch-scan-reports.mjs` (löscht danach auf dem Server).
 5. ✔ **Positionen nachtragen** (11/2026): nicht zugeordnete Lieferschein-Zeile als vergessene Position nachtragen und mitbuchen; ebenso in der Detailansicht; gekennzeichnet (ARCHITECTURE Kap. 4.5).
-6. Offen:
+6. ✔ **Lieferscheine ohne Bestellung** (11/2026): Bestellung aus dem Lieferschein anlegen (Nummer oder ausdrücklich ohne) bzw. ohne Profil in die Ablage „Lieferscheine ohne Bestellung“ legen und später zuordnen (ARCHITECTURE Kap. 4.6). Profile verbessert („3ST“).
+7. Offen:
    * Gemeldete Lieferscheine auswerten und Erkennung/Profile nachbessern (erste Auswertung 11/2026: TME und Würth ohne Profil, OCR gut; daraus die Zuordnung über die interne Bestellnummer).
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
    * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege vorliegen (am einfachsten per „Problem melden“).
@@ -82,3 +83,10 @@
 4. Werkzeuge – lesend: Bestellungen suchen/anzeigen, Rückstände je Gruppe/Veranstaltung, Kosten einer Bestellung, Gruppen auflisten; schreibend: Position in den Sammelkorb legen (über die vorhandene Transaktionslogik), Notiz setzen. **Nicht** enthalten: Lieferungen buchen, Status ändern, Löschen (Schutz vor manipulierten Eingaben, z. B. aus Moodle-Daten).
 5. Einrichtung in Claude Code dokumentieren (`claude mcp add --transport http …` mit Header) in `docs/DEPLOYMENT.md`.
 6. Tests: Protokoll-Handshake, Werkzeugliste, Rechte (ohne/mit ungültigem Token), Schreibwerkzeuge nur im erlaubten Umfang, keine Dateiinhalte in Antworten.
+
+## Phase 8: Lager (Branch `phase-8-stock`, Entscheidungen 11/2026, Umsetzung nach den übrigen Phasen)
+1. **Was ins Lager kommt:** der Anteil einer Position ohne Gruppe – also „ohne Gruppe“ zugeordnete Mengen und was über den Bedarf der Gruppen hinaus bestellt wurde (bestellt > Σ Gruppenanteile).
+2. **Wann:** bei **jeder Lieferbuchung**. Bei Teillieferungen gilt **Gruppen zuerst**: die gelieferte Menge deckt zunächst den Bedarf der Gruppen, erst was darüber hinausgeht, kommt ins Lager. Korrekturbuchungen (negativ) nehmen zuerst aus dem Lager zurück.
+3. **Datenmodell:** Lagerartikel und Lagerbewegungen als Journal (Zugang aus Lieferung, Entnahme für Gruppe, Korrektur) mit Herkunft und Nutzer; Bestand = Summe der Bewegungen – nachvollziehbar wie bei den Lieferungen.
+4. **Funktionen:** Bestandsübersicht mit Suche (Bestand, Herkunft, Verlauf); **Entnahme für eine Gruppe**, erscheint im Projekt-Status der Gruppe. Lagerort, Mindestbestand und Hinweis beim Erfassen vorerst nicht.
+5. Offen bei Umsetzung: Zuordnung gleicher Artikel verschiedener Lieferanten (Bestellnummer je Shop), Umgang mit bestehendem Bestand bei Einführung.

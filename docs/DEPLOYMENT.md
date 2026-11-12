@@ -128,6 +128,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<domain>/api/lab/cart-i
 * `401` (Anmeldung erforderlich) heißt: Die eigenen Routen sind geladen. **`404`** heißt: Die Hooks fehlen – dann `supervisorctl tail bestellverwaltung stderr` prüfen.
 * Warum immer neu starten: PocketBase lädt `pb_hooks/` beim Start und überwacht den Ordner nur, wenn er beim Start schon existierte. Lief der Dienst vor dem ersten Deploy, bleiben die Hooks bis zum Neustart ungeladen (11/2026: „Artikel anlegen“ schlug mit 404 fehl).
 * Bei Schema-Änderungen anschließend erneut importieren (Schritt 2.2). **Vorher ein Backup ziehen.**
+* **Lieferscheine ohne Bestellung (11/2026):** Schema-Import nötig (Feld `orders.origin`, neue Collection `unmatched_receipts`); neue Hook-Datei `lib/delivery-notes.js`.
 * **Positionen nachtragen (11/2026):** Schema-Import nötig (neue Felder `added_later_by`/`added_later_at` und geänderte Update-Regel von `order_items`); neue Hook-Datei `lib/late-items.js`.
 * **Moodle-Import (11/2026):** Schema-Import nötig (Bezeichnung einer Position wird optional); neue Hook-Datei `lib/import.js` → Neustart wie oben.
 * **Login unabhängig von Groß-/Kleinschreibung (11/2026):** Der Schema-Import legt den Index `idx_users_email_nocase` an. Er scheitert, falls es schon zwei Konten mit derselben Adresse in anderer Schreibweise gibt – dann vorher das überzählige Konto im Admin-UI löschen.

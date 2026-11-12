@@ -4,6 +4,7 @@ import { listOrders, listGroups, orderTotals, subscribe, errorMessage } from '..
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
+import { unmatchedReceiptsSection } from './unmatched-receipts.js';
 
 const FILTER_KEY = 'dashboard-filters';
 
@@ -16,6 +17,8 @@ const template = /* html */ `
     </template>
     <button type="button" class="btn btn-primary" @click="showForm = true">+ Position erfassen</button>
   </div>
+
+  ${unmatchedReceiptsSection}
 
   <!-- Filter: auf dem Smartphone eingeklappt, aktive Filter als Chips -->
   <div class="mb-3 flex flex-wrap items-center gap-2 sm:hidden">

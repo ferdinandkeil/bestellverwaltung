@@ -31,7 +31,7 @@ async function seed() {
 // Ablauf
 // ---------------------------------------------------------------------------
 const ORDER_LINKS = `document.querySelectorAll('#view ul a[href^="#/orders/"]')`;
-const BADGE = `document.querySelector('#view .badge').innerText.trim()`;
+const BADGE = `document.querySelector('#view [data-status-badge]').innerText.trim()`;
 
 const { groupA, login } = await seed();
 await enableRateLimits(); // Browser-Durchlauf unter Produktionsbedingungen

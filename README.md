@@ -15,12 +15,13 @@ Optimiert für die Nutzung am Smartphone am Auspacktisch im Labor.
 | **Lieferbuchungen** mit Historie und Beleg, Schnellbuttons „+1“ / „Rest komplett“, Korrektur per Gegenbuchung, Storno je Position | ✔ |
 | **Gruppen** je Veranstaltung und Semester, Projekt-Status je Gruppe | ✔ |
 | **Kosten** netto/brutto, Versand, Rechnungsbetrag | ✔ |
-| **Lieferschein-Erfassung**: Foto → Entzerrung → Texterkennung → Abgleich mit der Bestellung → Buchung mit PDF-Beleg; komplett im Browser, keine Daten an Dritte | Beta (Profil Reichelt) |
+| **Lieferschein-Erfassung**: Foto → Entzerrung → Texterkennung → Abgleich mit der Bestellung → Buchung mit PDF-Beleg; vergessene Positionen nachtragen; ohne passende Bestellung daraus eine Bestellung anlegen oder ablegen; komplett im Browser, keine Daten an Dritte | Beta (Profile Reichelt, TME, Würth) |
 | **Moodle-CSV-Import** mit interaktiver Gruppenzuweisung, Vorschau und Buchung nach „alles oder nichts“ | Beta |
 | Shop-Export (Copy & Paste / CSV für die Schnellbestellung) | geplant (Phase 4) |
 | Word-Export für Beschaffungsformulare | geplant (Phase 5) |
 | Prüfung der Bestellnummern | geplant (Phase 6) |
 | Zugriff für Claude Code per MCP | geplant (Phase 7) |
+| Lager für Bauteile ohne Gruppe (Zugang bei Lieferung, Entnahme für Gruppen) | geplant (Phase 8) |
 
 ## Technik in Kürze
 
