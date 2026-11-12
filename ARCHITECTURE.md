@@ -67,7 +67,9 @@ Projekt/
 │   │   ├── groups-view.js
 │   │   └── item-form.js            # Formular „Position erfassen“ (Dashboard + Detail)
 │   └── modules/                    # Isolierte Erweiterungsmodule (über plugin-registry)
-│       ├── shop-export/
+│       ├── shop-export/            # Shop-Export (Kap. 6)
+│       │   ├── shop-exporter.js    # Oberfläche: Vorschau, CSV-Download, „Exportiert & bestellt“
+│       │   └── formats.js          # CSV-Formate je Shop (reine Logik, getestet)
 │       ├── moodle-import/          # Moodle-CSV-Import (Kap. 6)
 │       │   ├── moodle-importer.js  # Oberfläche: Datei, Zuordnung, Vorschau, Buchung
 │       │   └── moodle-csv.js       # Auswertung der CSV (reine Logik, getestet)
@@ -174,7 +176,15 @@ registerPlugin({
 ```
 
 ## 6. Module (Überblick)
-* **shop-export:** Copy&Paste-Text und CSV je Lieferant. Die Formate werden vor der Umsetzung an den echten Schnellbestell-/Upload-Masken der Shops verifiziert.
+* **shop-export:** Nur **CSV-Download** für den CSV-Upload der Shops (kein Copy & Paste). Sichtbar im Status „angefragt“ und nur für Shops mit verifiziertem Format; weitere Shops erst nach einem Test-Upload in `formats.js` eintragen. Menge = `qty_ordered − qty_cancelled`, komplett stornierte Positionen entfallen. Dateien UTF-8 ohne BOM, Zeilenende CRLF, Name `<shop>-<interne Bestellnummer>.csv`. Formate (verifiziert 11/2026 mit Vorlagen und Test-Uploads):
+
+  | Shop | Erkennung | Trennzeichen | Kopfzeile | Spalten |
+  |---|---|---|---|---|
+  | Mouser | `supplier = mouser` | Komma | `Mouser or Manufacturer Part Number,Customer Part Number,Quantity 1,Quantity 2,Quantity 3` | Nummer, *leer*, Menge, *leer*, *leer* |
+  | Reichelt | `supplier = reichelt` | Semikolon (Nummern enthalten Kommas/Leerzeichen) | keine | Nummer, Menge |
+  | TME | `supplier = other`, Shop-Name beginnt mit „TME“ | Semikolon | keine | Nummer (TME- oder Herstellernummer), Menge |
+
+  Felder mit Trennzeichen oder Anführungszeichen werden nach RFC 4180 maskiert. Ablauf: Vorschau → Download → im Shop hochladen und bestellen → **„Exportiert & auf ‚Bestellt‘ setzen“** (erst nach dem Download; interne Bestellnummer Pflicht, Shop-Auftragsnummer optional) über die Status-Route. Vorher werden die Positionen neu geladen: Hat sich der Warenkorb seit dem Download geändert (z. B. Position von anderen ergänzt), wird der Statuswechsel angehalten und ein neuer Download verlangt.
 * **moodle-import (Beta):** CSV-Export der Moodle-Datenbank „Bauteilbestellung“ (Spalten Lieferant, Anzahl, Bestellnummer, Kommentar, Gruppe, Tags; Bezeichnung und Link optional, falls das Formular später ergänzt wird), eingelesen mit Papa Parse. Ablauf:
   1. **Datei** wählen oder hineinziehen; Spalten werden über die Überschriften erkannt und sind änderbar.
   2. **Zuordnung:** Veranstaltung und Semester einmal für den ganzen Import. **Lieferanten** je Angabe (Mouser/Farnell/Reichelt/Voelkner direkt, sonst „sonstige“ mit Shop-Namen, z. B. TME). **Gruppen interaktiv** je Bezeichnung: bestehende Gruppe der Veranstaltung, neu anlegen, ohne Gruppe oder „je Zeile wählen“ (für fehlerhafte Einträge, z. B. von Dozenten angelegte). Eine gleichnamige Gruppe der Veranstaltung ist **vorausgewählt und als Vorschlag markiert** – nichts geschieht stillschweigend; weiter erst, wenn alles zugeordnet ist.
