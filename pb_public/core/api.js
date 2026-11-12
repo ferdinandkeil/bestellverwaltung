@@ -212,6 +212,50 @@ export function listItemsForGroup(groupId) {
 }
 
 // ---------------------------------------------------------------------------
+// Lieferscheine ohne Bestellung (ARCHITECTURE.md Kap. 4.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bestellung aus einem Lieferschein anlegen (Herkunft „lieferschein“, sofort geliefert).
+ * data: { supplier, supplier_custom_name?, internal_order_no? | without_internal_order_no, supplier_order_no?,
+ *         note?, items: [{ part_number, name?, qty, group? }] }, receipt: PDF
+ * → { order, delivery, status }
+ */
+export function createOrderFromDeliveryNote(data, receipt) {
+  const body = new FormData();
+  for (const [k, v] of Object.entries(data)) {
+    if (v === undefined || v === null || v === '') continue;
+    body.append(k, k === 'items' ? JSON.stringify(v) : String(v));
+  }
+  if (receipt) body.append('receipt', receipt);
+  return pb.send('/api/lab/orders/from-delivery-note', { method: 'POST', body });
+}
+
+export function listUnmatchedReceipts() {
+  return pb.collection('unmatched_receipts').getFullList({ sort: '-created', expand: 'uploaded_by' });
+}
+
+/** Lieferschein ohne Bestellung ablegen. data: { supplier_name, internal_order_no?, note? } */
+export function createUnmatchedReceipt(data, receipt) {
+  const body = new FormData();
+  body.append('supplier_name', data.supplier_name);
+  body.append('internal_order_no', data.internal_order_no || '');
+  body.append('note', data.note || '');
+  body.append('uploaded_by', pb.authStore.record?.id ?? '');
+  body.append('receipt', receipt);
+  return pb.collection('unmatched_receipts').create(body);
+}
+
+/** Abgelegten Lieferschein einer Bestellung zuordnen (Beleg wird Anhang, Ablage-Eintrag entfällt). */
+export function assignUnmatchedReceipt(id, orderId) {
+  return pb.send(`/api/lab/unmatched-receipts/${id}/assign`, { method: 'POST', body: { order: orderId } });
+}
+
+export function deleteUnmatchedReceipt(id) {
+  return pb.collection('unmatched_receipts').delete(id);
+}
+
+// ---------------------------------------------------------------------------
 // Realtime
 // ---------------------------------------------------------------------------
 

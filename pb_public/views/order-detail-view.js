@@ -28,12 +28,15 @@ const template = /* html */ `
         <div class="flex flex-wrap items-start gap-2">
           <div class="mr-auto min-w-0">
             <h1 class="text-xl font-semibold" x-text="supplierLabel(order)"></h1>
+            <p x-show="order.origin === 'lieferschein'" class="mb-1">
+              <span class="badge bg-violet-50 text-violet-800 ring-violet-200">aus Lieferschein angelegt</span>
+            </p>
             <p class="text-xs text-slate-500">
               Angelegt <span x-text="fmt.dateTime(order.created)"></span>
               <span x-show="order.expand?.created_by" x-text="'von ' + (order.expand?.created_by?.name || order.expand?.created_by?.email)"></span>
             </p>
           </div>
-          <span class="badge text-sm" :class="statusMeta(order.status).badge" x-text="statusMeta(order.status).label"></span>
+          <span class="badge text-sm" data-status-badge :class="statusMeta(order.status).badge" x-text="statusMeta(order.status).label"></span>
         </div>
 
         <div class="mt-4 grid gap-3 sm:grid-cols-2">

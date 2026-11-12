@@ -2,9 +2,12 @@
 // Registriert sich in den Slots 'order-detail-actions' und 'dashboard-actions'.
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
-import { DELIVERY_STATUSES, supplierLabel, orderNumbersLabel, statusMeta, groupsByCourse } from '../../core/config.js';
+import { SUPPLIERS, DELIVERY_STATUSES, supplierLabel, orderNumbersLabel, statusMeta, groupsByCourse } from '../../core/config.js';
 import { pb } from '../../core/pb.js';
-import { listOrderItems, getOrder, bookDelivery, uploadAttachments, backlogOf, errorMessage, listGroups } from '../../core/api.js';
+import {
+  listOrderItems, getOrder, bookDelivery, uploadAttachments, backlogOf, errorMessage, listGroups,
+  createOrderFromDeliveryNote, createUnmatchedReceipt,
+} from '../../core/api.js';
 import { toast, confirmAction } from '../../core/ui.js';
 import { loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, toGrayJpeg, toJpeg } from './vision.js';
 import { preloadOcr, recognizePage, terminateOcr } from './ocr.js';
@@ -122,6 +125,105 @@ const template = /* html */ `
               </template>
             </select>
             <p class="hint" x-show="detectedOrderHint" x-text="detectedOrderHint"></p>
+          </div>
+
+          <!-- Keine passende Bestellung: daraus anlegen oder ablegen -->
+          <div x-show="!lockedOrder && !order && !noOrder.mode" class="card space-y-2 border-violet-300 p-3" data-no-order>
+            <h3 class="text-sm font-semibold">Keine passende Bestellung?</h3>
+            <p class="text-xs text-slate-600">
+              Z. B. Muster, Direktkauf oder eine Bestellung, die nicht im System erfasst wurde.
+              <span x-show="!profileLabel">Für diesen Lieferanten gibt es kein Profil – der Lieferschein kann abgelegt und später einer Bestellung zugeordnet werden.</span>
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="btn btn-primary btn-sm" x-show="profileLabel" @click="startCreateOrder()">Bestellung aus Lieferschein anlegen</button>
+              <button type="button" class="btn btn-secondary btn-sm" @click="startArchive()">In Ablage legen</button>
+            </div>
+          </div>
+
+          <!-- Bestellung aus Lieferschein anlegen -->
+          <div x-show="noOrder.mode === 'create'" class="card space-y-3 border-violet-300 p-3" data-create-order>
+            <div class="flex items-center gap-2">
+              <h3 class="mr-auto text-sm font-semibold">Bestellung aus Lieferschein anlegen</h3>
+              <button type="button" class="btn btn-ghost btn-sm" @click="noOrder.mode = ''">Abbrechen</button>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div :class="create.supplier === 'other' ? '' : 'col-span-2'">
+                <label class="label">Lieferant</label>
+                <select class="input" x-model="create.supplier" aria-label="Lieferant">
+                  <template x-for="s in suppliers" :key="s.value"><option :value="s.value" x-text="s.label"></option></template>
+                </select>
+              </div>
+              <div x-show="create.supplier === 'other'">
+                <label class="label">Shop-Name</label>
+                <input class="input" x-model="create.supplier_custom_name" maxlength="100" aria-label="Shop-Name">
+              </div>
+              <div>
+                <label class="label" for="create-internal-no">Interne Bestellnummer</label>
+                <input id="create-internal-no" class="input font-mono" x-model="create.internal_order_no" maxlength="11"
+                       :disabled="create.without_internal_order_no" placeholder="2026IW01047" spellcheck="false">
+              </div>
+              <div>
+                <label class="label">Auftragsnr. des Shops <span class="font-normal text-slate-500">(optional)</span></label>
+                <input class="input" x-model="create.supplier_order_no" maxlength="100" aria-label="Auftragsnummer des Shops">
+              </div>
+              <label class="col-span-2 flex items-center gap-2 text-sm">
+                <input type="checkbox" x-model="create.without_internal_order_no" @change="create.without_internal_order_no && (create.internal_order_no = '')">
+                ohne interne Bestellnummer (z. B. Muster, Direktkauf)
+              </label>
+            </div>
+            <div>
+              <h4 class="mb-1 text-xs font-semibold text-slate-600">Positionen (bestellt = geliefert)</h4>
+              <ul class="space-y-2">
+                <template x-for="(it, i) in create.items" :key="it.key">
+                  <li class="grid grid-cols-[1.5rem_4.5rem_minmax(0,1fr)] items-center gap-2" :data-create-item="i">
+                    <input type="checkbox" x-model="it.include" :aria-label="'Position ' + (i + 1) + ' übernehmen'">
+                    <input class="input text-right" type="number" min="1" step="1" x-model.number="it.qty" aria-label="Menge">
+                    <input class="input font-mono" x-model="it.part_number" maxlength="100" spellcheck="false" aria-label="Bestellnummer">
+                    <span></span>
+                    <input class="input col-span-2" x-model="it.name" maxlength="300" placeholder="Bezeichnung (empfohlen)" aria-label="Bezeichnung">
+                    <span></span>
+                    <select class="input col-span-2" x-model="it.group" aria-label="Gruppe">
+                      <option value="">– ohne Gruppe –</option>
+                      <template x-for="c in groupCourses" :key="c.label">
+                        <optgroup :label="c.label">
+                          <template x-for="g in c.groups" :key="g.id"><option :value="g.id" x-text="g.name"></option></template>
+                        </optgroup>
+                      </template>
+                    </select>
+                  </li>
+                </template>
+              </ul>
+              <button type="button" class="btn btn-ghost btn-sm mt-2" @click="addCreateItem()">+ Position</button>
+            </div>
+            <div class="flex justify-end">
+              <button type="button" class="btn btn-success" :disabled="busy" @click="submitCreateOrder()">
+                <span x-text="busy ? 'Wird angelegt …' : 'Bestellung anlegen und Lieferung buchen'"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- In Ablage legen -->
+          <div x-show="noOrder.mode === 'archive'" class="card space-y-3 border-violet-300 p-3" data-archive>
+            <div class="flex items-center gap-2">
+              <h3 class="mr-auto text-sm font-semibold">Lieferschein ablegen</h3>
+              <button type="button" class="btn btn-ghost btn-sm" @click="noOrder.mode = ''">Abbrechen</button>
+            </div>
+            <p class="text-xs text-slate-600">Erscheint im Dashboard unter „Lieferscheine ohne Bestellung“ und kann später einer Bestellung zugeordnet werden.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="label" for="archive-supplier">Lieferant</label>
+                <input id="archive-supplier" class="input" x-model="archive.supplier_name" maxlength="100" required>
+              </div>
+              <div>
+                <label class="label">Interne Bestellnr. <span class="font-normal text-slate-500">(falls bekannt)</span></label>
+                <input class="input font-mono" x-model="archive.internal_order_no" maxlength="20" aria-label="Interne Bestellnummer">
+              </div>
+            </div>
+            <div class="flex justify-end">
+              <button type="button" class="btn btn-secondary" :disabled="busy" @click="submitArchive()">
+                <span x-text="busy ? 'Wird abgelegt …' : 'In Ablage legen'"></span>
+              </button>
+            </div>
           </div>
 
           <template x-if="order">
@@ -275,6 +377,11 @@ function component() {
     reviewRows: [],
     unmatched: [],
     groupCourses: [],
+    suppliers: SUPPLIERS,
+    profileLabel: '',
+    noOrder: { mode: '' },
+    create: { items: [] },
+    archive: {},
     note: '',
     busy: false,
     problems: [],
@@ -324,6 +431,7 @@ function component() {
         step: 'pages', busyText: '', pages: [], cornersDetected: true, progress: { value: 0, label: '' },
         order: null, items: [], lockedOrder: false, orderCandidates: [], selectedOrderId: '', detectedOrderHint: '',
         warnings: [], reviewRows: [], unmatched: [], note: '', busy: false,
+        profileLabel: '', noOrder: { mode: '' }, create: { items: [] }, archive: {},
         problems: [], recognitionFailed: false, reportOpen: false, reportNote: '', reportBusy: false, reported: false,
       });
     },
@@ -507,6 +615,8 @@ function component() {
       const ocrPages = pageData.map((p) => p.ocr);
       const detected = detectProfile(ocrPages);
       detectedProfile = detected;
+      this.profileLabel = detected?.label ?? '';
+      this.noOrder = { mode: '' };
       internalNos = findInternalOrderNumbers(ocrPages);
       this.warnings = [];
 
@@ -747,13 +857,113 @@ function component() {
       return this.reviewRows.some((r) => Number(r.qty) !== 0) || this.unmatched.some((u) => u.addNew);
     },
 
-    async buildPdf() {
+    async buildPdf(label = this.order?.supplier ?? 'unbekannt') {
       const pdf = await jpegsToPdf(pageData.map((p) => p.jpeg));
       if (pdf.length > MAX_RECEIPT_BYTES) {
         throw new Error(`Der Beleg ist mit ${(pdf.length / 1048576).toFixed(1)} MB zu groß (max. 15 MB).`);
       }
       const date = new Date().toISOString().slice(0, 10);
-      return new File([pdf], `lieferschein-${this.order.supplier}-${date}.pdf`, { type: 'application/pdf' });
+      const safe = String(label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lieferschein';
+      return new File([pdf], `lieferschein-${safe}-${date}.pdf`, { type: 'application/pdf' });
+    },
+
+    // ---- Keine passende Bestellung ---------------------------------------------
+    async loadGroupCourses() {
+      if (this.groupCourses.length) return;
+      try {
+        this.groupCourses = groupsByCourse(await listGroups({ onlyActive: true }));
+      } catch (err) {
+        toast.error(errorMessage(err));
+      }
+    },
+
+    async startCreateOrder() {
+      const p = detectedProfile;
+      const rows = this.rowsForProfile(p); // unabhängig von einer zuvor gewählten Bestellung
+      let key = 0;
+      this.create = {
+        supplier: p?.supplier ?? 'other',
+        supplier_custom_name: p?.supplier === 'other' ? p.label : '',
+        internal_order_no: internalNos[0] ?? '',
+        without_internal_order_no: false,
+        supplier_order_no: '',
+        items: rows.map((r) => ({ key: ++key, include: true, qty: r.qty, part_number: r.part, name: '', group: '' })),
+      };
+      if (!this.create.items.length) this.addCreateItem();
+      this.noOrder = { mode: 'create' };
+      await this.loadGroupCourses();
+    },
+
+    /** Zeilen ohne gewählte Bestellung mit dem erkannten Profil lesen. */
+    rowsForProfile(profile) {
+      if (!profile) return [];
+      return pageData.flatMap((p, page) => extractRows(p.ocr, profile).rows.map((r) => ({ ...r, page })));
+    },
+
+    addCreateItem() {
+      const key = Math.max(0, ...this.create.items.map((i) => i.key)) + 1;
+      this.create.items.push({ key, include: true, qty: 1, part_number: '', name: '', group: '' });
+    },
+
+    async submitCreateOrder() {
+      const c = this.create;
+      const items = c.items.filter((i) => i.include)
+        .map((i) => ({ part_number: i.part_number.trim(), name: i.name.trim(), qty: Number(i.qty), group: i.group }));
+      if (!items.length) { toast.error('Mindestens eine Position übernehmen.'); return; }
+      if (items.some((i) => !i.part_number || !Number.isInteger(i.qty) || i.qty < 1)) {
+        toast.error('Jede Position braucht Bestellnummer und Menge (ganze Zahl ≥ 1).');
+        return;
+      }
+      if (!c.without_internal_order_no && !c.internal_order_no.trim()) {
+        toast.error('Bitte die interne Bestellnummer eintragen oder „ohne interne Bestellnummer“ wählen.');
+        return;
+      }
+      if (!confirmAction(`Neue Bestellung mit ${items.length} Position(en) anlegen und als geliefert buchen?`)) return;
+      this.busy = true;
+      try {
+        const receipt = await this.buildPdf(c.supplier === 'other' ? c.supplier_custom_name : c.supplier);
+        const r = await createOrderFromDeliveryNote({
+          supplier: c.supplier,
+          supplier_custom_name: c.supplier === 'other' ? c.supplier_custom_name : '',
+          internal_order_no: c.without_internal_order_no ? '' : c.internal_order_no.trim(),
+          without_internal_order_no: c.without_internal_order_no ? 'true' : '',
+          supplier_order_no: c.supplier_order_no.trim(),
+          note: this.note,
+          items,
+        }, receipt);
+        toast.success(`Bestellung ${supplierLabel(r.order)} · ${orderNumbersLabel(r.order)} angelegt, Lieferung gebucht.`);
+        this.isOpen = false;
+        this.reset();
+        await terminateOcr();
+        location.hash = '#/orders/' + r.order.id;
+      } catch (err) {
+        toast.error(errorMessage(err));
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    startArchive() {
+      this.archive = { supplier_name: this.profileLabel, internal_order_no: internalNos[0] ?? '' };
+      this.noOrder = { mode: 'archive' };
+    },
+
+    async submitArchive() {
+      const a = this.archive;
+      if (!a.supplier_name?.trim()) { toast.error('Bitte den Lieferanten angeben.'); return; }
+      this.busy = true;
+      try {
+        const receipt = await this.buildPdf(a.supplier_name);
+        await createUnmatchedReceipt({ supplier_name: a.supplier_name.trim(), internal_order_no: a.internal_order_no.trim(), note: this.note }, receipt);
+        toast.success('Lieferschein abgelegt – im Dashboard unter „Lieferscheine ohne Bestellung“.');
+        this.isOpen = false;
+        this.reset();
+        await terminateOcr();
+      } catch (err) {
+        toast.error(errorMessage(err));
+      } finally {
+        this.busy = false;
+      }
     },
 
     async book() {
