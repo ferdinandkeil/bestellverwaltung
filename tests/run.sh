@@ -4,7 +4,7 @@
 #
 #   tests/run.sh                 # alle Tests
 #   tests/run.sh tests/x.test.mjs
-#   tests/run.sh --e2e           # zusätzlich Browser-Durchlauf (headless Chrome, tests/e2e.mjs)
+#   tests/run.sh --e2e           # zusätzlich Browser-Durchläufe (headless Chrome, tests/e2e*.mjs)
 set -euo pipefail
 
 E2E=0
@@ -68,6 +68,10 @@ if [ "$status" -eq 0 ] && [ "$E2E" -eq 1 ]; then
   if [ "$status" -eq 0 ]; then
     echo "--- Browser-Durchlauf Moodle-Import ---"
     node "$ROOT/tests/e2e-moodle.mjs" || status=$?
+  fi
+  if [ "$status" -eq 0 ]; then
+    echo "--- Browser-Durchlauf Shop-Export ---"
+    node "$ROOT/tests/e2e-shop-export.mjs" || status=$?
   fi
 fi
 if [ "$status" -ne 0 ]; then

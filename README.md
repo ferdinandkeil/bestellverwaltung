@@ -17,7 +17,7 @@ Optimiert für die Nutzung am Smartphone am Auspacktisch im Labor.
 | **Kosten** netto/brutto, Versand, Rechnungsbetrag | ✔ |
 | **Lieferschein-Erfassung**: Foto → Entzerrung → Texterkennung → Abgleich mit der Bestellung → Buchung mit PDF-Beleg; vergessene Positionen nachtragen; ohne passende Bestellung daraus eine Bestellung anlegen oder ablegen; komplett im Browser, keine Daten an Dritte | Beta (Profile Reichelt, TME, Würth) |
 | **Moodle-CSV-Import** mit interaktiver Gruppenzuweisung, Vorschau und Buchung nach „alles oder nichts“ | Beta |
-| Shop-Export (Copy & Paste / CSV für die Schnellbestellung) | geplant (Phase 4) |
+| Shop-Export (CSV-Upload für Mouser, Reichelt, TME) | umgesetzt (Phase 4, Abnahme offen) |
 | Word-Export für Beschaffungsformulare | geplant (Phase 5) |
 | Prüfung der Bestellnummern | geplant (Phase 6) |
 | Zugriff für Claude Code per MCP | geplant (Phase 7) |

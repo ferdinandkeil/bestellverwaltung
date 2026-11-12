@@ -64,9 +64,10 @@
 6. Offen: erster echter Import im Semesterbetrieb; ggf. Moodle-Formular um „Bezeichnung“ ergänzen (wird automatisch erkannt).
 
 ## Phase 4: Shop-Export (Branch `phase-4-shop-export`)
-1. Vorab: Formate an den echten Schnellbestell-/Upload-Masken von Mouser, Farnell, Reichelt, Voelkner verifizieren und mit dem Nutzer abstimmen.
-2. `modules/shop-export/shop-exporter.js` im Slot `order-detail-actions`: Modal mit Copy-to-Clipboard und CSV-Download (Menge = `qty_ordered − qty_cancelled`).
-3. Button „Exportiert & auf ‚Bestellt‘ setzen“ (mit interner Bestellnummer, optional `supplier_order_no`) über die Status-Route.
+1. ✔ Formate für **Mouser, Reichelt und TME** an den CSV-Uploads der Shops verifiziert (Vorlagen + Test-Uploads, 11/2026); Farnell und Voelkner vorerst nicht. Entscheidung: **nur CSV**, kein Copy & Paste.
+2. ✔ `modules/shop-export/shop-exporter.js` + `formats.js` im Slot `order-detail-actions`: Vorschau und CSV-Download (Menge = `qty_ordered − qty_cancelled`), Formate in ARCHITECTURE Kap. 6.
+3. ✔ Button „Exportiert & auf ‚Bestellt‘ setzen“ (mit interner Bestellnummer, optional `supplier_order_no`) über die Status-Route; angehalten, wenn sich der Warenkorb seit dem Download geändert hat.
+4. Tests: `tests/shop-export.test.mjs` (Formate), `tests/e2e-shop-export.mjs` (Browser).
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
