@@ -8,7 +8,7 @@
 //     detect:    RegExp, die im oberen Seitenbereich (y < 0.3) auf den Lieferanten hinweist,
 //     und eine der beiden Lesarten der Positionstabelle:
 //       columns: { qty, part, desc }     – Überschriften der Spalten (Kopfzeile, z. B. Reichelt)
-//       rowAnchor: 'unit', unit: RegExp  – Zeilen über die Mengeneinheit („4 ST“), ohne Kopfzeile (z. B. TME, Würth)
+//       rowAnchor: 'unit', unit: 'ST'    – Zeilen über die Mengeneinheit („4 ST“/„4ST“), ohne Kopfzeile (z. B. TME, Würth)
 //   }
 // Neue Lieferanten: Datei in diesem Ordner anlegen und unten eintragen.
 import reichelt from './reichelt.js';

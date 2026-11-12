@@ -62,6 +62,7 @@ const isPunctuation = (w) => !/[0-9A-Za-z]/.test(w.text);
 
 /**
  * Lesart „Einheit“: Jede Mengeneinheit (profile.unit, z. B. „ST“) markiert eine Positionszeile.
+ * Die OCR liest Menge und Einheit teils als ein Wort („3ST“) – auch das wird erkannt.
  * Menge = Zahl direkt links der Einheit (darf durch die OCR leicht versetzt sein),
  * Bestellnummer = Wörter derselben Zeile links der Menge, ohne führende Positionsnummer.
  * Tabellen ohne Einheit (z. B. Pack- oder Chargenlisten) liefern so keine Zeilen.
@@ -69,15 +70,30 @@ const isPunctuation = (w) => !/[0-9A-Za-z]/.test(w.text);
 function extractRowsByUnit(page, profile) {
   const words = page.words;
   const rows = [];
-  for (const unit of words.filter((w) => profile.unit.test(w.text.trim()))) {
+  const unitOnly = new RegExp(`^(${profile.unit})\\.?$`);
+  const merged = new RegExp(`^([0-9OoIl|]+)(${profile.unit})\\.?$`);
+  const anchors = [];
+  for (const w of words) {
+    const t = w.text.trim();
+    if (unitOnly.test(t)) {
+      const uc = center(w.bbox);
+      const h = w.bbox.y1 - w.bbox.y0;
+      // Menge: Zahl rechtsbündig vor der Einheit, vertikal höchstens etwa eine Zeilenhöhe versetzt
+      const qtyWord = words
+        .filter((q) => q !== w && q.bbox.x1 <= w.bbox.x0 + 0.005 && q.bbox.x1 >= w.bbox.x0 - 0.06
+          && Math.abs(center(q.bbox).y - uc.y) < h * 1.2 && parseQty(q.text))
+        .sort((a, b) => b.bbox.x1 - a.bbox.x1)[0];
+      if (qtyWord) anchors.push({ unit: w, qtyWord, qty: parseQty(qtyWord.text) });
+    } else {
+      const m = merged.exec(t);
+      const qty = m && parseQty(m[1]);
+      if (qty) anchors.push({ unit: w, qtyWord: w, qty });
+    }
+  }
+
+  for (const { unit, qtyWord, qty } of anchors) {
     const uc = center(unit.bbox);
     const h = unit.bbox.y1 - unit.bbox.y0;
-    // Menge: Zahl rechtsbündig vor der Einheit, vertikal höchstens etwa eine Zeilenhöhe versetzt
-    const qtyWord = words
-      .filter((w) => w !== unit && w.bbox.x1 <= unit.bbox.x0 + 0.005 && w.bbox.x1 >= unit.bbox.x0 - 0.06
-        && Math.abs(center(w.bbox).y - uc.y) < h * 1.2 && parseQty(w.text))
-      .sort((a, b) => b.bbox.x1 - a.bbox.x1)[0];
-    if (!qtyWord) continue;
     // Bestellnummer: Zeile links der Menge. Bei leicht schiefem Blatt liegt die Folgezeile (Hersteller,
     // Beschreibung) ähnlich nah – daher Textzeilen bilden und die Zeile mit Positionsnummer bevorzugen.
     const nearby = words
@@ -108,7 +124,7 @@ function extractRowsByUnit(page, profile) {
     const partWords = block.filter((w) => !isPunctuation(w));
     if (!partWords.length) continue;
     rows.push({
-      qty: parseQty(qtyWord.text),
+      qty,
       part: partWords.map((w) => w.text).join(' ').replace(/[\s/]+$/, ''),
       box: unionBox([...partWords, qtyWord, unit]),
       conf: Math.round(Math.min(...partWords.map((w) => w.conf ?? 0))),
