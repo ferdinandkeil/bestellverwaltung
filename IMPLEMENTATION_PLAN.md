@@ -1,6 +1,6 @@
 # Implementierungsplan
 
-> Stand: 2026-11-09. Phase 1 abgenommen; Go-Live erfolgt; Phase 2 und 3 als Beta (Abnahme nach Erprobung im Betrieb). Nächster Schritt: Phase 4.
+> Stand: 2026-11-12. Phase 1 und 4 abgenommen; Go-Live erfolgt; Phase 2 und 3 als Beta im Betrieb getestet (bleiben Beta bis zur Abnahme nach längerer Erprobung). Nächster Schritt: Phase 5.
 >
 > Phasenweise arbeiten, nach jeder Phase Feedback einholen. Kein JS-Build (kein npm/Vite/Webpack); einzige Ausnahme ist der CSS-Build mit dem Tailwind Standalone CLI. Vorgaben: `ARCHITECTURE.md`, `pb_schema.json`, `CLAUDE.md`.
 
@@ -47,7 +47,8 @@
 4. ✔ **Problem melden:** fehlgeschlagene Erkennungen landen mit Originalfotos und OCR-Ergebnis in `scan_reports`, Mail mit Link an die Superuser; Abholen zur Analyse mit `scripts/fetch-scan-reports.mjs` (löscht danach auf dem Server).
 5. ✔ **Positionen nachtragen** (11/2026): nicht zugeordnete Lieferschein-Zeile als vergessene Position nachtragen und mitbuchen; ebenso in der Detailansicht; gekennzeichnet (ARCHITECTURE Kap. 4.5).
 6. ✔ **Lieferscheine ohne Bestellung** (11/2026): Bestellung aus dem Lieferschein anlegen (Nummer oder ausdrücklich ohne) bzw. ohne Profil in die Ablage „Lieferscheine ohne Bestellung“ legen und später zuordnen (ARCHITECTURE Kap. 4.6). Profile verbessert („3ST“).
-7. Offen:
+7. ✔ **Bedienung auf dem Handy** (11/2026, Rückmeldung aus dem Test im Betrieb): Eckenauswahl ohne Scrollen (Bild eingepasst, feste Knopfleiste), Lupe beim Ziehen eines Eckpunkts.
+8. Offen:
    * Gemeldete Lieferscheine auswerten und Erkennung/Profile nachbessern (erste Auswertung 11/2026: TME und Würth ohne Profil, OCR gut; daraus die Zuordnung über die interne Bestellnummer).
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
    * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege vorliegen (am einfachsten per „Problem melden“).
@@ -64,6 +65,8 @@
 6. Offen: erster echter Import im Semesterbetrieb; ggf. Moodle-Formular um „Bezeichnung“ ergänzen (wird automatisch erkannt).
 
 ## Phase 4: Shop-Export (Branch `phase-4-shop-export`)
+
+**Status:** abgenommen (11/2026).
 1. ✔ Formate für **Mouser, Reichelt und TME** an den CSV-Uploads der Shops verifiziert (Vorlagen + Test-Uploads, 11/2026); Farnell und Voelkner vorerst nicht. Entscheidung: **nur CSV**, kein Copy & Paste.
 2. ✔ `modules/shop-export/shop-exporter.js` + `formats.js` im Slot `order-detail-actions`: Vorschau und CSV-Download (Menge = `qty_ordered − qty_cancelled`), Formate in ARCHITECTURE Kap. 6.
 3. ✔ Button „Exportiert & auf ‚Bestellt‘ setzen“ (mit interner Bestellnummer, optional `supplier_order_no`) über die Status-Route; angehalten, wenn sich der Warenkorb seit dem Download geändert hat.
