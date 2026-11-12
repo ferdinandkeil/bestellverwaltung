@@ -127,6 +127,28 @@ try {
   ok('Blattkanten automatisch erkannt');
   await b.screenshot('scanner-02-ecken');
 
+  // Handy-Breite: ganzes Bild und alle Knöpfe ohne Scrollen sichtbar
+  const fit = await b.evaluate(`(() => {
+    const c = document.querySelector('[x-data=deliveryScanner] canvas[x-ref=cornerCanvas]').getBoundingClientRect();
+    const bar = document.querySelector('[data-corner-actions]').getBoundingClientRect();
+    const btns = [...document.querySelectorAll('[data-corner-actions] button')].map((e) => e.getBoundingClientRect());
+    return { canvas: c.top >= 0 && c.bottom <= bar.top + 1, buttons: btns.length === 3 && btns.every((r) => r.top >= 0 && r.bottom <= innerHeight) };
+  })()`);
+  if (!fit.canvas || !fit.buttons) throw new Error('Eckenauswahl passt nicht auf den Bildschirm: ' + JSON.stringify(fit));
+  ok('Eckenauswahl: Bild und Knöpfe ohne Scrollen sichtbar');
+
+  // Eckpunkt ziehen → Lupe erscheint auf der abgewandten Seite; zurück an die Ausgangsstelle, loslassen → Lupe weg
+  const tl = await b.evaluate(`${scanner}.cornerScreenPoint('topLeftCorner')`);
+  await b.mouse('mousePressed', tl.x, tl.y);
+  await b.mouse('mouseMoved', tl.x + 30, tl.y + 20);
+  await b.waitFor(`${scanner}.loupeSide === 'right' && document.querySelector('[data-loupe]').offsetParent`, 'Lupe sichtbar');
+  await sleep(200);
+  await b.screenshot('scanner-02b-lupe');
+  await b.mouse('mouseMoved', tl.x, tl.y);
+  await b.mouse('mouseReleased', tl.x, tl.y);
+  await b.waitFor(`${scanner}.loupeSide === '' && !document.querySelector('[data-loupe]').offsetParent`, 'Lupe ausgeblendet');
+  ok('Lupe beim Ziehen eines Eckpunkts');
+
   await b.clickText('[x-data=deliveryScanner] button', 'Übernehmen');
   await b.waitFor(`${scanner}.step === 'pages' && ${scanner}.pages.length === 1`, 'Seite übernommen', 20000);
   ok('Seite entzerrt');
