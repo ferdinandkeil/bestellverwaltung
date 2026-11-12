@@ -117,3 +117,55 @@ routerAdd("POST", "/api/lab/orders/{id}/items", (e) => {
   });
   return e.json(200, result);
 }, $apis.requireAuth("users"));
+
+/**
+ * POST /api/lab/orders/from-delivery-note   – Bestellung aus einem Lieferschein anlegen (Herkunft „lieferschein“)
+ * Body (JSON oder multipart/form-data):
+ *   supplier, supplier_custom_name?, internal_order_no? | without_internal_order_no: true,
+ *   supplier_order_no?, note?, items: [{ part_number, name?, qty, group? }] (bei multipart als JSON-String),
+ *   receipt?: eine Datei (Lieferschein als PDF)
+ * Legt Bestellung (bestellt), Positionen und Lieferung in einer Transaktion an → Status „geliefert“.
+ * Antwort: { order, delivery, status }
+ */
+routerAdd("POST", "/api/lab/orders/from-delivery-note", (e) => {
+  const { createOrderFromDeliveryNote } = require(`${__hooks}/lib/delivery-notes.js`);
+  const body = e.requestInfo().body || {};
+  let items = body.items;
+  if (typeof items === "string") {
+    try {
+      items = JSON.parse(items);
+    } catch (_) {
+      throw new BadRequestError("„items“ ist kein gültiges JSON.");
+    }
+  }
+  let receipts = [];
+  if (String(e.request.header.get("Content-Type") || "").indexOf("multipart/form-data") === 0) {
+    try {
+      receipts = Array.from(e.findUploadedFiles("receipt") || []);
+    } catch (_) {
+      receipts = [];
+    }
+  }
+  let result;
+  $app.runInTransaction((txApp) => {
+    result = createOrderFromDeliveryNote(txApp, body, items, receipts, e.auth.id);
+  });
+  return e.json(200, result);
+}, $apis.requireAuth("users"));
+
+/**
+ * POST /api/lab/unmatched-receipts/{id}/assign   – abgelegten Lieferschein einer Bestellung zuordnen
+ * Body: { order }
+ * Der Beleg wird Anhang der Bestellung, der Eintrag in der Ablage wird gelöscht.
+ * Antwort: order
+ */
+routerAdd("POST", "/api/lab/unmatched-receipts/{id}/assign", (e) => {
+  const { assignUnmatchedReceipt } = require(`${__hooks}/lib/delivery-notes.js`);
+  const id = e.request.pathValue("id");
+  const body = e.requestInfo().body || {};
+  let order;
+  $app.runInTransaction((txApp) => {
+    order = assignUnmatchedReceipt(txApp, id, body.order);
+  });
+  return e.json(200, order);
+}, $apis.requireAuth("users"));
