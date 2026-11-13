@@ -83,7 +83,6 @@ try {
 
   // Während im Shop bestellt wird, ergänzt jemand eine Position → Statuswechsel wird angehalten
   await addItem(s.owner.token, { supplier: 'mouser', part_number: '595-TL072CP', qty: 2, group: s.group });
-  await b.evaluate('window.confirm = () => true');
   await b.clickText('[data-shop-export] button', 'Exportiert');
   await b.waitFor(`document.querySelector('[data-export-changed]').offsetParent && document.querySelectorAll('[data-export-lines] li').length === 3`, 'Änderung erkannt');
   if ((await getRecord('orders', s.mouser)).status !== 'angefragt') throw new Error('Status trotz Änderung gesetzt');
@@ -94,6 +93,7 @@ try {
   await b.waitFor(`window.__downloads.length === 2 && window.__downloads[1].text.includes('595-TL072CP,,2,,')`, 'Download 2');
   await b.fill('#export-supplier-no', 'M-123456');
   await b.clickText('[data-shop-export] button', 'Exportiert');
+  await b.confirmDialog('Als bestellt markieren');
   await b.waitFor(`!${exp}.isOpen && ${BADGE} === 'Bestellt'`, 'Bestellt');
   const order = await getRecord('orders', s.mouser);
   if (order.internal_order_no !== '2026IW07001' || order.supplier_order_no !== 'M-123456') throw new Error('Nummern: ' + JSON.stringify(order));

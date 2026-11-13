@@ -510,15 +510,17 @@ function component() {
           document.getElementById('internal-order-no')?.focus();
           return;
         }
-        if (!confirmAction(
-          'Warenkorb als bestellt markieren? Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.')) return;
+        if (!(await confirmAction(
+          'Warenkorb als bestellt markieren? Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.',
+          { confirmLabel: 'Als bestellt markieren' }))) return;
         numbers = { internal_order_no: internal, supplier_order_no: this.orderForm.supplier_order_no.trim() };
       }
       await this.runStatus('advance', numbers);
     },
 
     async back() {
-      if (!confirmAction(`Status „${statusMeta(this.order.status).label}“ wirklich einen Schritt zurücksetzen?`)) return;
+      if (!(await confirmAction(`Status „${statusMeta(this.order.status).label}“ wirklich einen Schritt zurücksetzen?`,
+        { confirmLabel: 'Zurücksetzen' }))) return;
       await this.runStatus('back');
     },
 
@@ -536,7 +538,7 @@ function component() {
     },
 
     async removeOrder() {
-      if (!confirmAction('Diesen Warenkorb mit allen Positionen endgültig löschen?')) return;
+      if (!(await confirmAction('Diesen Warenkorb mit allen Positionen endgültig löschen?', { confirmLabel: 'Löschen', danger: true }))) return;
       try {
         await deleteOrder(this.order.id);
         toast.success('Warenkorb gelöscht.');
@@ -581,7 +583,7 @@ function component() {
     },
 
     async removeItem(it) {
-      if (!confirmAction(`Position ${it.part_number} löschen?`)) return;
+      if (!(await confirmAction(`Position ${it.part_number} löschen?`, { confirmLabel: 'Löschen', danger: true }))) return;
       try {
         await deleteItem(it.id);
         this.editId = null;
@@ -655,7 +657,7 @@ function component() {
     },
 
     async removeFile(name) {
-      if (!confirmAction(`Anhang „${name}“ löschen?`)) return;
+      if (!(await confirmAction(`Anhang „${name}“ löschen?`, { confirmLabel: 'Löschen', danger: true }))) return;
       try {
         await removeAttachment(this.order.id, name);
         await this.reload();

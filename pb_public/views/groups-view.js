@@ -253,7 +253,8 @@ function component() {
     },
 
     async remove() {
-      if (!confirmAction(`Gruppe „${this.form.data.name}“ löschen? Bestehende Gruppen-Hinweise in Positionen bleiben als Text erhalten.`)) return;
+      if (!(await confirmAction(`Gruppe „${this.form.data.name}“ löschen? Bestehende Gruppen-Hinweise in Positionen bleiben als Text erhalten.`,
+        { confirmLabel: 'Löschen', danger: true }))) return;
       try {
         await deleteGroup(this.form.id);
         if (this.selected?.id === this.form.id) this.selected = null;

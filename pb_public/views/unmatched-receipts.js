@@ -78,7 +78,8 @@ export function registerUnmatchedReceipts(Alpine) {
 
     async assign(r) {
       const order = this.orders.find((o) => o.id === this.target[r.id]);
-      if (!order || !confirmAction(`Lieferschein an die Bestellung ${supplierLabel(order)} · ${orderNumbersLabel(order)} anhängen?`)) return;
+      if (!order || !(await confirmAction(`Lieferschein an die Bestellung ${supplierLabel(order)} · ${orderNumbersLabel(order)} anhängen?`,
+        { confirmLabel: 'Anhängen' }))) return;
       this.busy = true;
       try {
         await assignUnmatchedReceipt(r.id, order.id);
@@ -92,7 +93,7 @@ export function registerUnmatchedReceipts(Alpine) {
     },
 
     async remove(r) {
-      if (!confirmAction(`Abgelegten Lieferschein „${r.supplier_name}“ endgültig löschen?`)) return;
+      if (!(await confirmAction(`Abgelegten Lieferschein „${r.supplier_name}“ endgültig löschen?`, { confirmLabel: 'Löschen', danger: true }))) return;
       this.busy = true;
       try {
         await deleteUnmatchedReceipt(r.id);

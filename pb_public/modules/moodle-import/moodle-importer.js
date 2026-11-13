@@ -234,8 +234,9 @@ function component() {
       loadPapa().catch((err) => toast.error(err.message));
     },
 
-    close() {
-      if (this.rows.length && !confirmAction('Import abbrechen? Die Zuordnung geht verloren.')) return;
+    async close() {
+      if (this.rows.length && !(await confirmAction('Import abbrechen? Die Zuordnung geht verloren.',
+        { confirmLabel: 'Verwerfen', cancelLabel: 'Weiter bearbeiten', danger: true }))) return;
       this.isOpen = false;
       this.reset();
     },
@@ -374,7 +375,7 @@ function component() {
     async book() {
       const payload = buildPayload(this.rows, this.groupMap, this.supplierMap, { course: this.course, semester: this.semester() });
       const newGroups = payload.groups.length ? `, ${payload.groups.length} neue Gruppe(n)` : '';
-      if (!confirmAction(`${payload.items.length} Position(en) in die Sammel-Warenkörbe buchen${newGroups}?`)) return;
+      if (!(await confirmAction(`${payload.items.length} Position(en) in die Sammel-Warenkörbe buchen${newGroups}?`, { confirmLabel: 'Buchen' }))) return;
       this.busy = true;
       try {
         const r = await pb.send('/api/lab/cart-items/batch', { method: 'POST', body: payload });

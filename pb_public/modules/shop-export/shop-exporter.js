@@ -129,8 +129,9 @@ function component() {
           this.downloaded = null;
           return;
         }
-        if (!confirmAction(
-          'Warenkorb als bestellt markieren? Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.')) return;
+        if (!(await confirmAction(
+          'Warenkorb als bestellt markieren? Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.',
+          { confirmLabel: 'Als bestellt markieren' }))) return;
         await changeOrderStatus(this.order.id, 'advance', { internal_order_no: internal, supplier_order_no: this.supplierNo.trim() });
         toast.success('Status: Bestellt');
         this.isOpen = false;

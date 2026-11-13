@@ -213,7 +213,8 @@ registerPlugin({
 * **Mobile-First:** große Touch-Ziele (Schnellbuttons „+1“, „Rest komplett“), Modals als Bottom-Sheet auf dem Smartphone.
 * **Dashboard:** Filter (Status, Lieferant, Gruppe) auf dem Smartphone einklappbar, aktive Filter als entfernbare Chips; Filter werden pro Browser gemerkt.
 * **Gruppenauswahl:** immer nach Veranstaltung/Semester gegliedert (neuestes Semester zuerst).
-* **Meldungen:** höchstens drei Toasts gleichzeitig (älteste fällt weg). Sicherheitsabfragen über native Dialoge.
+* **Meldungen:** höchstens drei Toasts gleichzeitig (älteste fällt weg).
+* **Sicherheitsabfragen:** eigener Dialog im Stil der App (`confirmAction()` in `core/ui.js`, natives `<dialog>` mit `showModal()`; auf dem Smartphone als Bottom-Sheet), keine Browser-Dialoge. Der Bestätigungsknopf nennt die Aktion („Löschen“, „Buchen“, „Zurücksetzen“ …). Endgültiges Löschen oder Verwerfen wird rot dargestellt, der Fokus liegt dann auf „Abbrechen“. Escape, ein Klick neben den Dialog und „Abbrechen“ brechen ab, darunterliegende Modals bleiben offen.
 * **Sprache:** komplette Oberfläche und Fehlermeldungen auf Deutsch.
 
 ## 8. Qualitätssicherung

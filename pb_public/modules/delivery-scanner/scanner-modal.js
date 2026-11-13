@@ -421,7 +421,8 @@ function component() {
     },
 
     async close() {
-      if (this.pages.length && !confirmAction('Erfassung abbrechen? Aufgenommene Seiten gehen verloren.')) return;
+      if (this.pages.length && !(await confirmAction('Erfassung abbrechen? Aufgenommene Seiten gehen verloren.',
+        { confirmLabel: 'Verwerfen', cancelLabel: 'Weiter erfassen', danger: true }))) return;
       this.isOpen = false;
       this.reset();
       await terminateOcr();
@@ -996,7 +997,8 @@ function component() {
         toast.error('Bitte die interne Bestellnummer eintragen oder „ohne interne Bestellnummer“ wählen.');
         return;
       }
-      if (!confirmAction(`Neue Bestellung mit ${items.length} Position(en) anlegen und als geliefert buchen?`)) return;
+      if (!(await confirmAction(`Neue Bestellung mit ${items.length} Position(en) anlegen und als geliefert buchen?`,
+        { confirmLabel: 'Anlegen und buchen' }))) return;
       this.busy = true;
       try {
         const receipt = await this.buildPdf(c.supplier === 'other' ? c.supplier_custom_name : c.supplier);
@@ -1059,7 +1061,8 @@ function component() {
         return;
       }
       const unchecked = this.reviewRows.filter((r) => r.status === 'check' && Number(r.qty) !== 0).length;
-      if (unchecked && !confirmAction(`${unchecked} Position(en) sind zur Prüfung markiert. Trotzdem buchen?`)) return;
+      if (unchecked && !(await confirmAction(`${unchecked} Position(en) sind zur Prüfung markiert. Trotzdem buchen?`,
+        { confirmLabel: 'Trotzdem buchen' }))) return;
 
       this.busy = true;
       try {

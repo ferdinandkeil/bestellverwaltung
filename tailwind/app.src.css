@@ -21,6 +21,7 @@
   .btn-secondary { @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
   .btn-success { @apply bg-emerald-600 text-white hover:bg-emerald-700; }
   .btn-danger { @apply border border-red-300 bg-white text-red-700 hover:bg-red-50; }
+  .btn-danger-solid { @apply bg-red-600 text-white hover:bg-red-700; }
   .btn-ghost { @apply text-slate-600 hover:bg-slate-100; }
 
   .label { @apply mb-1 block text-xs font-medium text-slate-600; }
@@ -41,4 +42,13 @@
   .modal-panel {
     @apply max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-2xl sm:p-6;
   }
+
+  /* Sicherheitsabfrage (natives <dialog>): Bottom-Sheet auf dem Smartphone, mittig ab sm.
+     Kein Innenabstand am <dialog> selbst, damit ein Klick auf den Rand nicht als „daneben“ zählt. */
+  .confirm-dialog {
+    @apply mx-0 mt-auto mb-0 w-full max-w-none rounded-t-2xl bg-white p-0 text-slate-900 shadow-xl
+      sm:m-auto sm:max-w-md sm:rounded-2xl;
+  }
+  /* Feste Farbe statt Theme-Variable: ::backdrop erbt in älteren Browsern keine Variablen. */
+  .confirm-dialog::backdrop { background-color: rgb(15 23 42 / 0.4); }
 }

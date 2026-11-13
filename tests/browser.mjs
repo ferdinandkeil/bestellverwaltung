@@ -85,6 +85,15 @@ export async function launchBrowser(profileDir) {
       if (!el) throw new Error('Element nicht gefunden: ' + ${JSON.stringify(text)});
       el.click();
     })()`),
+    /** Sicherheitsabfrage (#confirm-dialog) abwarten, Knopftext prüfen und bestätigen. */
+    async confirmDialog(label) {
+      await this.waitFor(`document.querySelector('#confirm-dialog')?.open`, 'Sicherheitsabfrage: ' + label);
+      const btn = `document.querySelector('#confirm-dialog [value=ok]')`;
+      const text = await evaluate(`${btn}.textContent.trim()`);
+      if (text !== label) throw new Error(`Sicherheitsabfrage: Knopf „${text}“ statt „${label}“`);
+      await evaluate(`${btn}.click()`);
+      await this.waitFor(`!document.querySelector('#confirm-dialog').open`, 'Sicherheitsabfrage geschlossen');
+    },
     async screenshot(name) {
       if (!SHOTS) return;
       mkdirSync(SHOTS, { recursive: true });

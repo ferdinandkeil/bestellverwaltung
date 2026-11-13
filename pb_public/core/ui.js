@@ -14,6 +14,19 @@ export function initUiStore() {
       this.items = this.items.filter((t) => t.id !== id);
     },
   });
+  Alpine.store('confirm', {
+    message: '',
+    confirmLabel: '',
+    cancelLabel: '',
+    danger: false,
+    resolve: null,
+    /** Offene Abfrage beantworten (wird vom close-Ereignis des Dialogs aufgerufen). */
+    settle(result) {
+      const resolve = this.resolve;
+      this.resolve = null;
+      resolve?.(result);
+    },
+  });
 }
 
 export const toast = {
@@ -22,9 +35,28 @@ export const toast = {
   error: (msg) => Alpine.store('toasts').push(msg, 'error', 8000),
 };
 
-/** Sicherheitsabfrage. Bewusst nativ: zuverlässig auf Smartphones, ohne eigenes Modal-System. */
-export function confirmAction(message) {
-  return window.confirm(message);
+/**
+ * Sicherheitsabfrage im eigenen Dialog (`#confirm-dialog` in index.html, natives <dialog> mit showModal:
+ * oberste Ebene über allen Modals, Fokus bleibt im Dialog). Auf dem Smartphone als Bottom-Sheet.
+ * Escape, Klick daneben und „Abbrechen“ zählen als Nein. Immer mit `await` verwenden.
+ * @param {string} message Frage an den Nutzer
+ * @param {{ confirmLabel?: string, cancelLabel?: string, danger?: boolean }} [options]
+ *   confirmLabel: was passiert („Löschen“, „Buchen“ …); danger: roter Knopf für endgültiges Löschen/Verwerfen
+ * @returns {Promise<boolean>}
+ */
+export async function confirmAction(message, { confirmLabel = 'Bestätigen', cancelLabel = 'Abbrechen', danger = false } = {}) {
+  const store = Alpine.store('confirm');
+  const dialog = document.getElementById('confirm-dialog');
+  if (dialog.open) dialog.close('cancel');
+  store.settle(false);
+  Object.assign(store, { message, confirmLabel, cancelLabel, danger });
+  const answer = new Promise((resolve) => { store.resolve = resolve; });
+  await Alpine.nextTick();
+  dialog.returnValue = '';
+  dialog.showModal();
+  // Bei Löschen/Verwerfen liegt der Fokus auf „Abbrechen“, damit Enter nichts zerstört.
+  dialog.querySelector(danger ? '[value=cancel]' : '[value=ok]').focus();
+  return answer;
 }
 
 const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
