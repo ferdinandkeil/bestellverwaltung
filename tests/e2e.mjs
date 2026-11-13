@@ -165,6 +165,24 @@ try {
   }
   ok('Projekt-Status Gruppe B');
 
+  // Schneller Wechsel A → B, die Antwort für A kommt zuletzt: es bleiben die Positionen von B stehen
+  await b.evaluate(`(() => {
+    const orig = window.fetch;
+    window.__restoreFetch = () => { window.fetch = orig; };
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : input.url;
+      const slow = url.includes('order_items') && url.includes(${JSON.stringify(groupA)});
+      return slow ? new Promise((r) => setTimeout(r, 1500)).then(() => orig(input, init)) : orig(input, init);
+    };
+  })()`);
+  await b.evaluate(`[...document.querySelectorAll('#view li')].find((l) => l.innerText.includes('Gruppe A')).click()`);
+  await b.evaluate(`[...document.querySelectorAll('#view li')].find((l) => l.innerText.includes('Gruppe B')).click()`);
+  await sleep(2500); // verzögerte Antwort für A ist eingetroffen
+  await b.evaluate('window.__restoreFetch()');
+  const shown = await b.evaluate(`JSON.stringify([document.querySelector('#view section:nth-of-type(2) h2')?.innerText, ${GROUP_ITEMS}.length])`);
+  if (shown !== JSON.stringify(['Gruppe B', 2])) throw new Error('Nach schnellem Wechsel angezeigt: ' + shown);
+  ok('schneller Gruppenwechsel: späte Antwort der vorigen Gruppe wird verworfen');
+
   // Gruppe über die Oberfläche anlegen: Vorschlag der Veranstaltung, aktuelles Semester vorausgewählt
   await b.clickText('#view button', '+ Gruppe');
   await b.waitFor(`document.querySelector('#group-course')?.offsetParent`, 'Gruppenformular');
