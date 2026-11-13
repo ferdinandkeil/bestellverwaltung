@@ -139,6 +139,9 @@ const template = /* html */ `
 </div>`;
 
 function component() {
+  // Nummer der jüngsten Ladeanfrage: Antworten älterer Anfragen (z. B. nach schnellem Gruppenwechsel) werden verworfen.
+  let itemsRequest = 0;
+
   return {
     supplierLabel, statusMeta, backlogOf, courseLabel,
     groups: [],
@@ -196,18 +199,23 @@ function component() {
     },
 
     async select(g) {
+      if (this.selected?.id !== g.id) this.items = []; // keine Positionen der vorigen Gruppe unter neuem Namen
       this.selected = g;
       await this.loadItems();
     },
 
     async loadItems() {
+      const groupId = this.selected?.id;
+      if (!groupId) return;
+      const request = ++itemsRequest;
       this.loadingItems = true;
       try {
-        this.items = await listItemsForGroup(this.selected.id);
+        const items = await listItemsForGroup(groupId);
+        if (request === itemsRequest) this.items = items;
       } catch (err) {
-        toast.error(errorMessage(err));
+        if (request === itemsRequest) toast.error(errorMessage(err));
       } finally {
-        this.loadingItems = false;
+        if (request === itemsRequest) this.loadingItems = false;
       }
     },
 
