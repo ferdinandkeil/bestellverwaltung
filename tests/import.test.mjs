@@ -21,7 +21,7 @@ test('Import mit bestehender und neuer Gruppe, mehreren Lieferanten und Zusammen
     items: [
       { line: 2, supplier: 'mouser', part_number: '511-nucleo-g031k8', qty: 3, group: thema5.id },
       { line: 3, supplier: 'reichelt', part_number: 'DEBO JT ESP32-C', qty: 2, groupRef: 'g1' },
-      { line: 4, supplier: 'other', supplier_custom_name: 'TME', part_number: 'INA226AIDGSR', qty: 1, groupRef: 'g1' },
+      { line: 4, supplier: 'tme', part_number: 'INA226AIDGSR', qty: 1, groupRef: 'g1' },
       { line: 5, supplier: 'reichelt', part_number: 'DEBO  JT ESP32-C', qty: 1 },
     ],
   });

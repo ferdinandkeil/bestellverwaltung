@@ -1,6 +1,7 @@
 // Bestell-Detail: Positionen, Lieferbuchungen, Storno, Status, Kosten, Anhänge, Plugin-Slot.
 import {
   supplierLabel, statusMeta, groupsByCourse, INTERNAL_ORDER_NO_RE, EDITABLE_STATUSES, DELIVERY_STATUSES, ADVANCE_LABELS, BACK_ALLOWED, VAT_RATE,
+  defaultWithoutInternalOrderNo,
 } from '../core/config.js';
 import {
   getOrder, listOrderItems, listDeliveries, updateOrder, deleteOrder, updateItem, deleteItem,
@@ -43,8 +44,18 @@ const template = /* html */ `
           <div>
             <label class="label" for="internal-order-no">Interne Bestellnummer</label>
             <input id="internal-order-no" class="input font-mono" x-model="orderForm.internal_order_no" @change="saveOrder('internal_order_no')"
-                   maxlength="11" placeholder="z. B. 2026IW01047" autocapitalize="characters" spellcheck="false">
-            <p class="hint" x-show="order.status === 'angefragt'">Pflicht für „Als bestellt markieren“.</p>
+                   maxlength="11" placeholder="z. B. 2026IW01047" autocapitalize="characters" spellcheck="false"
+                   :disabled="order.status === 'angefragt' && orderForm.without_internal_order_no">
+            <template x-if="order.status === 'angefragt'">
+              <div>
+                <label class="mt-2 flex items-center gap-2 text-sm" data-without-internal-no>
+                  <input type="checkbox" x-model="orderForm.without_internal_order_no" :disabled="!!order.internal_order_no">
+                  ohne interne Bestellnummer (z. B. Muster)
+                </label>
+                <p class="hint" x-text="orderForm.without_internal_order_no ? 'Wird ohne interne Bestellnummer bestellt.' : 'Pflicht für „Als bestellt markieren“.'"></p>
+              </div>
+            </template>
+            <p class="hint" x-show="order.status !== 'angefragt' && order.without_internal_order_no">Ohne interne Bestellnummer bestellt (z. B. Muster).</p>
           </div>
           <div>
             <label class="label" for="supplier-order-no">Auftragsnummer des Shops <span class="font-normal text-slate-500">(optional)</span></label>
@@ -404,6 +415,7 @@ function component() {
         this.deliveries = deliveries;
         this.orderForm = {
           internal_order_no: order.internal_order_no || '',
+          without_internal_order_no: defaultWithoutInternalOrderNo(order),
           supplier_order_no: order.supplier_order_no || '',
           notes: order.notes || '',
           shipping_cost: order.shipping_cost ? String(order.shipping_cost).replace('.', ',') : '',
@@ -504,16 +516,20 @@ function component() {
     async advance() {
       let numbers = {};
       if (this.order.status === 'angefragt') {
+        const without = this.orderForm.without_internal_order_no;
         const internal = this.orderForm.internal_order_no.trim().toUpperCase();
-        if (!INTERNAL_ORDER_NO_RE.test(internal)) {
-          toast.error('Bitte zuerst die interne Bestellnummer eintragen (Format JJJJIW#####, z. B. 2026IW01047).');
+        if (!without && !INTERNAL_ORDER_NO_RE.test(internal)) {
+          toast.error('Bitte zuerst die interne Bestellnummer eintragen (Format JJJJIW#####, z. B. 2026IW01047) oder „ohne interne Bestellnummer“ wählen.');
           document.getElementById('internal-order-no')?.focus();
           return;
         }
         if (!(await confirmAction(
-          'Warenkorb als bestellt markieren? Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.',
+          (without ? 'Warenkorb ohne interne Bestellnummer als bestellt markieren?' : 'Warenkorb als bestellt markieren?') +
+          ' Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.',
           { confirmLabel: 'Als bestellt markieren' }))) return;
-        numbers = { internal_order_no: internal, supplier_order_no: this.orderForm.supplier_order_no.trim() };
+        numbers = without
+          ? { without_internal_order_no: true, supplier_order_no: this.orderForm.supplier_order_no.trim() }
+          : { internal_order_no: internal, supplier_order_no: this.orderForm.supplier_order_no.trim() };
       }
       await this.runStatus('advance', numbers);
     },

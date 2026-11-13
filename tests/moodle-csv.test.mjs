@@ -43,7 +43,9 @@ test('Hilfsfunktionen: HTML, Lieferant, Bestellnummer', () => {
   assert.deepEqual(suggestSupplier(' Mouser '), { supplier: 'mouser', supplier_custom_name: '' });
   assert.deepEqual(suggestSupplier('Völkner'), { supplier: 'voelkner', supplier_custom_name: '' });
   assert.deepEqual(suggestSupplier('reichelt elektronik'), { supplier: 'reichelt', supplier_custom_name: '' });
-  assert.deepEqual(suggestSupplier('TME'), { supplier: 'other', supplier_custom_name: 'TME' });
+  assert.deepEqual(suggestSupplier('TME'), { supplier: 'tme', supplier_custom_name: '' });
+  assert.deepEqual(suggestSupplier('Würth Elektronik'), { supplier: 'wuerth', supplier_custom_name: '' });
+  assert.deepEqual(suggestSupplier('Conrad'), { supplier: 'other', supplier_custom_name: 'Conrad' });
   assert.deepEqual(suggestSupplier(''), { supplier: '', supplier_custom_name: '' });
   assert.equal(normalizePartNumber(' debo  jt esp32-c '), 'DEBO JT ESP32-C');
 });
@@ -93,7 +95,7 @@ test('Prüfung und Daten für den Import', () => {
   ]);
   assert.equal(payload.items.length, 7);
   assert.deepEqual(payload.items.find((i) => i.line === 5),
-    { line: 5, supplier: 'other', supplier_custom_name: 'TME', part_number: 'INA226AIDGSR', name: '', qty: 2, groupRef: 'g1' });
+    { line: 5, supplier: 'tme', supplier_custom_name: '', part_number: 'INA226AIDGSR', name: '', qty: 2, groupRef: 'g1' });
   assert.equal(payload.items.find((i) => i.line === 6).groupRef, 'g2');
   assert.equal(payload.items.find((i) => i.line === 2).group, 'g5');
   assert.equal(payload.items.find((i) => i.line === 10).group, undefined, 'ohne Gruppe');

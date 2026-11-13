@@ -1,12 +1,13 @@
-// Shop-Export: offener Warenkorb → CSV für den Upload im Shop → „Exportiert & auf ‚Bestellt‘ setzen“.
-// Registriert sich im Slot 'order-detail-actions' (nur Status „angefragt“ und Shops mit verifiziertem Format, formats.js).
+// Shop-Export: offener Warenkorb → CSV für den Upload im Shop bzw. Liste für die Bestell-Mail
+// → „Exportiert & auf ‚Bestellt‘ setzen“.
+// Registriert sich im Slot 'order-detail-actions' (nur Status „angefragt“ und Lieferanten mit Format, formats.js).
 // Der Statuswechsel läuft über die Status-Route; die Detailansicht aktualisiert sich per Realtime.
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
-import { INTERNAL_ORDER_NO_RE } from '../../core/config.js';
+import { INTERNAL_ORDER_NO_RE, defaultWithoutInternalOrderNo } from '../../core/config.js';
 import { changeOrderStatus, listOrderItems, errorMessage } from '../../core/api.js';
 import { toast, confirmAction } from '../../core/ui.js';
-import { formatForOrder, exportLines, buildCsv, csvFileName, sameLines } from './formats.js';
+import { formatForOrder, exportLines, buildCsv, buildText, csvFileName, sameLines } from './formats.js';
 
 const template = /* html */ `
 <div x-data="shopExporter" @open-shop-export.window="open($event.detail)" x-cloak>
@@ -32,20 +33,36 @@ const template = /* html */ `
         </template>
       </ul>
 
-      <section class="space-y-2">
+      <section x-show="format?.kind === 'csv'" class="space-y-2">
         <h3 class="text-sm font-semibold">1. Datei herunterladen und im Shop hochladen</h3>
         <p class="text-xs text-slate-500">Im Shop den CSV-Upload der Schnellbestellung nutzen und den Warenkorb dort prüfen.</p>
         <button type="button" class="btn btn-primary" :disabled="!lines.length" @click="download()" data-export-download>CSV herunterladen</button>
-        <p x-show="downloaded" class="text-xs text-emerald-700" x-text="'Heruntergeladen: ' + fileName"></p>
+        <p x-show="exported" class="text-xs text-emerald-700" x-text="'Heruntergeladen: ' + fileName"></p>
+      </section>
+
+      <section x-show="format?.kind === 'text'" class="space-y-2">
+        <h3 class="text-sm font-semibold">1. Liste kopieren und per Mail bestellen</h3>
+        <p class="text-xs text-slate-500" x-text="'Liste in die Bestell-Mail an ' + (format?.recipient || '') + ' einfügen (je Zeile Menge × Artikelnummer).'"></p>
+        <button type="button" class="btn btn-primary" :disabled="!lines.length" @click="copy()" data-export-copy>Liste kopieren</button>
+        <p x-show="exported && !manualCopy" class="text-xs text-emerald-700">In die Zwischenablage kopiert.</p>
+        <div x-show="manualCopy" class="space-y-1">
+          <p class="text-xs text-amber-800">Kopieren war nicht möglich. Bitte den markierten Text von Hand kopieren.</p>
+          <textarea x-ref="copyText" class="input font-mono" readonly rows="4" :value="text" @focus="$el.select()"></textarea>
+        </div>
       </section>
 
       <section class="space-y-3 border-t border-slate-200 pt-3">
-        <h3 class="text-sm font-semibold">2. Nach dem Bestellen im Shop</h3>
+        <h3 class="text-sm font-semibold" x-text="format?.kind === 'text' ? '2. Nach dem Senden der Mail' : '2. Nach dem Bestellen im Shop'"></h3>
         <div class="grid gap-3 sm:grid-cols-2">
           <div>
             <label class="label" for="export-internal-no">Interne Bestellnummer</label>
             <input id="export-internal-no" class="input font-mono" x-model="internalNo" maxlength="11" placeholder="z. B. 2026IW01047"
-                   autocapitalize="characters" spellcheck="false" @change="internalNo = internalNo.trim().toUpperCase()">
+                   autocapitalize="characters" spellcheck="false" @change="internalNo = internalNo.trim().toUpperCase()"
+                   :disabled="withoutInternalNo">
+            <label class="mt-2 flex items-center gap-2 text-sm" data-export-without-internal-no>
+              <input type="checkbox" x-model="withoutInternalNo" :disabled="!!order?.internal_order_no">
+              ohne interne Bestellnummer (z. B. Muster)
+            </label>
           </div>
           <div>
             <label class="label" for="export-supplier-no">Auftragsnummer des Shops <span class="font-normal text-slate-500">(optional)</span></label>
@@ -53,12 +70,14 @@ const template = /* html */ `
           </div>
         </div>
         <p x-show="changed" class="rounded-lg bg-amber-50 p-2 text-xs text-amber-900" data-export-changed>
-          Der Warenkorb wurde seit dem Download geändert. Bitte die Liste prüfen, neu herunterladen und im Shop abgleichen.
+          <span x-text="format?.kind === 'text'
+            ? 'Der Warenkorb wurde seit dem Kopieren geändert. Bitte die Liste prüfen, neu kopieren und die Mail abgleichen.'
+            : 'Der Warenkorb wurde seit dem Download geändert. Bitte die Liste prüfen, neu herunterladen und im Shop abgleichen.'"></span>
         </p>
-        <button type="button" class="btn btn-primary" :disabled="busy || !downloaded" @click="markOrdered()" data-export-ordered>
+        <button type="button" class="btn btn-primary" :disabled="busy || !exported" @click="markOrdered()" data-export-ordered>
           Exportiert &amp; auf „Bestellt“ setzen
         </button>
-        <p x-show="!downloaded" class="hint">Erst nach dem Download möglich.</p>
+        <p x-show="!exported" class="hint" x-text="format?.kind === 'text' ? 'Erst nach dem Kopieren möglich.' : 'Erst nach dem Download möglich.'"></p>
       </section>
     </div>
   </div>
@@ -72,8 +91,11 @@ function component() {
     format: null,
     lines: [],
     skipped: 0,
-    downloaded: null, // Positionen der zuletzt heruntergeladenen Datei
+    exported: null, // Positionen der zuletzt heruntergeladenen Datei bzw. kopierten Liste
     fileName: '',
+    text: '',
+    manualCopy: false,
+    withoutInternalNo: false,
     changed: false,
     internalNo: '',
     supplierNo: '',
@@ -82,9 +104,11 @@ function component() {
       this.order = order;
       this.format = formatForOrder(order);
       this.setItems(items);
-      this.downloaded = null;
+      this.exported = null;
+      this.manualCopy = false;
       this.changed = false;
       this.internalNo = order.internal_order_no || '';
+      this.withoutInternalNo = defaultWithoutInternalOrderNo(order);
       this.supplierNo = order.supplier_order_no || '';
       this.isOpen = true;
     },
@@ -108,15 +132,32 @@ function component() {
       a.remove();
       // Verzögert freigeben: manche Browser (iOS Safari) lesen die Datei erst nach dem Klick.
       setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
-      this.downloaded = this.lines.map((l) => ({ ...l }));
+      this.exported = this.lines.map((l) => ({ ...l }));
+      this.changed = false;
+    },
+
+    async copy() {
+      this.text = buildText(this.lines);
+      const lines = this.lines.map((l) => ({ ...l }));
+      try {
+        await navigator.clipboard.writeText(this.text);
+        this.manualCopy = false;
+      } catch (_) {
+        // Ohne Zwischenablage-Zugriff (z. B. ältere Browser): Text markiert anzeigen
+        this.manualCopy = true;
+        await this.$nextTick();
+        this.$refs.copyText.focus();
+      }
+      this.exported = lines;
       this.changed = false;
     },
 
     async markOrdered() {
+      const without = this.withoutInternalNo;
       const internal = this.internalNo.trim().toUpperCase();
       this.internalNo = internal;
-      if (!INTERNAL_ORDER_NO_RE.test(internal)) {
-        toast.error('Bitte die interne Bestellnummer eintragen (Format JJJJIW#####, z. B. 2026IW01047).');
+      if (!without && !INTERNAL_ORDER_NO_RE.test(internal)) {
+        toast.error('Bitte die interne Bestellnummer eintragen (Format JJJJIW#####, z. B. 2026IW01047) oder „ohne interne Bestellnummer“ wählen.');
         document.getElementById('export-internal-no')?.focus();
         return;
       }
@@ -124,15 +165,19 @@ function component() {
       try {
         // Andere Nutzer können während des Bestellens Positionen ergänzen: nur setzen, wenn die Datei noch stimmt.
         this.setItems(await listOrderItems(this.order.id));
-        if (!sameLines(this.lines, this.downloaded)) {
+        if (!sameLines(this.lines, this.exported)) {
           this.changed = true;
-          this.downloaded = null;
+          this.exported = null;
           return;
         }
         if (!(await confirmAction(
-          'Warenkorb als bestellt markieren? Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.',
+          (without ? 'Warenkorb ohne interne Bestellnummer als bestellt markieren?' : 'Warenkorb als bestellt markieren?') +
+          ' Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.',
           { confirmLabel: 'Als bestellt markieren' }))) return;
-        await changeOrderStatus(this.order.id, 'advance', { internal_order_no: internal, supplier_order_no: this.supplierNo.trim() });
+        const supplierNo = this.supplierNo.trim();
+        await changeOrderStatus(this.order.id, 'advance', without
+          ? { without_internal_order_no: true, supplier_order_no: supplierNo }
+          : { internal_order_no: internal, supplier_order_no: supplierNo });
         toast.success('Status: Bestellt');
         this.isOpen = false;
       } catch (err) {
@@ -153,7 +198,7 @@ document.body.appendChild(host.firstElementChild);
 registerPlugin({
   id: 'shop-export',
   slot: 'order-detail-actions',
-  label: 'Shop-Export (CSV)',
+  label: 'Shop-Export',
   icon: 'download',
   isVisible: (order) => order?.status === 'angefragt' && !!formatForOrder(order),
   // Kopien übergeben: die Werte der Detailansicht sind reaktive Proxies einer anderen Komponente.

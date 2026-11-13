@@ -35,6 +35,7 @@
 ```text
 Projekt/
 ├── pb_schema.json                  # Collections im PocketBase-Importformat (≥ v0.23)
+├── pb_migrations/                  # Datenmigrationen (PocketBase JSVM), laufen beim Start nach dem Schema-Import
 ├── pb_hooks/                       # Serverseitige Geschäftslogik (PocketBase JSVM)
 │   ├── routes.pb.js                # Registrierung der /api/lab/* Routen
 │   ├── mcp.pb.js                   # MCP-Endpunkt /mcp für Claude Code (Phase 7, geplant)
@@ -68,8 +69,8 @@ Projekt/
 │   │   └── item-form.js            # Formular „Position erfassen“ (Dashboard + Detail)
 │   └── modules/                    # Isolierte Erweiterungsmodule (über plugin-registry)
 │       ├── shop-export/            # Shop-Export (Kap. 6)
-│       │   ├── shop-exporter.js    # Oberfläche: Vorschau, CSV-Download, „Exportiert & bestellt“
-│       │   └── formats.js          # CSV-Formate je Shop (reine Logik, getestet)
+│       │   ├── shop-exporter.js    # Oberfläche: Vorschau, CSV-Download bzw. Liste kopieren, „Exportiert & bestellt“
+│       │   └── formats.js          # Export-Formate je Lieferant (reine Logik, getestet)
 │       ├── moodle-import/          # Moodle-CSV-Import (Kap. 6)
 │       │   ├── moodle-importer.js  # Oberfläche: Datei, Zuordnung, Vorschau, Buchung
 │       │   └── moodle-csv.js       # Auswertung der CSV (reine Logik, getestet)
@@ -91,7 +92,7 @@ Projekt/
 │   └── fetch-scan-reports.mjs      # Scanner-Meldungen nach samples/scan-reports/ holen, dann auf dem Server löschen
 ├── tests/                          # siehe Kap. 8
 │   ├── run.sh                      # frische PocketBase + Mailpit, dann node --test [--e2e]
-│   ├── *.test.mjs                  # Server-, Rechte-, OTP- und Unit-Tests
+│   ├── *.test.mjs                  # Server-, Rechte-, OTP- und Unit-Tests (migration.test.mjs: eigene Instanz)
 │   ├── browser.mjs                 # CDP-Client für headless Chrome
 │   ├── e2e.mjs, e2e-scanner.mjs    # Browser-Durchläufe App und Lieferschein-Erfassung
 │   └── helpers.mjs
@@ -103,7 +104,7 @@ Projekt/
 
 ### 4.1 Collections (Details: `pb_schema.json`)
 * **`groups`:** `name`, **`course`** (Veranstaltung, Pflicht), `semester` (Pflicht, Format `WS 2026/27` bzw. `SS 2027`), `is_active`. **Bewusst keine Kontaktdaten von Studierenden** (kein Name/E-Mail-Feld) – es werden keine personenbezogenen Daten Studierender gespeichert. Der Gruppenname ist nur **innerhalb von Veranstaltung + Semester eindeutig** (Unique-Index `idx_groups_unique_name`, Groß-/Kleinschreibung egal). Bei der Eingabe werden bestehende Veranstaltungen vorgeschlagen; in Auswahllisten erscheinen Gruppen nach Veranstaltung/Semester gegliedert.
-* **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|other`), `supplier_custom_name` (nur bei `other`, sonst leer), **`internal_order_no`** (interne Bestellnummer der Hochschule, Format `JJJJIW#####`, z. B. `2026IW01047`; eindeutig, Pflicht ab „bestellt“, danach korrigierbar, aber nicht mehr leer; ältere Bestellungen ohne Nummer bleiben bearbeitbar), `supplier_order_no` (optionale Auftragsnummer des Shops), `status`, **`origin`** (`warenkorb` bzw. leer = normal über den Sammelkorb, `lieferschein` = aus einem Lieferschein angelegt, Kap. 4.6), `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
+* **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|tme|wuerth|other`; TME und Würth Elektronik seit 11/2026 fest, vorher „sonstige“ mit Shop-Namen – umgestellt durch `pb_migrations/1794601422_lieferanten_tme_wuerth.js`), `supplier_custom_name` (nur bei `other`, sonst leer), **`internal_order_no`** (interne Bestellnummer der Hochschule, Format `JJJJIW#####`, z. B. `2026IW01047`; eindeutig, Pflicht ab „bestellt“, danach korrigierbar, aber nicht mehr leer; ältere Bestellungen ohne Nummer bleiben bearbeitbar), **`without_internal_order_no`** (ausdrücklich ohne interne Bestellnummer bestellt, z. B. Muster; nur über die Status- bzw. Lieferschein-Route gesetzt, nicht per REST; entfällt automatisch, sobald eine Nummer eingetragen wird), `supplier_order_no` (optionale Auftragsnummer des Shops), `status`, **`origin`** (`warenkorb` bzw. leer = normal über den Sammelkorb, `lieferschein` = aus einem Lieferschein angelegt, Kap. 4.6), `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
 * **`order_items`:** `order`, `part_number`, `name` (**Bezeichnung, optional** – der Moodle-Export enthält keine; Formulare kennzeichnen sie als „empfohlen“, die Detailansicht zeigt „ohne Bezeichnung“), `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), **`added_later_by`/`added_later_at`** (Kennzeichnung nachgetragener Positionen, Kap. 4.5), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
 * **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (genau eine Datei, optional: Bild oder PDF; mehrseitige Belege als PDF, max. 15 MB ≈ 30 Seiten), `created`.
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
@@ -128,8 +129,8 @@ Projekt/
 
 ### 4.3 Status-Workflow
 * Kette: `angefragt` → `bestellt` → `teilgeliefert` → `geliefert` → `geprueft` → `abgerechnet`.
-* **Manuelle Schritte** (Route `POST /api/lab/orders/{id}/status`, `{action: "advance" | "back", internal_order_no?, supplier_order_no?}`):
-  * `angefragt → bestellt` **nur mit interner Bestellnummer** (im Body oder vorher an der Bestellung eingetragen), optional mit `supplier_order_no`; der Korb ist damit für neue Positionen geschlossen, neue landen in einem neuen offenen Korb.
+* **Manuelle Schritte** (Route `POST /api/lab/orders/{id}/status`, `{action: "advance" | "back", internal_order_no? | without_internal_order_no: true, supplier_order_no?}`):
+  * `angefragt → bestellt` **nur mit interner Bestellnummer** (im Body oder vorher an der Bestellung eingetragen) **oder ausdrücklich „ohne interne Bestellnummer“** (z. B. Muster; wird in `without_internal_order_no` gespeichert und gilt nach „zurück“ weiter; beides zugleich wird abgelehnt), optional mit `supplier_order_no`; der Korb ist damit für neue Positionen geschlossen, neue landen in einem neuen offenen Korb. Im UI ist „ohne interne Bestellnummer“ ein Häkchen beim Bestellen, bei Würth Elektronik (Bestellung meist als Muster) vorausgewählt (`withoutInternalOrderNo` in `config.js`).
   * `geliefert → geprueft → abgerechnet`.
   * **„Einen Schritt zurück“** mit Sicherheitsabfrage im UI. Zurück auf `angefragt` wird verweigert, wenn bereits ein anderer offener Korb für den Lieferanten existiert.
 * **Automatischer Lieferstatus** (bei `bestellt`, `teilgeliefert`, `geliefert`; ab `geprueft` keine Automatik), neu berechnet nach jeder Lieferbuchung und jeder Änderung von `qty_ordered`/`qty_cancelled`:
@@ -154,7 +155,7 @@ Projekt/
 
 ### 4.6 Lieferscheine ohne passende Bestellung
 Für Muster, Direktkäufe oder am System vorbei bestellte Ware. Im Scanner, wenn keine Bestellung passt:
-* **Bestellung aus Lieferschein anlegen** (Route `POST /api/lab/orders/from-delivery-note`, nur wenn ein Lieferanten-Profil erkannt wurde): Lieferant, interne Bestellnummer (falls auf dem Beleg) und Positionen sind vorbelegt und änderbar, Gruppe je Position optional. **Interne Bestellnummer angeben oder ausdrücklich „ohne interne Bestellnummer“ wählen** – nur bei dieser Herkunft ist eine Bestellung ab „bestellt“ ohne Nummer zulässig. In einer Transaktion: Bestellung (`status = bestellt`, `origin = lieferschein`), Positionen (gleiche Nummern zusammengefasst, bestellt = geliefert) und Lieferung mit dem Beleg-PDF → „geliefert“. Der offene Warenkorb des Lieferanten bleibt unberührt. Die Bestellung zeigt „aus Lieferschein angelegt“.
+* **Bestellung aus Lieferschein anlegen** (Route `POST /api/lab/orders/from-delivery-note`, nur wenn ein Lieferanten-Profil erkannt wurde): Lieferant, interne Bestellnummer (falls auf dem Beleg) und Positionen sind vorbelegt und änderbar, Gruppe je Position optional. **Interne Bestellnummer angeben oder ausdrücklich „ohne interne Bestellnummer“ wählen** (gespeichert wie beim Statuswechsel; bei Würth vorausgewählt, wenn keine Nummer erkannt wurde). In einer Transaktion: Bestellung (`status = bestellt`, `origin = lieferschein`), Positionen (gleiche Nummern zusammengefasst, bestellt = geliefert) und Lieferung mit dem Beleg-PDF → „geliefert“. Der offene Warenkorb des Lieferanten bleibt unberührt. Die Bestellung zeigt „aus Lieferschein angelegt“.
 * **In Ablage legen** (ohne Profil nur diese Möglichkeit): Beleg-PDF mit Lieferant, ggf. Nummer und Notiz in `unmatched_receipts`. Das Dashboard zeigt den Abschnitt „Lieferscheine ohne Bestellung“, solange etwas abgelegt ist. **Zuordnen** (Route `POST /api/lab/unmatched-receipts/{id}/assign`) hängt den Beleg an die gewählte Bestellung (`attachments`) und entfernt den Ablage-Eintrag; Löschen mit Rückfrage.
 
 ## 5. Modul-Schnittstelle (`core/plugin-registry.js`)
@@ -176,18 +177,19 @@ registerPlugin({
 ```
 
 ## 6. Module (Überblick)
-* **shop-export:** Nur **CSV-Download** für den CSV-Upload der Shops (kein Copy & Paste). Sichtbar im Status „angefragt“ und nur für Shops mit verifiziertem Format; weitere Shops erst nach einem Test-Upload in `formats.js` eintragen. Menge = `qty_ordered − qty_cancelled`, komplett stornierte Positionen entfallen. Dateien UTF-8 ohne BOM, Zeilenende CRLF, Name `<shop>-<interne Bestellnummer>.csv`. Formate (verifiziert 11/2026 mit Vorlagen und Test-Uploads):
+* **shop-export:** **CSV-Download** für den CSV-Upload der Shops; für Lieferanten, die per Mail bestellt werden (Würth Elektronik), stattdessen eine **Liste zum Kopieren** in die Bestell-Mail. Sichtbar im Status „angefragt“ und nur für Lieferanten mit Format in `formats.js`; weitere Shops (CSV) erst nach einem Test-Upload eintragen. Menge = `qty_ordered − qty_cancelled`, komplett stornierte Positionen entfallen. Dateien UTF-8 ohne BOM, Zeilenende CRLF, Name `<shop>-<interne Bestellnummer>.csv`. Formate (verifiziert 11/2026 mit Vorlagen und Test-Uploads):
 
   | Shop | Erkennung | Trennzeichen | Kopfzeile | Spalten |
   |---|---|---|---|---|
   | Mouser | `supplier = mouser` | Komma | `Mouser or Manufacturer Part Number,Customer Part Number,Quantity 1,Quantity 2,Quantity 3` | Nummer, *leer*, Menge, *leer*, *leer* |
   | Reichelt | `supplier = reichelt` | Semikolon (Nummern enthalten Kommas/Leerzeichen) | keine | Nummer, Menge |
-  | TME | `supplier = other`, Shop-Name beginnt mit „TME“ | Semikolon | keine | Nummer (TME- oder Herstellernummer), Menge |
+  | TME | `supplier = tme` | Semikolon | keine | Nummer (TME- oder Herstellernummer), Menge |
 
   Felder mit Trennzeichen oder Anführungszeichen werden nach RFC 4180 maskiert. Ablauf: Vorschau → Download → im Shop hochladen und bestellen → **„Exportiert & auf ‚Bestellt‘ setzen“** (erst nach dem Download; interne Bestellnummer Pflicht, Shop-Auftragsnummer optional) über die Status-Route. Vorher werden die Positionen neu geladen: Hat sich der Warenkorb seit dem Download geändert (z. B. Position von anderen ergänzt), wird der Statuswechsel angehalten und ein neuer Download verlangt.
+  **Würth Elektronik (Mail):** eine Zeile je Position `Menge × Artikelnummer`, Mengen rechtsbündig, sortiert wie die CSV, ohne Kopfzeile und ohne interne Bestellnummer (Muster). „Liste kopieren“ schreibt in die Zwischenablage; geht das nicht, wird der Text markiert zum Kopieren von Hand angezeigt. Danach wie oben „Exportiert & auf ‚Bestellt‘ setzen“, „ohne interne Bestellnummer“ ist vorausgewählt; der Abgleich gilt ab dem Kopieren.
 * **moodle-import (Beta):** CSV-Export der Moodle-Datenbank „Bauteilbestellung“ (Spalten Lieferant, Anzahl, Bestellnummer, Kommentar, Gruppe, Tags; Bezeichnung und Link optional, falls das Formular später ergänzt wird), eingelesen mit Papa Parse. Ablauf:
   1. **Datei** wählen oder hineinziehen; Spalten werden über die Überschriften erkannt und sind änderbar.
-  2. **Zuordnung:** Veranstaltung und Semester einmal für den ganzen Import. **Lieferanten** je Angabe (Mouser/Farnell/Reichelt/Voelkner direkt, sonst „sonstige“ mit Shop-Namen, z. B. TME). **Gruppen interaktiv** je Bezeichnung: bestehende Gruppe der Veranstaltung, neu anlegen, ohne Gruppe oder „je Zeile wählen“ (für fehlerhafte Einträge, z. B. von Dozenten angelegte). Eine gleichnamige Gruppe der Veranstaltung ist **vorausgewählt und als Vorschlag markiert** – nichts geschieht stillschweigend; weiter erst, wenn alles zugeordnet ist.
+  2. **Zuordnung:** Veranstaltung und Semester einmal für den ganzen Import. **Lieferanten** je Angabe (Mouser/Farnell/Reichelt/Voelkner/TME/Würth direkt, sonst „sonstige“ mit Shop-Namen, z. B. Conrad). **Gruppen interaktiv** je Bezeichnung: bestehende Gruppe der Veranstaltung, neu anlegen, ohne Gruppe oder „je Zeile wählen“ (für fehlerhafte Einträge, z. B. von Dozenten angelegte). Eine gleichnamige Gruppe der Veranstaltung ist **vorausgewählt und als Vorschlag markiert** – nichts geschieht stillschweigend; weiter erst, wenn alles zugeordnet ist.
   3. **Vorschau** je Zeile: übernehmen ja/nein, Menge, Bestellnummer, Bezeichnung, Gruppe änderbar. **Fehler** (fehlende Nummer, ungültige Menge, offene Zuordnung) blockieren das Buchen; **Hinweise**, wenn Nummer + Gruppe schon im offenen Korb stehen oder in der Datei doppelt vorkommen.
   4. **Buchen** über den Sammel-Import (Kap. 4.2) – alles oder nichts.
   Der **Moodle-Kommentar** wird nur angezeigt, nicht gespeichert (auch nicht der Link darin); **Tags** werden ignoriert. **Kein gespeicherter Import-Bezug:** Nach dem Buchen ist die Zuordnung zu Moodle-Einträgen nicht mehr vorhanden.
@@ -200,7 +202,7 @@ registerPlugin({
   5. **Tabelle lesen**, je Profil auf eine von zwei Arten – unabhängig von Bildausschnitt und Auflösung:
      * **Kopfzeile** (Reichelt): Spaltengrenzen aus den Überschriften (z. B. Menge | Artikelnummer | Bezeichnung).
      * **Mengeneinheit** (TME „4 ST“, Würth „2 STK“): jede Einheit markiert eine Positionszeile; Menge = Zahl direkt davor, Bestellnummer = Anfang der Zeile mit Positionsnummer. Braucht keine Kopfzeile (bei TME von der OCR oft nicht gelesen) und zählt Begleitdokumente ohne Einheit (Würth: Chargen- und Packliste) nicht doppelt.
-     Mengen mit OCR-Korrektur (O→0, I/l→1) nur bei sonst rein numerischem Text. Profile gehören zu einem Lieferanten, bei „sonstige“ zusätzlich zu einem Shop-Namen (z. B. TME, Würth/WE).
+     Mengen mit OCR-Korrektur (O→0, I/l→1) nur bei sonst rein numerischem Text. Profile gehören zu einem festen Lieferanten (Reichelt, TME, Würth); „sonstige“ haben kein Profil. Würth-Muster haben meist keine interne Bestellnummer auf dem Lieferschein – dann greift der unscharfe Rückfall bzw. die Auswahl von Hand.
   6. **Abgleich:** Ähnlichkeit der normierten Bestellnummern (Levenshtein) gegen die Positionen der Bestellung. *Sicher* ab 0,85 mit Abstand ≥ 0,08 zum Zweitbesten, sonst *prüfen*; zusätzlich *prüfen* bei Menge > Rückstand oder mehreren Zeilen je Position. Nicht zugeordnete Zeilen weist der Nutzer von Hand einer Position zu oder **trägt sie als vergessene Position nach** (Kap. 4.5; Bestellnummer vor dem Buchen prüfbar, Lieferung und neue Position in einer Buchung).
   7. **Buchung** über die Lieferbuchungs-Route; alle Seiten als ein PDF (Graustufen-JPEG) in `receipt`. Ohne Mengen wird das PDF nur an `orders.attachments` gehängt.
   8. **Keine passende Bestellung:** Bestellung aus dem Lieferschein anlegen oder Lieferschein ablegen (Kap. 4.6).

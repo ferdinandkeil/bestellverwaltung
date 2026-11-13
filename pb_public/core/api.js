@@ -42,11 +42,12 @@ export function addItemToSupplierCart(data) {
 
 /**
  * action: 'advance' | 'back'
- * numbers (nur angefragt → bestellt): { internal_order_no, supplier_order_no? }
+ * numbers (nur angefragt → bestellt): { internal_order_no | without_internal_order_no: true, supplier_order_no? }
  */
 export function changeOrderStatus(orderId, action, numbers = {}) {
   const body = { action };
   if (numbers.internal_order_no) body.internal_order_no = numbers.internal_order_no;
+  if (numbers.without_internal_order_no) body.without_internal_order_no = true;
   if (numbers.supplier_order_no) body.supplier_order_no = numbers.supplier_order_no;
   return pb.send(`/api/lab/orders/${orderId}/status`, { method: 'POST', body });
 }

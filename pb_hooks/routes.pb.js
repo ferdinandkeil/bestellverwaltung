@@ -36,8 +36,9 @@ routerAdd("POST", "/api/lab/cart-items/batch", (e) => {
 
 /**
  * POST /api/lab/orders/{id}/status
- * Body: { action: "advance" | "back", internal_order_no?, supplier_order_no? }
- *   internal_order_no ist beim Schritt angefragt → bestellt Pflicht (falls noch nicht gesetzt).
+ * Body: { action: "advance" | "back", internal_order_no? | without_internal_order_no: true, supplier_order_no? }
+ *   Beim Schritt angefragt → bestellt ist die interne Bestellnummer Pflicht (falls noch nicht gesetzt),
+ *   außer es wird ausdrücklich „ohne interne Bestellnummer“ gewählt (z. B. Muster).
  * Antwort: order
  */
 routerAdd("POST", "/api/lab/orders/{id}/status", (e) => {
@@ -48,6 +49,7 @@ routerAdd("POST", "/api/lab/orders/{id}/status", (e) => {
   $app.runInTransaction((txApp) => {
     order = changeStatus(txApp, id, String(body.action || ""), {
       internal_order_no: body.internal_order_no,
+      without_internal_order_no: body.without_internal_order_no,
       supplier_order_no: body.supplier_order_no,
     });
   });

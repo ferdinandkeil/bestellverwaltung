@@ -8,8 +8,20 @@ export const SUPPLIERS = [
   { value: 'farnell', label: 'Farnell' },
   { value: 'reichelt', label: 'Reichelt' },
   { value: 'voelkner', label: 'Voelkner' },
+  { value: 'tme', label: 'TME' },
+  // Bestellung per Mail, meist Muster: „ohne interne Bestellnummer“ ist vorausgewählt.
+  { value: 'wuerth', label: 'Würth Elektronik', withoutInternalOrderNo: true },
   { value: 'other', label: 'Sonstiger Lieferant' },
 ];
+
+/**
+ * Vorauswahl „ohne interne Bestellnummer“ beim Bestellen: wenn die Bestellung schon so gekennzeichnet ist
+ * oder der Lieferant meist ohne Nummer bestellt wird (Muster) – nie, wenn bereits eine Nummer eingetragen ist.
+ */
+export function defaultWithoutInternalOrderNo(order) {
+  if (!order || order.internal_order_no) return false;
+  return !!order.without_internal_order_no || !!SUPPLIERS.find((s) => s.value === order.supplier)?.withoutInternalOrderNo;
+}
 
 // Klassen stehen hier vollständig ausgeschrieben, damit der Tailwind-Build sie findet.
 export const STATUSES = [
@@ -47,6 +59,7 @@ export function orderNumbersLabel(order) {
   if (!order) return '';
   const parts = [];
   if (order.internal_order_no) parts.push(order.internal_order_no);
+  else if (order.without_internal_order_no) parts.push('ohne interne Bestellnummer');
   if (order.supplier_order_no) parts.push('Shop-Auftrag ' + order.supplier_order_no);
   return parts.join(' · ') || 'ohne Bestellnummer';
 }

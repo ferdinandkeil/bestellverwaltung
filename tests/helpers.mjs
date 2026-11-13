@@ -109,7 +109,7 @@ export function nextInternalNo() {
  */
 export function changeStatus(token, orderId, action, extra = {}) {
   const json = { action, ...extra };
-  if (action === 'advance' && !('internal_order_no' in extra)) json.internal_order_no = nextInternalNo();
+  if (action === 'advance' && !('internal_order_no' in extra) && !('without_internal_order_no' in extra)) json.internal_order_no = nextInternalNo();
   return http('POST', `/api/lab/orders/${orderId}/status`, { token, json });
 }
 

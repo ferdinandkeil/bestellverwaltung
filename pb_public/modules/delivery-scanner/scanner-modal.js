@@ -2,7 +2,9 @@
 // Registriert sich in den Slots 'order-detail-actions' und 'dashboard-actions'.
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
-import { SUPPLIERS, DELIVERY_STATUSES, supplierLabel, orderNumbersLabel, statusMeta, groupsByCourse } from '../../core/config.js';
+import {
+  SUPPLIERS, DELIVERY_STATUSES, supplierLabel, orderNumbersLabel, statusMeta, groupsByCourse, defaultWithoutInternalOrderNo,
+} from '../../core/config.js';
 import { pb } from '../../core/pb.js';
 import {
   listOrderItems, getOrder, bookDelivery, uploadAttachments, backlogOf, errorMessage, listGroups,
@@ -964,7 +966,7 @@ function component() {
         supplier: p?.supplier ?? 'other',
         supplier_custom_name: p?.supplier === 'other' ? p.label : '',
         internal_order_no: internalNos[0] ?? '',
-        without_internal_order_no: false,
+        without_internal_order_no: defaultWithoutInternalOrderNo({ supplier: p?.supplier, internal_order_no: internalNos[0] }),
         supplier_order_no: '',
         items: rows.map((r) => ({ key: ++key, include: true, qty: r.qty, part_number: r.part, name: '', group: '' })),
       };

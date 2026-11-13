@@ -1,6 +1,6 @@
 // Gemeinsame Hilfsfunktionen für die Hooks (CommonJS, wird per require() geladen).
 
-const SUPPLIERS = ["mouser", "farnell", "reichelt", "voelkner", "other"];
+const SUPPLIERS = ["mouser", "farnell", "reichelt", "voelkner", "tme", "wuerth", "other"];
 const STATUSES = ["angefragt", "bestellt", "teilgeliefert", "geliefert", "geprueft", "abgerechnet"];
 /** Status, in denen der Lieferstatus automatisch berechnet wird. */
 const AUTO_STATUSES = ["bestellt", "teilgeliefert", "geliefert"];
@@ -28,6 +28,11 @@ function normalizeInternalOrderNo(value) {
 
 function normalizeShopName(value) {
   return String(value == null ? "" : value).trim();
+}
+
+/** Wahrheitswert aus JSON- oder Formular-Eingaben (true, "true", "1", 1). */
+function truthy(v) {
+  return v === true || v === "true" || v === "1" || v === 1;
 }
 
 /** Liest ein JSON-Feld eines Records als JS-Wert. */
@@ -69,6 +74,7 @@ module.exports = {
   INTERNAL_ORDER_NO_RE,
   normalizeInternalOrderNo,
   readJSON,
+  truthy,
   positiveInt,
   nonZeroInt,
 };

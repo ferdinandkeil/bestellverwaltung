@@ -51,7 +51,7 @@ export function stripHtml(html) {
 export function suggestSupplier(value) {
   const raw = collapse(value);
   if (!raw) return { supplier: '', supplier_custom_name: '' };
-  const key = raw.toLowerCase().replace(/ö/g, 'oe').replace(/[^a-z]/g, '');
+  const key = raw.toLowerCase().replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/[^a-z]/g, '');
   const known = SUPPLIERS.find((s) => s.value !== 'other' && (key === s.value || key.startsWith(s.value)));
   return known ? { supplier: known.value, supplier_custom_name: '' } : { supplier: 'other', supplier_custom_name: raw };
 }

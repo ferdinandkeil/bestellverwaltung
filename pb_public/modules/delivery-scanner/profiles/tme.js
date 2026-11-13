@@ -9,9 +9,7 @@
 
 export default {
   id: 'tme',
-  supplier: 'other',
-  /** Shop-Name einer „sonstigen“ Bestellung, zu dem das Profil gehört. */
-  shopName: /^\s*tme\b/i,
+  supplier: 'tme',
   label: 'TME',
   detect: /\bTME\b|tme-germany|Transfer Multisort/i,
   /** Positionszeilen: Menge direkt vor der Einheit, Bestellnummer am Zeilenanfang (nach der Positionsnummer). */

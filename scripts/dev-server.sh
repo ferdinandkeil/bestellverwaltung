@@ -45,6 +45,7 @@ pocketbase superuser upsert "$ADMIN_EMAIL" "$ADMIN_PASSWORD" --dir "$DATA" >/dev
 pocketbase serve --dev \
   --dir "$DATA" \
   --hooksDir "$ROOT/pb_hooks" \
+  --migrationsDir "$ROOT/pb_migrations" --automigrate=false \
   --publicDir "$ROOT/pb_public" \
   --http "${PB#http://}" &
 PIDS+=("$!")

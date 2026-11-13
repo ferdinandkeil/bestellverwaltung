@@ -61,6 +61,31 @@ test('interne Bestellnummer: Pflicht bei „bestellt“, Format, eindeutig, dana
   assert.match(clear.body.message, /nicht mehr entfernt/);
 });
 
+test('ohne interne Bestellnummer bestellen (z. B. Muster): ausdrücklich, gespeichert, später nachtragbar', async () => {
+  const a = await addItem(u.token, { supplier: 'wuerth', part_number: '885012207098', qty: 10 });
+  const both = await expectHttpError(changeStatus(u.token, a.order.id, 'advance',
+    { internal_order_no: '2026IW00009', without_internal_order_no: true }), 400);
+  assert.match(both.body.message, /nicht beides/);
+  // nicht von Hand setzbar, nur über den Statuswechsel
+  await expectHttpError(http('PATCH', `/api/collections/orders/records/${a.order.id}`,
+    { token: u.token, json: { without_internal_order_no: true } }), 404);
+
+  await changeStatus(u.token, a.order.id, 'advance', { without_internal_order_no: true });
+  let o = await getRecord('orders', a.order.id);
+  assert.deepEqual([o.status, o.internal_order_no, o.without_internal_order_no], ['bestellt', '', true]);
+
+  // zurück in den Korb und erneut bestellen: der Verzicht gilt weiter
+  await changeStatus(u.token, a.order.id, 'back');
+  await changeStatus(u.token, a.order.id, 'advance', { internal_order_no: '' });
+  assert.equal(await statusOf(a.order.id), 'bestellt');
+
+  // Nummer nachträglich eingetragen → Kennzeichen entfällt, Nummer danach nicht mehr leer
+  await http('PATCH', `/api/collections/orders/records/${a.order.id}`, { token: u.token, json: { internal_order_no: '2026IW00010' } });
+  o = await getRecord('orders', a.order.id);
+  assert.deepEqual([o.internal_order_no, o.without_internal_order_no], ['2026IW00010', false]);
+  await expectHttpError(http('PATCH', `/api/collections/orders/records/${a.order.id}`, { token: u.token, json: { internal_order_no: '' } }), 400);
+});
+
 test('ältere Bestellungen ohne interne Bestellnummer bleiben bearbeitbar', async () => {
   const { orderId } = await orderedCart();
   // Altbestand simulieren: Nummer als Admin entfernen (vor Einführung des Feldes)

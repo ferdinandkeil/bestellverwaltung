@@ -183,17 +183,15 @@ const WE_PACKING = {
   ],
 };
 
-test('Profile TME und Würth: Erkennung über den Kopf, Zuordnung über den Shop-Namen', () => {
+test('Profile TME und Würth: Erkennung über den Kopf, Zuordnung über den Lieferanten', () => {
   assert.equal(detectProfile([TME_PAGE]).id, 'tme');
   assert.equal(detectProfile([WE_DELIVERY]).id, 'wuerth');
-  const other = (name) => ({ supplier: 'other', supplier_custom_name: name });
-  assert.equal(profileForOrder(other('TME')).id, 'tme');
-  assert.equal(profileForOrder(other(' tme.eu ')).id, 'tme');
-  for (const n of ['Würth Elektronik', 'Wuerth', 'WE']) assert.equal(profileForOrder(other(n)).id, 'wuerth', n);
-  assert.equal(profileForOrder(other('Conrad')), null);
+  assert.equal(profileForOrder({ supplier: 'tme' }).id, 'tme');
+  assert.equal(profileForOrder({ supplier: 'wuerth' }).id, 'wuerth');
+  assert.equal(profileForOrder({ supplier: 'other', supplier_custom_name: 'TME' }), null, 'sonstige haben kein Profil');
   assert.equal(profileForOrder({ supplier: 'reichelt' }).id, 'reichelt');
   assert.equal(profileMatchesOrder(tme, { supplier: 'reichelt' }), false);
-  assert.equal(profileMatchesOrder(tme, other('Wuerth')), false);
+  assert.equal(profileMatchesOrder(tme, { supplier: 'wuerth' }), false);
 });
 
 test('TME: Zeilen über die Einheit „ST“ – trotz schiefem Blatt, versetzter Menge, „3ST“ und fehlender Kopfzeile', () => {
