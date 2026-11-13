@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Deploy auf Uberspace (docs/DEPLOYMENT.md Kap. 3): Tests → pb_schema.json, pb_hooks/, pb_public/ kopieren
-# → Dienst neu starten → prüfen, dass die Hooks geladen sind.
+# Deploy auf Uberspace (docs/DEPLOYMENT.md Kap. 3): Tests → pb_schema.json, pb_migrations/, pb_hooks/, pb_public/
+# kopieren → Dienst neu starten (führt neue Migrationen aus) → prüfen, dass die Hooks geladen sind.
 #
 #   scripts/deploy.sh             # Tests, dann deployen
 #   scripts/deploy.sh --dry-run   # nur anzeigen, was sich auf dem Server ändern würde
@@ -57,11 +57,17 @@ if [ -n "$OLD_REV" ] && git cat-file -e "$OLD_REV^{commit}" 2>/dev/null; then
 fi
 
 RSYNC=(rsync -az --delete)
-[ "$DRY" -eq 1 ] && RSYNC+=(--dry-run --itemize-changes)
+# Migrationen ohne --delete: auf dem Server liegen ggf. von PocketBase selbst erzeugte (bereits angewandte) Dateien.
+RSYNC_KEEP=(rsync -az)
+if [ "$DRY" -eq 1 ]; then
+  RSYNC+=(--dry-run --itemize-changes)
+  RSYNC_KEEP+=(--dry-run --itemize-changes)
+fi
 
 if [ "$DRY" -eq 1 ]; then
   step "Probelauf – Änderungen auf dem Server (nichts wird kopiert)"
   "${RSYNC[@]}" pb_schema.json "$DEPLOY_SSH:$DEPLOY_DIR/"
+  "${RSYNC_KEEP[@]}" pb_migrations/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_migrations/"
   "${RSYNC[@]}" pb_hooks/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_hooks/"
   "${RSYNC[@]}" pb_public/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_public/"
   [ "$SCHEMA_CHANGED" -eq 1 ] && echo "Hinweis: Schema geändert (oder Stand unbekannt) – beim echten Deploy ist ein Import nötig."
@@ -82,7 +88,10 @@ else
 fi
 
 # ---- Code -------------------------------------------------------------------------
-step "Hooks und Oberfläche"
+# Migrationen vor den Hooks: PocketBase startet bei Änderungen in pb_hooks/ ggf. selbst neu und führt
+# dabei neue Migrationen aus – erst nach dem Schema-Import oben.
+step "Migrationen, Hooks und Oberfläche"
+"${RSYNC_KEEP[@]}" pb_migrations/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_migrations/"
 "${RSYNC[@]}" pb_hooks/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_hooks/"
 "${RSYNC[@]}" pb_public/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_public/"
 

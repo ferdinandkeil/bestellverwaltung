@@ -328,6 +328,8 @@
           "farnell",
           "reichelt",
           "voelkner",
+          "tme",
+          "wuerth",
           "other"
         ]
       },
@@ -358,6 +360,15 @@
         "pattern": "^[0-9]{4}IW[0-9]{5}$",
         "autogeneratePattern": "",
         "primaryKey": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "ord_without_internal_no",
+        "name": "without_internal_order_no",
+        "type": "bool",
+        "required": false
       },
       {
         "id": "ord_number",
@@ -515,7 +526,7 @@
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": null,
-    "updateRule": "@request.auth.id != \"\" && @request.body.status:isset = false && @request.body.created_by:isset = false && @request.body.origin:isset = false",
+    "updateRule": "@request.auth.id != \"\" && @request.body.status:isset = false && @request.body.created_by:isset = false && @request.body.origin:isset = false && @request.body.without_internal_order_no:isset = false",
     "deleteRule": "@request.auth.id != \"\" && status = \"angefragt\""
   },
   {

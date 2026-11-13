@@ -3,13 +3,12 @@
 //   2. Abgelegten Lieferschein einer Bestellung zuordnen (Beleg wird Anhang, Ablage-Eintrag entfällt)
 // Muss innerhalb einer Transaktion aufgerufen werden.
 
-const { SUPPLIERS, normalizePartNumber, normalizeShopName, normalizeInternalOrderNo, positiveInt } =
+const { SUPPLIERS, normalizePartNumber, normalizeShopName, normalizeInternalOrderNo, positiveInt, truthy } =
   require(`${__hooks}/lib/util.js`);
 const { allocationNote, resolveGroup, NO_GROUP_LABEL } = require(`${__hooks}/lib/cart.js`);
 const { bookDelivery } = require(`${__hooks}/lib/deliveries.js`);
 
 const MAX_ITEMS = 200;
-const truthy = (v) => v === true || v === "true" || v === "1" || v === 1;
 
 /**
  * body: { supplier, supplier_custom_name?, internal_order_no?, without_internal_order_no?,
@@ -66,6 +65,7 @@ function createOrderFromDeliveryNote(app, body, items, receipts, userId) {
   order.set("status", "bestellt");
   order.set("origin", "lieferschein");
   order.set("internal_order_no", internalNo);
+  order.set("without_internal_order_no", without);
   order.set("supplier_order_no", String(body.supplier_order_no || "").trim());
   order.set("custom_fields", {});
   if (userId) order.set("created_by", userId);

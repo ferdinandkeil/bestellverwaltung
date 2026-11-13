@@ -1,22 +1,20 @@
-// Shop-Export: CSV-Formate der Upload-Masken je Shop (reine Logik, ohne Browser – testbar mit node --test).
+// Shop-Export: Formate je Lieferant (reine Logik, ohne Browser – testbar mit node --test).
 //
-// Ein Format beschreibt die Datei, die der Shop beim CSV-Upload (Schnellbestellung/BOM) annimmt:
-//   {
-//     id, label,
-//     supplier:  Wert aus orders.supplier; bei 'other' zusätzlich
-//     shopName:  RegExp auf orders.supplier_custom_name (z. B. /^tme/i),
-//     delimiter: Trennzeichen,
-//     header:    Kopfzeile (Array) oder null,
-//     row(line): Spalten einer Position aus { part, qty },
-//   }
-// Verifiziert mit Vorlagen und Test-Uploads in den Shops, Stand 11/2026. Alle Dateien UTF-8 ohne BOM, Zeilenende CRLF.
-// Neue Shops erst nach einem Test-Upload eintragen.
+// Zwei Arten:
+//   kind 'csv':  Datei für den CSV-Upload des Shops (Schnellbestellung/BOM)
+//     { id, label, supplier, kind: 'csv', delimiter, header: Kopfzeile (Array) oder null, row(line): Spalten aus { part, qty } }
+//     Verifiziert mit Vorlagen und Test-Uploads in den Shops, Stand 11/2026. UTF-8 ohne BOM, Zeilenende CRLF.
+//     Neue Shops erst nach einem Test-Upload eintragen.
+//   kind 'text': Liste zum Kopieren in eine Bestell-Mail (Lieferanten ohne Shop-Upload)
+//     { id, label, supplier, kind: 'text', recipient: Empfänger für die Anleitung }
+// supplier ist ein fester Wert aus orders.supplier (nicht „other“).
 
 export const FORMATS = [
   {
     id: 'mouser',
     label: 'Mouser',
     supplier: 'mouser',
+    kind: 'csv',
     delimiter: ',',
     // Kopfzeile wie in der Mouser-Vorlage; „Customer Part Number“ bleibt leer, Quantity 2/3 dienen nur der Preisabfrage.
     header: ['Mouser or Manufacturer Part Number', 'Customer Part Number', 'Quantity 1', 'Quantity 2', 'Quantity 3'],
@@ -26,6 +24,7 @@ export const FORMATS = [
     id: 'reichelt',
     label: 'Reichelt',
     supplier: 'reichelt',
+    kind: 'csv',
     // Semikolon, weil Reichelt-Nummern Kommas und Leerzeichen enthalten („MKDS 1,5 3 5,08“).
     delimiter: ';',
     header: null,
@@ -34,19 +33,26 @@ export const FORMATS = [
   {
     id: 'tme',
     label: 'TME',
-    supplier: 'other',
-    shopName: /^\s*tme\b/i,
+    supplier: 'tme',
+    kind: 'csv',
     delimiter: ';',
     header: null,
     row: ({ part, qty }) => [part, qty],
   },
+  {
+    // Bestellung (meist Muster) per Mail; nur Menge und Artikelnummer.
+    id: 'wuerth',
+    label: 'Würth Elektronik',
+    supplier: 'wuerth',
+    kind: 'text',
+    recipient: 'Würth Elektronik',
+  },
 ];
 
-/** Passendes Format zur Bestellung (Lieferant, bei „sonstige“ auch Shop-Name) oder null. */
+/** Passendes Format zum Lieferanten der Bestellung oder null. */
 export function formatForOrder(order) {
   if (!order) return null;
-  return FORMATS.find((f) => f.supplier === order.supplier &&
-    (f.supplier !== 'other' || !!f.shopName?.test(order.supplier_custom_name || ''))) ?? null;
+  return FORMATS.find((f) => f.supplier === order.supplier) ?? null;
 }
 
 /**
@@ -76,6 +82,15 @@ export function buildCsv(format, lines) {
   const rows = format.header ? [format.header] : [];
   for (const l of lines) rows.push(format.row(l));
   return rows.map((r) => r.map((v) => field(v, format.delimiter)).join(format.delimiter) + '\r\n').join('');
+}
+
+/**
+ * Liste für die Bestell-Mail: eine Zeile je Position „Menge × Nummer“, Mengen rechtsbündig,
+ * Zeilenende LF, ohne abschließenden Zeilenumbruch (wird in den Mailtext eingefügt).
+ */
+export function buildText(lines) {
+  const width = Math.max(0, ...lines.map((l) => String(l.qty).length));
+  return lines.map((l) => `${String(l.qty).padStart(width)} × ${l.part}`).join('\n');
 }
 
 /** Dateiname, z. B. „mouser-2026IW01047.csv“ bzw. „tme-2026-11-12.csv“ ohne interne Bestellnummer. */

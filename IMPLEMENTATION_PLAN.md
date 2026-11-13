@@ -72,6 +72,12 @@
 3. ✔ Button „Exportiert & auf ‚Bestellt‘ setzen“ (mit interner Bestellnummer, optional `supplier_order_no`) über die Status-Route; angehalten, wenn sich der Warenkorb seit dem Download geändert hat.
 4. Tests: `tests/shop-export.test.mjs` (Formate), `tests/e2e-shop-export.mjs` (Browser).
 
+**Nachtrag 11/2026 (Branch `lieferanten-tme-wuerth`, vor Phase 5 eingeschoben):**
+1. ✔ TME und Würth Elektronik als feste Lieferanten (`tme`, `wuerth`); bestehende „sonstige“ Bestellungen per Migration (`pb_migrations/`, erstmals genutzt) umgestellt.
+2. ✔ Würth wird per Mail bestellt (meist Muster): Export als Liste „Menge × Artikelnummer“ zum Kopieren in die Mail – Erweiterung der Entscheidung „nur CSV“ für Lieferanten ohne Shop-Upload.
+3. ✔ „Ohne interne Bestellnummer“ beim Bestellen ausdrücklich wählbar und gespeichert (`orders.without_internal_order_no`), bei Würth vorausgewählt.
+4. Tests: `tests/migration.test.mjs` (eigene PocketBase-Instanz), Erweiterungen in `status`, `shop-export`, `e2e-shop-export`.
+
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
 2. `modules/word-export/docx-generator.js` (PizZip + docxtemplater aus `vendor/`) im Slot `order-detail-actions`; Zusatzfelder in `orders.custom_fields`; Platzhalter u. a. `{supplier}`, `{total_net}`, `{total_gross}`, `{shipping_cost}`, Loop `{#items}…{/items}`.

@@ -1,6 +1,6 @@
 // Status-Workflow & automatischer Lieferstatus (ARCHITECTURE.md Kap. 4.3).
 
-const { STATUSES, AUTO_STATUSES, normalizeInternalOrderNo } = require(`${__hooks}/lib/util.js`);
+const { STATUSES, AUTO_STATUSES, normalizeInternalOrderNo, truthy } = require(`${__hooks}/lib/util.js`);
 
 /**
  * Lieferstatus aus den Positionen ableiten.
@@ -74,11 +74,20 @@ function changeStatus(app, orderId, action, numbers) {
         throw new BadRequestError("Ein leerer Warenkorb kann nicht bestellt werden.");
       }
       next = "bestellt";
-      const internalNo = normalizeInternalOrderNo(numbers.internal_order_no) || order.getString("internal_order_no");
-      if (!internalNo) {
-        throw new BadRequestError("Bitte die interne Bestellnummer angeben (Format JJJJIW#####, z. B. 2026IW01047).");
+      // Interne Bestellnummer angeben oder ausdrücklich darauf verzichten (z. B. Muster)
+      const givenNo = normalizeInternalOrderNo(numbers.internal_order_no);
+      const without = truthy(numbers.without_internal_order_no);
+      if (givenNo && without) {
+        throw new BadRequestError("Entweder eine interne Bestellnummer angeben oder „ohne interne Bestellnummer“ wählen – nicht beides.");
       }
-      order.set("internal_order_no", internalNo); // Format und Eindeutigkeit prüft der Validierungs-Hook
+      const internalNo = givenNo || order.getString("internal_order_no");
+      if (internalNo) {
+        order.set("internal_order_no", internalNo); // Format und Eindeutigkeit prüft der Validierungs-Hook
+      } else if (without || order.getBool("without_internal_order_no")) {
+        order.set("without_internal_order_no", true);
+      } else {
+        throw new BadRequestError("Bitte die interne Bestellnummer angeben (Format JJJJIW#####, z. B. 2026IW01047) oder „ohne interne Bestellnummer“ wählen.");
+      }
       if (numbers.supplier_order_no != null && String(numbers.supplier_order_no).trim() !== "") {
         order.set("supplier_order_no", String(numbers.supplier_order_no).trim());
       }

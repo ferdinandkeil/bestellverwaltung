@@ -31,6 +31,7 @@ Ziel-Layout auf dem Uberspace-Host (Benutzer `<user>`):
 ~/bestellverwaltung/
 ├── pocketbase          # Binary (gleiche Version wie lokal getestet, aktuell v0.40.6)
 ├── pb_data/            # Datenbank + Uploads – NUR hier, nie in Dropbox/Git
+├── pb_migrations/      # aus dem Repo (Datenmigrationen; Standardordner von PocketBase, läuft beim Start)
 ├── pb_hooks/           # aus dem Repo
 ├── pb_public/          # aus dem Repo (inkl. committetem assets/app.css und vendor/)
 └── pb_schema.json      # aus dem Repo (für den Import)
@@ -97,7 +98,7 @@ Die Meldungen landen in `samples/scan-reports/` (nicht im Repo, enthält echte B
 ```bash
 cp scripts/deploy.env.example scripts/deploy.env   # einmalig: SSH-Ziel und Adresse eintragen (nicht im Repo)
 scripts/deploy.sh --dry-run                        # zeigt, was sich auf dem Server ändern würde
-scripts/deploy.sh                                  # Tests → Schema → Hooks/Oberfläche → Neustart → Prüfung
+scripts/deploy.sh                                  # Tests → Schema → Migrationen/Hooks/Oberfläche → Neustart → Prüfung
 ```
 
 Das Skript deployt nur von `main` mit sauberem Arbeitsverzeichnis und merkt sich den Stand in `~/bestellverwaltung/DEPLOYED_REVISION`. Hat sich `pb_schema.json` seitdem geändert (oder ist der Stand unbekannt, z. B. beim ersten Lauf), kopiert es zuerst das Schema und **hält an**: dann im Admin-UI ein Backup erstellen und das Schema importieren (Schritt 2.2), danach mit Enter fortfahren. Am Ende prüft es, dass die Hooks geladen sind (`401`).
@@ -113,9 +114,11 @@ git log --oneline -1                 # deployten Stand notieren (für ein Zurüc
 ```
 
 ```bash
-rsync -av --delete pb_public/ <user>@<host>.uberspace.de:bestellverwaltung/pb_public/
-rsync -av --delete pb_hooks/  <user>@<host>.uberspace.de:bestellverwaltung/pb_hooks/
 rsync -av pb_schema.json      <user>@<host>.uberspace.de:bestellverwaltung/
+# bei Schema-Änderung jetzt Backup + Import (Schritt 2.2), erst dann weiter
+rsync -av pb_migrations/      <user>@<host>.uberspace.de:bestellverwaltung/pb_migrations/   # ohne --delete
+rsync -av --delete pb_hooks/  <user>@<host>.uberspace.de:bestellverwaltung/pb_hooks/
+rsync -av --delete pb_public/ <user>@<host>.uberspace.de:bestellverwaltung/pb_public/
 ```
 
 Danach **immer** den Dienst neu starten und prüfen, ob die Hooks geladen sind:
@@ -127,12 +130,14 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<domain>/api/lab/cart-i
 
 * `401` (Anmeldung erforderlich) heißt: Die eigenen Routen sind geladen. **`404`** heißt: Die Hooks fehlen – dann `supervisorctl tail bestellverwaltung stderr` prüfen.
 * Warum immer neu starten: PocketBase lädt `pb_hooks/` beim Start und überwacht den Ordner nur, wenn er beim Start schon existierte. Lief der Dienst vor dem ersten Deploy, bleiben die Hooks bis zum Neustart ungeladen (11/2026: „Artikel anlegen“ schlug mit 404 fehl).
-* Bei Schema-Änderungen anschließend erneut importieren (Schritt 2.2). **Vorher ein Backup ziehen.**
+* Bei Schema-Änderungen **vor** dem Kopieren von `pb_migrations/` und `pb_hooks/` importieren (Schritt 2.2). **Vorher ein Backup ziehen.**
+* **Migrationen** (`pb_migrations/`): PocketBase führt neue Dateien beim Start einmal aus (in einer Transaktion) und merkt sie sich in `_migrations`. Sie setzen das importierte Schema voraus; fehlt es, bricht der Start mit einer Meldung ab (`supervisorctl tail bestellverwaltung stderr`) – dann den alten Stand zurück deployen, Schema importieren, erneut deployen. Auf einer frischen Installation (noch ohne Collections) tun sie nichts. Ergebnis: Admin-UI → Logs.
 * **Lieferscheine ohne Bestellung (11/2026):** Schema-Import nötig (Feld `orders.origin`, neue Collection `unmatched_receipts`); neue Hook-Datei `lib/delivery-notes.js`.
 * **Positionen nachtragen (11/2026):** Schema-Import nötig (neue Felder `added_later_by`/`added_later_at` und geänderte Update-Regel von `order_items`); neue Hook-Datei `lib/late-items.js`.
 * **Moodle-Import (11/2026):** Schema-Import nötig (Bezeichnung einer Position wird optional); neue Hook-Datei `lib/import.js` → Neustart wie oben.
 * **Login unabhängig von Groß-/Kleinschreibung (11/2026):** Der Schema-Import legt den Index `idx_users_email_nocase` an. Er scheitert, falls es schon zwei Konten mit derselben Adresse in anderer Schreibweise gibt – dann vorher das überzählige Konto im Admin-UI löschen.
 * **Einführung der internen Bestellnummer (11/2026):** Bestellungen, die schon vorher auf „bestellt“ standen, haben noch keine. Sie bleiben bearbeitbar; die Nummer in der Bestell-Detailansicht nachtragen (stand sie bisher im Feld „Auftragsnummer“, dorthin verschieben), damit der Lieferschein-Scanner sie findet.
+* **TME und Würth Elektronik als feste Lieferanten, „ohne interne Bestellnummer“ (11/2026):** Schema-Import nötig (Lieferanten `tme`/`wuerth`, Feld `orders.without_internal_order_no`, geänderte Update-Regel von `orders`), neuer Ordner `pb_migrations/`. Beim Neustart stellt die Migration bestehende „sonstige“ Bestellungen mit Shop-Namen „TME …“ bzw. „Würth …“/„Wuerth …“/„WE …“ um und kennzeichnet Bestellungen „aus Lieferschein“ ohne Nummer. Danach in Admin-UI → Logs nach „Migration Lieferanten“ sehen: Eine Warnung heißt, ein zweiter offener Warenkorb (andere Schreibweise) blieb „sonstige“ – Positionen von Hand in den neuen Korb übertragen und den alten löschen. Achtung: Auch ein Shop-Name nur „Würth“ wird zu Würth Elektronik; war damit Adolf Würth (Werkzeug/Befestigung) gemeint, die Bestellung danach im Admin-UI zurück auf „sonstige“ setzen.
 * **Achtung:** Der Import mit „Merge“ ergänzt und ändert Felder, **entfernt aber keine Felder**, die im Schema weggefallen sind. Solche Felder im Admin-UI (Collection → Feld → Löschen) von Hand entfernen. Die betroffenen Felder stehen in der jeweiligen Commit-Nachricht.
 
 ## 4. Backups

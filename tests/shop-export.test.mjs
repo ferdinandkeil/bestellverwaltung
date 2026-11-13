@@ -2,16 +2,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  formatForOrder, exportLines, buildCsv, csvFileName, sameLines,
+  formatForOrder, exportLines, buildCsv, buildText, csvFileName, sameLines,
 } from '../pb_public/modules/shop-export/formats.js';
 
 const item = (part, qty_ordered, qty_cancelled = 0, name = '') => ({ id: part, part_number: part, name, qty_ordered, qty_cancelled });
 
-test('Format je Lieferant: Mouser, Reichelt, TME als sonstiger Shop; andere ohne Format', () => {
+test('Format je Lieferant: Mouser, Reichelt, TME (CSV), Würth (Mail-Liste); andere ohne Format', () => {
   assert.equal(formatForOrder({ supplier: 'mouser' }).id, 'mouser');
   assert.equal(formatForOrder({ supplier: 'reichelt' }).id, 'reichelt');
-  assert.equal(formatForOrder({ supplier: 'other', supplier_custom_name: ' TME Germany' }).id, 'tme');
-  assert.equal(formatForOrder({ supplier: 'other', supplier_custom_name: 'Würth' }), null);
+  assert.equal(formatForOrder({ supplier: 'tme' }).kind, 'csv');
+  assert.equal(formatForOrder({ supplier: 'wuerth' }).kind, 'text');
+  assert.equal(formatForOrder({ supplier: 'other', supplier_custom_name: 'TME' }), null);
   assert.equal(formatForOrder({ supplier: 'other', supplier_custom_name: '' }), null);
   assert.equal(formatForOrder({ supplier: 'farnell' }), null);
   assert.equal(formatForOrder({ supplier: 'voelkner' }), null);
@@ -41,9 +42,16 @@ test('Reichelt: Semikolon ohne Kopfzeile, Komma und Leerzeichen in der Nummer bl
 });
 
 test('TME: Semikolon ohne Kopfzeile; Felder mit Trennzeichen oder Anführungszeichen werden maskiert', () => {
-  const tme = formatForOrder({ supplier: 'other', supplier_custom_name: 'TME' });
+  const tme = formatForOrder({ supplier: 'tme' });
   assert.equal(buildCsv(tme, [{ part: 'NTCM-HP-2K2-1%', qty: 10 }]), 'NTCM-HP-2K2-1%;10\r\n');
   assert.equal(buildCsv(tme, [{ part: 'A;B "C"', qty: 1 }]), '"A;B ""C""";1\r\n');
+});
+
+test('Würth: Liste für die Mail – Menge × Nummer, Mengen rechtsbündig, ohne Zeilenumbruch am Ende', () => {
+  assert.equal(buildText([{ part: '885012207098', qty: 10 }, { part: '7447789100', qty: 5 }, { part: '61300411121', qty: 2 }]),
+    '10 × 885012207098\n 5 × 7447789100\n 2 × 61300411121');
+  assert.equal(buildText([{ part: 'X', qty: 1 }]), '1 × X');
+  assert.equal(buildText([]), '');
 });
 
 test('Dateiname mit interner Bestellnummer, sonst Datum', () => {

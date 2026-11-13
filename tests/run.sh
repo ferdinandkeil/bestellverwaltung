@@ -40,6 +40,7 @@ pocketbase superuser upsert test-admin@example.com test-admin-password --dir "$W
 pocketbase serve \
   --dir "$WORK/pb_data" \
   --hooksDir "$ROOT/pb_hooks" \
+  --migrationsDir "$ROOT/pb_migrations" --automigrate=false \
   --publicDir "$ROOT/pb_public" \
   --http "127.0.0.1:$PB_PORT" >"$WORK/pocketbase.log" 2>&1 &
 PIDS+=("$!")

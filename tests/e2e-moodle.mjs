@@ -53,8 +53,8 @@ try {
   await b.fill('#moodle-course', COURSE);
   await b.waitFor(`${imp}.groupSuggested['Thema 5'] && ${imp}.groupMap['Thema 5'] === 'id:${thema5}'`, 'Vorschlag Thema 5 (richtige Veranstaltung)');
   const tme = await b.evaluate(`JSON.stringify(${imp}.supplierMap.TME)`);
-  if (tme !== '{"supplier":"other","supplier_custom_name":"TME"}') throw new Error('TME: ' + tme);
-  ok('Vorschläge: gleichnamige Gruppe der Veranstaltung, TME als sonstiger Lieferant');
+  if (tme !== '{"supplier":"tme","supplier_custom_name":""}') throw new Error('TME: ' + tme);
+  ok('Vorschläge: gleichnamige Gruppe der Veranstaltung, TME als fester Lieferant');
 
   await select('Gruppe für Thema 6', 'new');
   await select('Gruppe für Thema 7', 'new');
@@ -91,8 +91,7 @@ try {
   if (by('700-MAX3485EPA+').qty_ordered !== 2) throw new Error('MAX3485');
   if (!/^Thema 7: 3x$/.test(by('DEBO JT ESP32-C').group_allocation_note)) throw new Error('Dozenten-Zeile: ' + by('DEBO JT ESP32-C').group_allocation_note);
   if (by('MKDS 1-5 3-5.08').group_allocation_note !== 'ohne Gruppe: 1x') throw new Error('ohne Gruppe');
-  const tmeOrder = (await listRecords('orders', 'supplier = "other"'))[0];
-  if (tmeOrder?.supplier_custom_name !== 'TME') throw new Error('TME-Korb fehlt');
+  if ((await listRecords('orders', 'supplier = "tme"')).length !== 1) throw new Error('TME-Korb fehlt');
   if (items.some((i) => /Kondensator|Hall-Sensor/.test(i.name))) throw new Error('Kommentar wurde gespeichert');
   ok('Datenbank: neue Gruppen in der Veranstaltung, Mengen zusammengeführt, TME-Korb, Kommentar nicht gespeichert');
 

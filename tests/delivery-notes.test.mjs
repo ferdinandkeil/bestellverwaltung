@@ -51,15 +51,16 @@ test('Bestellung aus Lieferschein: Herkunft, sofort geliefert, Positionen zusamm
 
 test('interne Bestellnummer: angeben oder ausdrücklich darauf verzichten', async () => {
   const items = [{ part_number: 'MUSTER 1', qty: 2 }];
-  const none = await expectHttpError(fromNote({ supplier: 'other', supplier_custom_name: 'Würth Elektronik', items }), 400);
+  const none = await expectHttpError(fromNote({ supplier: 'wuerth', items }), 400);
   assert.match(none.body.message, /ohne interne Bestellnummer/);
   const both = await expectHttpError(fromNote({ supplier: 'reichelt', internal_order_no: '2026IW00001', without_internal_order_no: true, items }), 400);
   assert.match(both.body.message, /nicht beides/);
   const bad = await expectHttpError(fromNote({ supplier: 'reichelt', internal_order_no: '2026-1', items }), 400);
   assert.match(bad.body.message, /Format JJJJIW#####/);
 
-  const r = await fromNote({ supplier: 'other', supplier_custom_name: 'Würth Elektronik', without_internal_order_no: true, items });
+  const r = await fromNote({ supplier: 'wuerth', without_internal_order_no: true, items });
   assert.equal(r.order.internal_order_no, '');
+  assert.equal(r.order.without_internal_order_no, true, 'Verzicht wird gespeichert');
   assert.equal(r.status, 'geliefert');
   // bestehende Nummer wird als Dublette abgelehnt
   await fromNote({ supplier: 'reichelt', internal_order_no: '2026IW00002', items });

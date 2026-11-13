@@ -10,6 +10,8 @@ onRecordValidate((e) => {
   const order = e.record;
   const no = normalizeInternalOrderNo(order.getString("internal_order_no"));
   order.set("internal_order_no", no);
+  // „ohne interne Bestellnummer“ gilt nur, solange keine Nummer eingetragen ist
+  if (no) order.set("without_internal_order_no", false);
   if (no) {
     if (!INTERNAL_ORDER_NO_RE.test(no)) {
       throw new BadRequestError("Die interne Bestellnummer hat das Format JJJJIW##### (z. B. 2026IW01047).");

@@ -3,8 +3,7 @@
 // Ein Profil beschreibt, wie ein Lieferschein eines Lieferanten gelesen wird:
 //   {
 //     id, label,
-//     supplier:  Wert aus orders.supplier; bei 'other' zusätzlich
-//     shopName:  RegExp auf orders.supplier_custom_name (z. B. /^tme/i),
+//     supplier:  fester Wert aus orders.supplier (nicht „other“),
 //     detect:    RegExp, die im oberen Seitenbereich (y < 0.3) auf den Lieferanten hinweist,
 //     und eine der beiden Lesarten der Positionstabelle:
 //       columns: { qty, part, desc }     – Überschriften der Spalten (Kopfzeile, z. B. Reichelt)
@@ -21,10 +20,9 @@ export function profileById(id) {
   return PROFILES.find((p) => p.id === id) ?? null;
 }
 
-/** Passt das Profil zur Bestellung (Lieferant, bei „sonstige“ auch Shop-Name)? */
+/** Passt das Profil zum Lieferanten der Bestellung? */
 export function profileMatchesOrder(profile, order) {
-  if (!profile || !order || profile.supplier !== order.supplier) return false;
-  return profile.supplier !== 'other' || !!profile.shopName?.test(order.supplier_custom_name || '');
+  return !!profile && !!order && profile.supplier === order.supplier;
 }
 
 /** Profil zur Bestellung (oder null). */

@@ -10,9 +10,7 @@
 
 export default {
   id: 'wuerth',
-  supplier: 'other',
-  /** Shop-Name einer „sonstigen“ Bestellung, zu dem das Profil gehört (Würth, Wuerth, Würth Elektronik, WE). */
-  shopName: /^\s*(w(ü|ue|u)rth|we\b)/i,
+  supplier: 'wuerth',
   label: 'Würth Elektronik',
   detect: /W[üuöo]RTH|we-online/i,
   rowAnchor: 'unit',

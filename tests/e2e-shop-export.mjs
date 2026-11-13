@@ -19,9 +19,14 @@ async function seed() {
   const gone = await addItem(owner.token, { supplier: 'mouser', part_number: '667-ERJ-3EKF1001V', name: 'Widerstand', qty: 10, group: g.id });
   await http('PATCH', `/api/collections/order_items/records/${gone.item.id}`, { token: owner.token, json: { qty_cancelled: 10 } });
   await http('PATCH', `/api/collections/order_items/records/${m1.item.id}`, { token: owner.token, json: { qty_cancelled: 2 } });
-  const tme = await addItem(owner.token, { supplier: 'other', supplier_custom_name: 'TME', part_number: 'INA226AIDGSR', qty: 2, group: g.id });
+  const tme = await addItem(owner.token, { supplier: 'tme', part_number: 'INA226AIDGSR', qty: 2, group: g.id });
   const farnell = await addItem(owner.token, { supplier: 'farnell', part_number: '1848687', qty: 3, group: g.id });
-  return { owner, group: g.id, mouser: m1.order.id, tme: tme.order.id, farnell: farnell.order.id, login: await createUser('Export-Tester') };
+  const we = await addItem(owner.token, { supplier: 'wuerth', part_number: '885012207098', qty: 10, group: g.id });
+  await addItem(owner.token, { supplier: 'wuerth', part_number: '7447789100', qty: 5, group: g.id });
+  return {
+    owner, group: g.id, mouser: m1.order.id, tme: tme.order.id, farnell: farnell.order.id, wuerth: we.order.id,
+    login: await createUser('Export-Tester'),
+  };
 }
 
 const ok = (msg) => console.log('✔', msg);
@@ -100,6 +105,41 @@ try {
   if (await b.evaluate(hasExportButton)) throw new Error('Export nach „Bestellt“ noch sichtbar');
   ok('Exportiert & bestellt: Status, interne Bestellnummer und Shop-Auftragsnummer gesetzt');
   await b.screenshot('export-03-bestellt');
+
+  // ---- Würth Elektronik: Liste für die Bestell-Mail, Muster ohne interne Bestellnummer ----
+  await openOrder(s.wuerth);
+  await b.waitFor(hasExportButton, 'Export-Button Würth');
+  if (!(await b.evaluate(`document.querySelector('[data-without-internal-no] input').checked`))) {
+    throw new Error('Würth: „ohne interne Bestellnummer“ in der Bestellung nicht vorausgewählt');
+  }
+  await b.clickText('#view button', 'Shop-Export');
+  await b.waitFor(`${exp}.isOpen && document.querySelector('[data-export-copy]')?.offsetParent`, 'Würth-Export');
+  if (await b.evaluate(`!!document.querySelector('[data-export-download]').offsetParent`)) throw new Error('Würth: CSV-Download sichtbar');
+  if (!(await b.evaluate(`document.querySelector('[data-export-without-internal-no] input').checked && document.querySelector('#export-internal-no').disabled`))) {
+    throw new Error('Würth: „ohne interne Bestellnummer“ im Export nicht vorausgewählt');
+  }
+  // Zwischenablage nicht verfügbar → Text markiert zum Kopieren von Hand
+  await b.evaluate(`navigator.clipboard.writeText = () => Promise.reject(new Error('verweigert'))`);
+  await b.clickText('[data-shop-export] button', 'Liste kopieren');
+  await b.waitFor(`document.querySelector('[data-shop-export] textarea')?.offsetParent`, 'Text zum Kopieren von Hand');
+  const LIST = ' 5 × 7447789100\n10 × 885012207098'; // sortiert nach Nummer wie die CSV
+  const manual = await b.evaluate(`document.querySelector('[data-shop-export] textarea').value`);
+  if (manual !== LIST) throw new Error('Liste (von Hand): ' + JSON.stringify(manual));
+  // Zwischenablage verfügbar
+  await b.evaluate(`window.__clipboard = null; navigator.clipboard.writeText = (t) => { window.__clipboard = t; return Promise.resolve(); }`);
+  await b.clickText('[data-shop-export] button', 'Liste kopieren');
+  await b.waitFor(`window.__clipboard !== null`, 'kopiert');
+  if ((await b.evaluate('window.__clipboard')) !== LIST) throw new Error('Zwischenablage: ' + JSON.stringify(await b.evaluate('window.__clipboard')));
+  ok('Würth: Liste „Menge × Nummer“ in die Zwischenablage (sonst markiert zum Kopieren von Hand)');
+  await b.screenshot('export-04-wuerth');
+
+  await b.clickText('[data-shop-export] button', 'Exportiert');
+  await b.confirmDialog('Als bestellt markieren');
+  await b.waitFor(`!${exp}.isOpen && ${BADGE} === 'Bestellt'`, 'Würth bestellt');
+  const we = await getRecord('orders', s.wuerth);
+  if (we.internal_order_no !== '' || we.without_internal_order_no !== true) throw new Error('Würth: ' + JSON.stringify(we));
+  await b.waitFor(`document.body.innerText.includes('Ohne interne Bestellnummer bestellt')`, 'Hinweis in der Bestellung');
+  ok('Würth: als Muster ohne interne Bestellnummer bestellt (gespeichert und angezeigt)');
 
   if (b.problems.length) throw new Error('Fehler in der Browser-Konsole:\n  ' + b.problems.join('\n  '));
   ok('keine Fehler in der Browser-Konsole');
