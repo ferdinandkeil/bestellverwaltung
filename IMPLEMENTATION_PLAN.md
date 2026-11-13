@@ -1,6 +1,6 @@
 # Implementierungsplan
 
-> Stand: 2026-11-12. Phase 1 und 4 abgenommen; Go-Live erfolgt; Phase 2 und 3 als Beta im Betrieb getestet (bleiben Beta bis zur Abnahme nach längerer Erprobung). Nächster Schritt: Phase 5.
+> Stand: 2026-11-13. Phase 1 und 4 abgenommen (Nachtrag TME/Würth deployt); Go-Live erfolgt; Phase 2 und 3 als Beta im Betrieb getestet (bleiben Beta bis zur Abnahme nach längerer Erprobung). Phase 5 zurückgestellt; Hilfe vor dem Rollout an weitere Nutzer eingeplant.
 >
 > Phasenweise arbeiten, nach jeder Phase Feedback einholen. Kein JS-Build (kein npm/Vite/Webpack); einzige Ausnahme ist der CSS-Build mit dem Tailwind Standalone CLI. Vorgaben: `ARCHITECTURE.md`, `pb_schema.json`, `CLAUDE.md`.
 
@@ -85,6 +85,16 @@
 ## Phase 6: Prüfung der Bestellnummern (Branch `phase-6-part-number-check`)
 1. Vorab: Formatregeln der Shop-Bestellnummern zusammentragen und mit dem Nutzer abstimmen (z. B. Mouser `NNN-…`); klären, ob Online-Abfragen bei den Shops gewünscht/zulässig sind.
 2. `modules/part-number-check/` im Slot `order-detail-actions` (und als Prüfschritt im Moodle-Import nutzbar): auffällige Nummern markieren, Korrekturvorschläge interaktiv bestätigen.
+
+## Hilfe (Branch `help-system`, vor dem Rollout an weitere Nutzer; geplant 11/2026)
+Grundsatz: Hilfe dort, wo Fehlbedienung teuer ist oder Regeln nicht offensichtlich sind – geschrieben für tatsächlich beobachtete Probleme (Beta-Rückmeldungen, Scanner-Meldungen), nicht auf Vorrat. Ausführliche Texte erst, wenn die Abläufe stabil sind, damit sie nicht veralten.
+1. **Stufe 1 – Hilfe im Kontext** (sobald die Beta-Rückmeldungen zeigen, wo Nutzer hängen bleiben): „?“ neben der Überschrift öffnet einen kurzen Hilfetext als Bottom-Sheet (gleicher Stil wie der Bestätigungsdialog). Module bringen ihre Hilfetexte selbst mit (Plugin-Architektur), damit Text und Funktion zusammen geändert werden. Kandidaten:
+   * Lieferschein-Scanner: Fotografieren, Ecken, Prüfmaske, „Problem melden“
+   * Moodle-Import: Zuordnung, Vorschläge, „je Zeile wählen“
+   * Shop-Export: welche Datei bzw. Liste wohin, wann „Bestellt“ setzen
+   * Regeln: interne Bestellnummer bzw. „ohne interne Bestellnummer“, löschen (offener Korb) oder stornieren (ab „bestellt“), ein offener Korb je Lieferant, Status und automatischer Lieferstatus
+2. **Stufe 2 – zentrale Hilfeseite** (nach Phase 5/6): Route `#/hilfe` mit dem Gesamtablauf von Warenkorb bis Abrechnung und den Status; die „?“ der Stufe 1 verlinken dorthin.
+3. Offen bei Umsetzung: Ablage der Texte (im Modul als JS-Konstante oder als Markdown/HTML unter `pb_public/`), Pflege der Texte bei Änderungen (in der Definition of Done jeder Phase), Prüfung im E2E-Test (jedes „?“ öffnet einen Text).
 
 ## Phase 7: Zugriff für Claude Code per MCP (Branch `phase-7-mcp`)
 1. Datengrundlage: Es werden nur Bestelldaten und Daten der Labor-Nutzer übermittelt. Labor-Nutzer (Name, E-Mail) sind öffentlich (Homepage der TH); Daten von Studierenden werden im System gar nicht gespeichert (Gruppen ohne Kontaktfeld). Belege und Anhänge werden nur als Dateiname genannt, nicht inhaltlich übertragen.
