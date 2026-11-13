@@ -108,12 +108,20 @@ try {
   await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert', 6000);
   ok('„Rest komplett“ → automatisch Geliefert');
 
-  await b.evaluate('window.confirm = () => true');
   await b.clickText('button', 'Als geprüft markieren');
   await b.waitFor(`${BADGE} === 'Geprüft'`, 'Geprüft');
+  // Sicherheitsabfrage abbrechen → nichts passiert
   await b.clickText('button', 'Einen Schritt zurück');
+  await b.waitFor(`document.querySelector('#confirm-dialog')?.open`, 'Sicherheitsabfrage');
+  await b.screenshot('04a-sicherheitsabfrage');
+  await b.evaluate(`document.querySelector('#confirm-dialog [value=cancel]').click()`);
+  await b.waitFor(`!document.querySelector('#confirm-dialog').open`, 'Abfrage geschlossen');
+  await sleep(300);
+  if ((await b.evaluate(BADGE)) !== 'Geprüft') throw new Error('Status trotz Abbruch geändert: ' + await b.evaluate(BADGE));
+  await b.clickText('button', 'Einen Schritt zurück');
+  await b.confirmDialog('Zurücksetzen');
   await b.waitFor(`${BADGE} === 'Geliefert'`, 'zurück');
-  ok('Geprüft und einen Schritt zurück');
+  ok('Geprüft und einen Schritt zurück (Sicherheitsabfrage: Abbrechen wirkt, Bestätigen setzt zurück)');
 
   // Vergessene Position nachtragen und gleich als geliefert buchen → bleibt „Geliefert“, gekennzeichnet
   await b.clickText('#view button', 'Position nachtragen');
@@ -138,6 +146,7 @@ try {
   await b.fill('#internal-order-no', ' 2026iw04711 ');
   await b.waitFor(`document.querySelector('#internal-order-no').value === '2026IW04711'`, 'normalisiert');
   await b.clickText('button', 'Als bestellt markieren');
+  await b.confirmDialog('Als bestellt markieren');
   await b.waitFor(`${BADGE} === 'Bestellt'`, 'Bestellt');
   await b.screenshot('05-bestellt');
   await b.navigate(PB_URL + '/#/');

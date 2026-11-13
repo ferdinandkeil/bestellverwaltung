@@ -75,8 +75,8 @@ try {
   await b.fill('[data-line="7"] input[aria-label="Anzahl"]', '2');
   await b.fill('[data-line="2"] input[aria-label="Bezeichnung"]', 'Nucleo-Board');
   await b.waitFor(`${imp}.errorCount() === 0`, 'Fehler behoben');
-  await b.evaluate('window.confirm = () => true');
   await b.clickText('[x-data=moodleImporter] button', '8 Position(en) buchen');
+  await b.confirmDialog('Buchen');
   await b.waitFor(`!${imp}.isOpen && document.body.innerText.includes('gebucht')`, 'Buchung', 15000);
   const toastText = await b.evaluate(`[...document.querySelectorAll('[role=status], .toast, [x-data] div')].map((e) => e.innerText).find((t) => /Position\\(en\\) in/.test(t)) || ''`);
   ok('gebucht: ' + toastText.split('\n')[0]);

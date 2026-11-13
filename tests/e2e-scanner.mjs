@@ -209,7 +209,6 @@ try {
   await b.screenshot('scanner-06-nachtragen');
   ok('nicht zugeordnete Zeile zum Nachtragen markiert');
 
-  await b.evaluate('window.confirm = () => true');
   await b.clickText('[x-data=deliveryScanner] button', 'Lieferung buchen');
   await b.waitFor(`document.body.innerText.includes('Lieferung mit 13 Position(en) gebucht, davon 1 nachgetragen')`, 'Buchung', 30000);
   const [late] = await listRecords('order_items', `part_number = "${FORGOTTEN[1]}"`);
@@ -253,6 +252,7 @@ try {
   await b.fill('[data-create-item="0"] input[aria-label="Bezeichnung"]', 'Tinte cyan');
   await b.screenshot('scanner-07-bestellung-anlegen');
   await b.clickText('[data-create-order] button', 'Bestellung anlegen und Lieferung buchen');
+  await b.confirmDialog('Anlegen und buchen');
   await b.waitFor(`location.hash.startsWith('#/orders/') && document.body.innerText.includes('aus Lieferschein angelegt')`, 'neue Bestellung', 30000);
   const [direct] = await listRecords('orders', `internal_order_no = "${DIRECT_NO}"`);
   const directItems = await listRecords('order_items', `order = "${direct.id}"`);
@@ -280,6 +280,7 @@ try {
   await b.waitFor(`document.querySelectorAll('[data-unmatched-receipts] option').length > 1`, 'Bestellungen zur Auswahl');
   await b.fill('[data-unmatched-receipts] select', direct.id);
   await b.clickText('[data-unmatched-receipts] button', 'Zuordnen');
+  await b.confirmDialog('Anhängen');
   await b.waitFor(`!document.querySelector('[data-unmatched-receipts]')?.offsetParent`, 'Ablage leer');
   const assigned = (await listRecords('orders', `id = "${direct.id}"`))[0];
   if (assigned.attachments.length !== 1 || (await listRecords('unmatched_receipts')).length !== 0) throw new Error('Zuordnung: ' + JSON.stringify(assigned.attachments));
