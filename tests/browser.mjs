@@ -80,9 +80,14 @@ export async function launchBrowser(profileDir) {
       el.dispatchEvent(new Event('change', { bubbles: true }));
     })()`),
     clickText: (selector, text) => evaluate(`(() => {
-      const el = [...document.querySelectorAll(${JSON.stringify(selector)})]
-        .find((e) => e.offsetParent !== null && e.textContent.trim().startsWith(${JSON.stringify(text)}));
-      if (!el) throw new Error('Element nicht gefunden: ' + ${JSON.stringify(text)});
+      const all = [...document.querySelectorAll(${JSON.stringify(selector)})];
+      const el = all.find((e) => e.offsetParent !== null && e.textContent.trim().startsWith(${JSON.stringify(text)}));
+      if (!el) {
+        // Für die Fehlersuche: was stattdessen da ist (sichtbar/unsichtbar, Text, deaktiviert)
+        const seen = all.slice(0, 15).map((e) => (e.offsetParent === null ? '(unsichtbar) ' : '') +
+          JSON.stringify(e.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)) + (e.disabled ? ' (deaktiviert)' : ''));
+        throw new Error('Element nicht gefunden: ' + ${JSON.stringify(text)} + ' – vorhanden: ' + (seen.join(', ') || 'keine'));
+      }
       el.click();
     })()`),
     /** Sicherheitsabfrage (#confirm-dialog) abwarten, Knopftext prüfen und bestätigen. */

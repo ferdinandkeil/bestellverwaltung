@@ -156,9 +156,13 @@ try {
   await b.navigate(PB_URL + '/#/groups');
   await b.waitFor(`document.querySelector('[x-data=groupsView]') && [...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('Gruppe B'))`, 'Gruppenliste');
   await b.evaluate(`[...document.querySelectorAll('#view li')].find((l) => l.innerText.includes('Gruppe B')).click()`);
-  await b.waitFor(`document.body.innerText.includes('Anteil')`, 'Projekt-Status');
-  const groupItems = await b.evaluate(`document.querySelectorAll('#view section:nth-of-type(2) li').length`);
-  if (groupItems !== 2) throw new Error(`Gruppe B: ${groupItems} statt 2 Positionen`);
+  // Auf die geladenen Positionen warten – „Anteil“ steht auch im festen Erklärtext und taugt nicht als Signal.
+  const GROUP_ITEMS = `document.querySelectorAll('#view section:nth-of-type(2) li')`;
+  try {
+    await b.waitFor(`!Alpine.$data(document.querySelector('[x-data=groupsView]')).loadingItems && ${GROUP_ITEMS}.length === 2`, 'Projekt-Status');
+  } catch (_) {
+    throw new Error(`Gruppe B: ${await b.evaluate(`${GROUP_ITEMS}.length`)} statt 2 Positionen`);
+  }
   ok('Projekt-Status Gruppe B');
 
   // Gruppe über die Oberfläche anlegen: Vorschlag der Veranstaltung, aktuelles Semester vorausgewählt
