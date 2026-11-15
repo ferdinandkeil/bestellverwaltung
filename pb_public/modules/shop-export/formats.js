@@ -7,6 +7,9 @@
 //     Neue Shops erst nach einem Test-Upload eintragen.
 //   kind 'text': Liste zum Kopieren in eine Bestell-Mail (Lieferanten ohne Shop-Upload)
 //     { id, label, supplier, kind: 'text', recipient: Empfänger für die Anleitung }
+//   kind 'checklist': Abhakliste zum Übertragen von Hand (Shop nimmt je Eingabe nur eine Nummer ohne Menge an)
+//     { id, label, supplier, kind: 'checklist', shopUrl: Seite zum Eingeben der Nummern }
+//     Je Position zwei Haken: Artikelnummer im Shop-Korb, Menge dort geprüft (Stand siehe checklistState).
 // supplier ist ein fester Wert aus orders.supplier (nicht „other“).
 
 export const FORMATS = [
@@ -46,6 +49,14 @@ export const FORMATS = [
     supplier: 'wuerth',
     kind: 'text',
     recipient: 'Würth Elektronik',
+  },
+  {
+    // „Bestellen mit Artikelnummer“ nimmt nur eine Nummer ohne Menge an (Stand 11/2026).
+    id: 'printus',
+    label: 'Printus',
+    supplier: 'printus',
+    kind: 'checklist',
+    shopUrl: 'https://www.printus.de/warenkorb?do=true',
   },
 ];
 
@@ -103,4 +114,61 @@ export function csvFileName(format, order, today = new Date()) {
 export function sameLines(a, b) {
   const key = (lines) => lines.map((l) => l.part + '\u0000' + l.qty).sort().join('\u0001');
   return key(a) === key(b);
+}
+
+// ---------------------------------------------------------------------------
+// Abhakliste (kind 'checklist')
+// ---------------------------------------------------------------------------
+// Stand: { parts: [Nummer, …], qty: [Nummer + NUL + Menge, …] } – nur im Browser gespeichert.
+// Der Haken „Menge“ gilt für die abgehakte Menge: Ändert sich die Menge im Warenkorb, ist er wieder offen.
+// Der Haken „Artikelnummer“ bleibt bei Mengenänderungen stehen (der Artikel liegt ja schon im Shop-Korb).
+
+const qtyKey = (l) => l.part + '\u0000' + l.qty;
+
+export function emptyChecklist() {
+  return { parts: [], qty: [] };
+}
+
+/** Gespeicherten Stand prüfen (aus localStorage, kann fehlen oder beschädigt sein). */
+export function parseChecklist(raw) {
+  try {
+    const v = JSON.parse(raw || 'null');
+    if (v && Array.isArray(v.parts) && Array.isArray(v.qty)) {
+      return { parts: v.parts.filter((x) => typeof x === 'string'), qty: v.qty.filter((x) => typeof x === 'string') };
+    }
+  } catch (_) { /* unbrauchbar → leer */ }
+  return emptyChecklist();
+}
+
+/** Haken je Position: [{ ...line, partDone, qtyDone }]. */
+export function checklistState(lines, state) {
+  const parts = new Set(state.parts);
+  const qty = new Set(state.qty);
+  return lines.map((l) => ({ ...l, partDone: parts.has(l.part), qtyDone: qty.has(qtyKey(l)) }));
+}
+
+/** Haken setzen bzw. entfernen; which = 'part' | 'qty'. Liefert einen neuen Stand. */
+export function toggleChecklist(state, line, which, done) {
+  const key = which === 'part' ? 'parts' : 'qty';
+  const value = which === 'part' ? line.part : qtyKey(line);
+  let list = state[key].filter((x) => x !== value);
+  if (which === 'qty') list = list.filter((x) => !x.startsWith(line.part + '\u0000')); // je Nummer nur eine Menge
+  if (done) list.push(value);
+  return { ...state, [key]: list };
+}
+
+/** Alle Positionen mit beiden Haken? (leere Liste: nein) */
+export function checklistComplete(lines, state) {
+  return lines.length > 0 && checklistState(lines, state).every((l) => l.partDone && l.qtyDone);
+}
+
+/** Abgehakte Nummern, die nicht mehr im Warenkorb stehen – im Shop-Korb wieder entfernen. */
+export function checklistRemoved(lines, state) {
+  const current = new Set(lines.map((l) => l.part));
+  return state.parts.filter((p) => !current.has(p));
+}
+
+/** Entfernte Nummer erledigt: Haken der Nummer vergessen. */
+export function forgetChecklistPart(state, part) {
+  return { parts: state.parts.filter((p) => p !== part), qty: state.qty.filter((x) => !x.startsWith(part + '\u0000')) };
 }

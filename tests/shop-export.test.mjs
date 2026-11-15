@@ -3,15 +3,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatForOrder, exportLines, buildCsv, buildText, csvFileName, sameLines,
+  emptyChecklist, parseChecklist, checklistState, toggleChecklist, checklistComplete, checklistRemoved, forgetChecklistPart,
 } from '../pb_public/modules/shop-export/formats.js';
 
 const item = (part, qty_ordered, qty_cancelled = 0, name = '') => ({ id: part, part_number: part, name, qty_ordered, qty_cancelled });
 
-test('Format je Lieferant: Mouser, Reichelt, TME (CSV), Würth (Mail-Liste); andere ohne Format', () => {
+test('Format je Lieferant: Mouser, Reichelt, TME (CSV), Würth (Mail-Liste), Printus (Abhakliste); andere ohne Format', () => {
   assert.equal(formatForOrder({ supplier: 'mouser' }).id, 'mouser');
   assert.equal(formatForOrder({ supplier: 'reichelt' }).id, 'reichelt');
   assert.equal(formatForOrder({ supplier: 'tme' }).kind, 'csv');
   assert.equal(formatForOrder({ supplier: 'wuerth' }).kind, 'text');
+  assert.equal(formatForOrder({ supplier: 'printus' }).kind, 'checklist');
   assert.equal(formatForOrder({ supplier: 'other', supplier_custom_name: 'TME' }), null);
   assert.equal(formatForOrder({ supplier: 'other', supplier_custom_name: '' }), null);
   assert.equal(formatForOrder({ supplier: 'farnell' }), null);
@@ -65,4 +67,44 @@ test('Abgleich vor dem Statuswechsel: Reihenfolge egal, Menge und Nummer zählen
   assert.ok(sameLines(a, [{ part: 'Y', qty: 2 }, { part: 'X', qty: 1 }]));
   assert.ok(!sameLines(a, [{ part: 'X', qty: 1 }, { part: 'Y', qty: 3 }]));
   assert.ok(!sameLines(a, [...a, { part: 'Z', qty: 1 }]));
+});
+
+test('Abhakliste: zwei Haken je Position, Menge gilt nur für die abgehakte Menge', () => {
+  const lines = exportLines([item('892586', 5), item('302491', 1)]).lines;
+  let st = emptyChecklist();
+  assert.equal(checklistComplete(lines, st), false);
+  for (const l of lines) st = toggleChecklist(st, l, 'part', true);
+  assert.equal(checklistComplete(lines, st), false, 'Mengen fehlen noch');
+  for (const l of lines) st = toggleChecklist(st, l, 'qty', true);
+  assert.equal(checklistComplete(lines, st), true);
+
+  // Menge im Warenkorb geändert → nur der Mengen-Haken ist wieder offen
+  const changed = exportLines([item('892586', 7), item('302491', 1)]).lines;
+  const rows = checklistState(changed, st);
+  assert.deepEqual(rows.map((r) => [r.part, r.partDone, r.qtyDone]), [['302491', true, true], ['892586', true, false]]);
+  st = toggleChecklist(st, changed[1], 'qty', true);
+  assert.equal(checklistComplete(changed, st), true);
+  assert.equal(st.qty.filter((k) => k.startsWith('892586')).length, 1, 'je Nummer nur eine Menge gemerkt');
+
+  // Haken entfernen
+  st = toggleChecklist(st, changed[0], 'part', false);
+  assert.equal(checklistComplete(changed, st), false);
+  assert.equal(checklistComplete([], emptyChecklist()), false, 'leere Liste ist nicht fertig');
+});
+
+test('Abhakliste: entfernte Positionen melden, gespeicherten Stand robust lesen', () => {
+  const lines = exportLines([item('892586', 5), item('302491', 1)]).lines;
+  let st = emptyChecklist();
+  for (const l of lines) st = toggleChecklist(toggleChecklist(st, l, 'part', true), l, 'qty', true);
+  const fewer = exportLines([item('302491', 1)]).lines;
+  assert.deepEqual(checklistRemoved(fewer, st), ['892586']);
+  st = forgetChecklistPart(st, '892586');
+  assert.deepEqual(checklistRemoved(fewer, st), []);
+  assert.equal(checklistComplete(fewer, st), true);
+
+  assert.deepEqual(parseChecklist(JSON.stringify(st)), st);
+  assert.deepEqual(parseChecklist(null), emptyChecklist());
+  assert.deepEqual(parseChecklist('kaputt{'), emptyChecklist());
+  assert.deepEqual(parseChecklist('{"parts":[1,"A"],"qty":"x"}'), emptyChecklist());
+  assert.deepEqual(parseChecklist('{"parts":[1,"A"],"qty":[]}'), { parts: ['A'], qty: [] });
 });

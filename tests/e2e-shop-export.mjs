@@ -1,5 +1,6 @@
 // Browser-Durchlauf Shop-Export: Mouser-Korb → Vorschau (Storno abgezogen) → CSV → Änderung während des Bestellens
 // wird erkannt → erneuter Download → „Exportiert & auf ‚Bestellt‘ setzen“. Sichtbarkeit je Shop und Status.
+// Würth: Liste für die Bestell-Mail. Printus: Abhakliste (Stand im Browser, Mengenänderung öffnet den Haken).
 // Start über:  tests/run.sh --e2e
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,7 +8,7 @@ import { join } from 'node:path';
 import {
   PB_URL, setup, resetData, createUser, createGroup, addItem, http, getRecord, enableRateLimits, disableRateLimits,
 } from './helpers.mjs';
-import { launchBrowser, loginViaUi } from './browser.mjs';
+import { launchBrowser, loginViaUi, sleep } from './browser.mjs';
 
 async function seed() {
   await setup();
@@ -23,7 +24,10 @@ async function seed() {
   const farnell = await addItem(owner.token, { supplier: 'farnell', part_number: '1848687', qty: 3, group: g.id });
   const we = await addItem(owner.token, { supplier: 'wuerth', part_number: '885012207098', qty: 10, group: g.id });
   await addItem(owner.token, { supplier: 'wuerth', part_number: '7447789100', qty: 5, group: g.id });
+  const pr = await addItem(owner.token, { supplier: 'printus', part_number: '892586', name: 'Kopierpapier A4', qty: 5 });
+  await addItem(owner.token, { supplier: 'printus', part_number: '302491', name: 'Briefumschläge', qty: 1 });
   return {
+    printus: pr.order.id,
     owner, group: g.id, mouser: m1.order.id, tme: tme.order.id, farnell: farnell.order.id, wuerth: we.order.id,
     login: await createUser('Export-Tester'),
   };
@@ -140,6 +144,67 @@ try {
   if (we.internal_order_no !== '' || we.without_internal_order_no !== true) throw new Error('Würth: ' + JSON.stringify(we));
   await b.waitFor(`document.body.innerText.includes('Ohne interne Bestellnummer bestellt')`, 'Hinweis in der Bestellung');
   ok('Würth: als Muster ohne interne Bestellnummer bestellt (gespeichert und angezeigt)');
+
+  // ---- Printus: Abhakliste, je Position Haken für Artikelnummer und Menge ----
+  const ROW = (part) => `document.querySelector('[data-checklist-row="${part}"]')`;
+  const tick = (part, which) => b.evaluate(`${ROW(part)}.querySelector('[data-check-${which}]').click()`);
+  const ORDERED_DISABLED = `document.querySelector('[data-export-ordered]').disabled`;
+  const openPrintus = async ({ reload = false } = {}) => {
+    if (reload) {
+      // Seite wirklich neu laden (gleiche URL): erst weiter, wenn das alte Dokument weg ist
+      await b.evaluate('window.__alteSeite = true; location.reload()');
+      await b.waitFor(`!window.__alteSeite && document.querySelector('[x-data=orderDetailView]') && ${BADGE}`, 'Detail nach dem Neuladen');
+    } else {
+      await openOrder(s.printus);
+    }
+    await b.waitFor(hasExportButton, 'Export-Button Printus');
+    await b.clickText('#view button', 'Shop-Export');
+    await b.waitFor(`${exp}.isOpen && document.querySelector('[data-export-checklist]')?.offsetParent`, 'Printus-Abhakliste');
+  };
+  await openPrintus();
+  if (await b.evaluate(`!!document.querySelector('[data-export-download]').offsetParent || !!document.querySelector('[data-export-copy]').offsetParent || !!document.querySelector('[data-export-lines]').offsetParent`)) {
+    throw new Error('Printus: CSV, Mail-Liste oder Vorschau sichtbar');
+  }
+  const order1 = await b.evaluate(`[...document.querySelectorAll('[data-checklist-row]')].map((e) => e.dataset.checklistRow)`);
+  if (order1.join() !== '302491,892586') throw new Error('Printus: Reihenfolge ' + JSON.stringify(order1));
+  await b.evaluate(`window.__clipboard = null; navigator.clipboard.writeText = (t) => { window.__clipboard = t; return Promise.resolve(); }`);
+  await b.evaluate(`${ROW('892586')}.querySelector('[data-copy-part]').click()`);
+  await b.waitFor(`window.__clipboard === '892586' && ${ROW('892586')}.querySelector('[data-copy-part]').innerText.trim() === 'Kopiert'`, 'Nummer kopiert');
+  await tick('892586', 'part');
+  await tick('302491', 'part');
+  await tick('302491', 'qty');
+  await b.waitFor(`document.querySelector('[data-checklist-progress]').innerText.includes('2/2 Artikelnummern · 1/2 Mengen')`, 'Fortschritt');
+  if (!(await b.evaluate(ORDERED_DISABLED))) throw new Error('Printus: „Bestellt“ vor allen Haken möglich');
+  ok('Printus: Abhakliste statt Datei, Nummer kopieren, Haken für Nummer und Menge, „Bestellt“ erst wenn alles abgehakt');
+  await sleep(400); // Einblenden des Dialogs abwarten
+  await b.screenshot('export-05-printus');
+
+  // Stand bleibt beim Neuladen erhalten; Mengenänderung im Warenkorb öffnet nur den Mengen-Haken
+  await tick('892586', 'qty');
+  await addItem(s.owner.token, { supplier: 'printus', part_number: '302491', qty: 2 });
+  await openPrintus({ reload: true });
+  await b.waitFor(`${ROW('302491')}?.innerText.includes('3×')`, 'neue Menge nach dem Neuladen');
+  const st = await b.evaluate(`[...document.querySelectorAll('[data-checklist-row]')].map((e) =>
+    [e.dataset.checklistRow, e.querySelector('[data-check-part]').checked, e.querySelector('[data-check-qty]').checked].join(':'))`);
+  if (st.join() !== '302491:true:false,892586:true:true') throw new Error('Printus nach Neuladen: ' + JSON.stringify(st));
+  if (!(await b.evaluate(ORDERED_DISABLED))) throw new Error('Printus: „Bestellt“ trotz geänderter Menge möglich');
+  await tick('302491', 'qty');
+  await b.waitFor(`!${ORDERED_DISABLED}`, 'alles abgehakt');
+  ok('Printus: Haken bleiben beim Neuladen, geänderte Menge muss neu abgehakt werden');
+
+  // Änderung, während der Dialog offen ist → beim „Bestellt“-Setzen erkannt
+  await addItem(s.owner.token, { supplier: 'printus', part_number: '423741', qty: 3 });
+  await b.fill('#export-internal-no', '2026IW07002');
+  await b.clickText('[data-shop-export] button', 'Exportiert');
+  await b.waitFor(`document.querySelector('[data-export-changed]').offsetParent && ${ROW('423741')} && ${ORDERED_DISABLED}`, 'Printus: Änderung erkannt');
+  await tick('423741', 'part');
+  await tick('423741', 'qty');
+  await b.clickText('[data-shop-export] button', 'Exportiert');
+  await b.confirmDialog('Als bestellt markieren');
+  await b.waitFor(`!${exp}.isOpen && ${BADGE} === 'Bestellt'`, 'Printus bestellt');
+  if ((await getRecord('orders', s.printus)).internal_order_no !== '2026IW07002') throw new Error('Printus: interne Bestellnummer');
+  if (await b.evaluate(`localStorage.getItem('shop-export-checklist:${s.printus}')`) !== null) throw new Error('Printus: Abhakstand nicht aufgeräumt');
+  ok('Printus: neue Position während des Übertragens erkannt, danach bestellt und Abhakstand aufgeräumt');
 
   if (b.problems.length) throw new Error('Fehler in der Browser-Konsole:\n  ' + b.problems.join('\n  '));
   ok('keine Fehler in der Browser-Konsole');
