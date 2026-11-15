@@ -42,8 +42,9 @@ Voraussetzungen im `PATH`: [`pocketbase`](https://github.com/pocketbase/pocketba
 [`tailwindcss`](https://github.com/tailwindlabs/tailwindcss/releases) (Standalone CLI v4.3.3), für die Browser-Tests Google Chrome.
 
 ```bash
-scripts/dev-server.sh                                   # App http://127.0.0.1:8090, Mails http://127.0.0.1:8025
-scripts/dev-server.sh add-user name@example.com "Name"  # Labor-Nutzer anlegen, Login-Code erscheint in Mailpit
+scripts/dev-server.sh                                   # App http://127.0.0.1:8090, Mails http://127.0.0.1:8025 – jedes Mal frisch mit Testdaten
+                                                        # Login: labor@example.com, Login-Code erscheint in Mailpit
+scripts/dev-server.sh add-user name@example.com "Name"  # weiteren Labor-Nutzer anlegen
 tests/run.sh                                            # Server- und Unit-Tests
 tests/run.sh --e2e                                      # zusätzlich Browser-Durchläufe
 scripts/build-css.sh                                    # CSS nach UI-Änderungen neu erzeugen

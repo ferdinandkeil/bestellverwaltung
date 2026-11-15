@@ -158,11 +158,13 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<domain>/api/lab/cart-i
 ## 6. Lokale Entwicklung
 
 ```bash
-scripts/dev-server.sh                                 # PocketBase :8090 + Mailpit :8025
-scripts/dev-server.sh add-user name@example.com "Vorname Name"
+scripts/dev-server.sh                                 # PocketBase :8090 + Mailpit :8025, frische Testdaten
+scripts/dev-server.sh add-user name@example.com "Vorname Name"   # weiterer Nutzer (Server muss laufen)
 scripts/build-css.sh --watch                          # parallel, bei UI-Arbeit
 tests/run.sh                                          # Tests gegen frische Instanz
-tests/run.sh --e2e                                    # zusätzlich Browser-Durchläufe (App + Lieferschein-Scanner)
+tests/run.sh --e2e                                    # zusätzlich Browser-Durchläufe
 ```
 
-Die Daten der Dev-Instanz liegen in `~/.local/share/bestellverwaltung-dev/` (außerhalb von Dropbox).
+Die Dev-Instanz startet **jedes Mal leer** in einem temporären Verzeichnis (außerhalb von Dropbox), importiert `pb_schema.json` und legt mit `scripts/dev-seed.mjs` synthetische Testdaten über die echten Routen an: Gruppen in zwei Veranstaltungen, Bestellungen in allen Status und für jeden Exportweg (Mouser-CSV, Würth-Mail-Liste, Printus-Abhakliste). Login mit `labor@example.com` oder `kollegin@example.com`, der Code erscheint in Mailpit. Beim Beenden (Strg+C) wird das Verzeichnis gelöscht; was von Hand angelegt wurde, ist danach weg. So passt die Instanz immer zum aktuellen Schema – Migrationen werden nicht lokal an Altdaten erprobt, sondern in `tests/migration.test.mjs`. Neue Funktionen bekommen passende Testdaten in `dev-seed.mjs` (geprüft durch `tests/dev-seed.test.mjs`).
+
+Bis 11/2026 lagen die Dev-Daten dauerhaft in `~/.local/share/bestellverwaltung-dev/`; der Ordner wird nicht mehr benutzt und kann gelöscht werden.
