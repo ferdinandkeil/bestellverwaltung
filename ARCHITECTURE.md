@@ -88,7 +88,8 @@ Projekt/
 ├── scripts/
 │   ├── build-css.sh                # Tailwind Standalone CLI → pb_public/assets/app.css
 │   ├── fetch-vendor.sh             # Lädt festgelegte Bibliotheksversionen nach pb_public/vendor/
-│   ├── dev-server.sh               # Lokale Test-Instanz (pb_data außerhalb von Dropbox)
+│   ├── dev-server.sh               # Lokale Test-Instanz: jedes Mal frisch (temporäres Verzeichnis) mit Testdaten
+│   ├── dev-seed.mjs                # Synthetische Testdaten über die echten Routen
 │   └── fetch-scan-reports.mjs      # Scanner-Meldungen nach samples/scan-reports/ holen, dann auf dem Server löschen
 ├── tests/                          # siehe Kap. 8
 │   ├── run.sh                      # frische PocketBase + Mailpit, dann node --test [--e2e]
@@ -229,5 +230,5 @@ registerPlugin({
 ## 9. Betrieb
 * **Produktivbetrieb:** Rate-Limiting aktiv, Client-IP über den Proxy-Header `X-Forwarded-For` (Uberspace-Proxy), Login-Mails über ein Postfach auf Uberspace.
 * `pb_data/` liegt **nie** in Dropbox (SQLite/WAL kann durch Sync beschädigt werden). Lokale Test-Instanzen liegen außerhalb des Projektordners.
-* Lokale Entwicklung: `scripts/dev-server.sh` (PocketBase + Mailpit), Daten unter `~/.local/share/bestellverwaltung-dev/`.
+* Lokale Entwicklung: `scripts/dev-server.sh` (PocketBase + Mailpit) startet jedes Mal eine leere Instanz in einem temporären Verzeichnis, importiert das Schema und legt synthetische Testdaten an (`scripts/dev-seed.mjs`); beim Beenden wird alles gelöscht. Keine dauerhaften Dev-Daten mehr – die Instanz passt so immer zum aktuellen Schema (Details: `docs/DEPLOYMENT.md` Kap. 6).
 * Deploy, Dienst-Einrichtung, Backup und Updates auf Uberspace: `docs/DEPLOYMENT.md`.
