@@ -171,3 +171,18 @@ routerAdd("POST", "/api/lab/unmatched-receipts/{id}/assign", (e) => {
   });
   return e.json(200, order);
 }, $apis.requireAuth("users"));
+
+/**
+ * POST /api/lab/favorite-lists/from-order   – Artikel einer Bestellung in eine Favoritenliste übernehmen
+ * Body: { order, items?: [Positions-IDs] (fehlt → alle), list?: ID einer eigenen Liste | new_list?: { title, description?, is_public? } }
+ * Antwort: { list, added, existing, priceUpdated }
+ */
+routerAdd("POST", "/api/lab/favorite-lists/from-order", (e) => {
+  const { addItemsFromOrder } = require(`${__hooks}/lib/favorites.js`);
+  const body = e.requestInfo().body || {};
+  let result;
+  $app.runInTransaction((txApp) => {
+    result = addItemsFromOrder(txApp, body, e.auth.id);
+  });
+  return e.json(200, result);
+}, $apis.requireAuth("users"));

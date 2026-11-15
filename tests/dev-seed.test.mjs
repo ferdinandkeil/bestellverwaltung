@@ -9,7 +9,7 @@ import { setup, resetData, listRecords } from './helpers.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-test('Dev-Testdaten: alle Status, alle Exportwege, feste Nutzer', async () => {
+test('Dev-Testdaten: alle Status, alle Exportwege, Favoriten, feste Nutzer', async () => {
   await setup();
   await resetData();
   const out = execFileSync('node', [join(ROOT, 'scripts/dev-seed.mjs')], { env: process.env, encoding: 'utf8' });
@@ -25,4 +25,10 @@ test('Dev-Testdaten: alle Status, alle Exportwege, feste Nutzer', async () => {
   assert.ok(users.includes('labor@example.com') && users.includes('kollegin@example.com'));
   const merged = (await listRecords('order_items')).find((i) => i.part_number === '595-SN74HC595N');
   assert.equal(merged.qty_ordered, 8, 'Mouser-Position für zwei Gruppen zusammengeführt');
+  const lists = (await listRecords('favorite_lists')).map((l) => `${l.title}|${l.supplier}|${l.is_public}`).sort();
+  assert.deepEqual(lists, [
+    'Bürobedarf Standard|printus|false', 'Grundausstattung Elektronik-Projekt|reichelt|true',
+    'Messtechnik: Strommessung|tme|true', 'Werkstatt Lötplatz|other|false',
+  ]);
+  assert.equal((await listRecords('favorite_items')).length, 3 + 2 + 2 + 2);
 });

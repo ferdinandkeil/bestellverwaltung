@@ -12,12 +12,15 @@
     <!-- Kopfzeile (nur eingeloggt) -->
     <header x-show="$store.auth.user" class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div class="mx-auto flex max-w-6xl items-center gap-1 px-4 py-2">
-        <a href="#/" class="mr-2 text-sm font-semibold text-blue-700 sm:mr-4 sm:text-base">Labor-Bestellungen</a>
+        <!-- Schriftzug erst ab sm: auf dem Smartphone reicht der Platz sonst nicht für alle Menüpunkte -->
+        <a href="#/" class="mr-4 hidden text-base font-semibold text-blue-700 sm:inline">Labor-Bestellungen</a>
         <nav class="flex flex-1 items-center gap-1 text-sm">
           <a href="#/" class="rounded-lg px-2.5 py-1.5"
              :class="['dashboard','order'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Bestellungen</a>
           <a href="#/groups" class="rounded-lg px-2.5 py-1.5"
              :class="$store.route.name === 'groups' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Gruppen<span class="hidden sm:inline">/Projekte</span></a>
+          <a href="#/favorites" class="rounded-lg px-2.5 py-1.5"
+             :class="['favorites','favorite'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Favoriten</a>
         </nav>
         <span class="hidden text-xs text-slate-500 md:inline" x-text="$store.auth.user?.name || $store.auth.user?.email"></span>
         <button type="button" class="btn btn-ghost btn-sm" @click="$store.auth.logout()">Logout</button>
@@ -64,6 +67,8 @@
     import dashboardView from './views/dashboard-view.js';
     import orderDetailView from './views/order-detail-view.js';
     import groupsView from './views/groups-view.js';
+    import favoritesView from './views/favorites-view.js';
+    import favoriteListView from './views/favorite-list-view.js';
     import { registerItemForm } from './views/item-form.js';
     import { registerUnmatchedReceipts } from './views/unmatched-receipts.js';
 
@@ -72,6 +77,7 @@
       './modules/delivery-scanner/scanner-modal.js',
       './modules/moodle-import/moodle-importer.js',
       './modules/shop-export/shop-exporter.js',
+      './modules/favorites/from-order.js',
     ];
 
     // Routen: Hash → View. ":id" wird als Parameter übergeben.
@@ -80,6 +86,8 @@
       { name: 'dashboard', pattern: /^\/?$/, view: dashboardView },
       { name: 'order', pattern: /^\/orders\/([a-z0-9]{15})$/, view: orderDetailView, params: ['id'] },
       { name: 'groups', pattern: /^\/groups$/, view: groupsView },
+      { name: 'favorites', pattern: /^\/favorites$/, view: favoritesView },
+      { name: 'favorite', pattern: /^\/favorites\/([a-z0-9]{15})$/, view: favoriteListView, params: ['id'] },
     ];
 
     window.Alpine = Alpine;

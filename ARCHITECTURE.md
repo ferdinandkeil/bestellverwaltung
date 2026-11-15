@@ -27,6 +27,7 @@
    * `created_by` / `booked_by` werden serverseitig aus dem Auth-Kontext gesetzt (nicht fälschbar).
    * `deliveries` sind unveränderlich (kein Update/Delete für Nutzer); Korrekturen erfolgen per Gegenbuchung.
    * `unmatched_receipts` (Ablage „Lieferscheine ohne Bestellung“): für alle Labor-Nutzer sichtbar, anlegen im eigenen Namen, löschen erlaubt, nicht änderbar; Zuordnen nur über die Hook-Route (Kap. 4.6). `orders.origin` ist nicht von Hand änderbar.
+   * **Favoritenlisten** (`favorite_lists`, `favorite_items`): **alle Listen für alle sichtbar** (Transparenz bleibt); anlegen im eigenen Namen, **ändern und löschen nur durch den Besitzer** (Liste und ihre Artikel). Besitzer und Lieferant einer Liste sind nach dem Anlegen nicht änderbar. „Öffentlich“ ist keine Zugriffsbeschränkung, sondern steuert den voreingestellten Filter (Kap. 4.7).
    * `scan_reports` (Problem-Meldungen des Scanners): Labor-Nutzer dürfen nur **anlegen** (im eigenen Namen), lesen/löschen nur der Admin; Fotos sind geschützte Dateien.
    * PocketBase-Login-Alarm („Login from a new location“) ist deaktiviert, da er auf Passwörter verweist, die es nicht gibt.
 
@@ -47,6 +48,7 @@ Projekt/
 │       ├── import.js               # Sammel-Import mehrerer Positionen (alles oder nichts)
 │       ├── late-items.js           # Positionen nachtragen (vergessen beim Erfassen)
 │       ├── delivery-notes.js       # Bestellung aus Lieferschein, Ablage zuordnen
+│       ├── favorites.js            # Favoriten: Artikel aus einer Bestellung übernehmen
 │       ├── deliveries.js           # Lieferbuchungen, qty_delivered-Summen
 │       └── status.js               # Status-Workflow & Auto-Lieferstatus
 ├── pb_public/
@@ -66,6 +68,8 @@ Projekt/
 │   │   ├── dashboard-view.js
 │   │   ├── order-detail-view.js
 │   │   ├── groups-view.js
+│   │   ├── favorites-view.js       # Favoritenlisten (Übersicht mit Filter)
+│   │   ├── favorite-list-view.js   # Eine Favoritenliste: bearbeiten, in den Warenkorb legen
 │   │   └── item-form.js            # Formular „Position erfassen“ (Dashboard + Detail)
 │   └── modules/                    # Isolierte Erweiterungsmodule (über plugin-registry)
 │       ├── shop-export/            # Shop-Export (Kap. 6)
@@ -74,6 +78,8 @@ Projekt/
 │       ├── moodle-import/          # Moodle-CSV-Import (Kap. 6)
 │       │   ├── moodle-importer.js  # Oberfläche: Datei, Zuordnung, Vorschau, Buchung
 │       │   └── moodle-csv.js       # Auswertung der CSV (reine Logik, getestet)
+│       ├── favorites/
+│       │   └── from-order.js       # „In Favoriten übernehmen“ in der Bestellung (Slot order-detail-actions)
 │       ├── word-export/
 │       ├── delivery-scanner/       # Lieferschein-Erfassung (Kap. 6)
 │       │   ├── scanner-modal.js    # Oberfläche: Aufnahme, Ecken, Prüfmaske, Buchung
@@ -95,7 +101,7 @@ Projekt/
 │   ├── run.sh                      # frische PocketBase + Mailpit, dann node --test [--e2e]
 │   ├── *.test.mjs                  # Server-, Rechte-, OTP- und Unit-Tests (migration.test.mjs: eigene Instanz)
 │   ├── browser.mjs                 # CDP-Client für headless Chrome
-│   ├── e2e.mjs, e2e-scanner.mjs    # Browser-Durchläufe App und Lieferschein-Erfassung
+│   ├── e2e*.mjs                    # Browser-Durchläufe: App, Lieferschein-Erfassung, Moodle-Import, Shop-Export, Favoriten
 │   └── helpers.mjs
 ├── samples/                        # echte Belege zur Entwicklung – nie committen (.gitignore)
 └── docs/DEPLOYMENT.md              # Uberspace-Betrieb, Deploy, Backup
@@ -110,6 +116,8 @@ Projekt/
 * **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (genau eine Datei, optional: Bild oder PDF; mehrseitige Belege als PDF, max. 15 MB ≈ 30 Seiten), `created`.
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
 * **`unmatched_receipts`** (Ablage „Lieferscheine ohne Bestellung“): `supplier_name`, `internal_order_no` (falls auf dem Beleg erkannt, ungeprüft), `note`, `receipt` (eine Datei, PDF/Bild, max. 15 MB), `uploaded_by`, `created`.
+* **`favorite_lists`** (Favoriten, Kap. 4.7): `title` (Pflicht), `description` (optional), `owner` (Pflicht, beim Anlegen = angemeldeter Nutzer; ein Nutzer mit Listen kann erst gelöscht werden, wenn seine Listen im Admin-UI übertragen oder gelöscht sind), `is_public`, `supplier` (Werte wie `orders.supplier`, nach dem Anlegen fest), `supplier_custom_name` (nur bei `other`, Pflicht; korrigierbar).
+* **`favorite_items`:** `list` (wird mit der Liste gelöscht), `part_number` (normalisiert wie bei Positionen, je Liste eindeutig: Index `idx_favorite_items_part`), `name` (optional), `url`, `qty` (Standardmenge ≥ 1), `price_unit` (zuletzt bezahlter Netto-Stückpreis, optional) mit `price_date` (Stand; bei Änderung des Preises von Hand automatisch „jetzt“, beim Übernehmen aus einer Bestellung deren Anlagedatum).
 * **`scan_reports`** (Problem-Meldungen der Lieferschein-Erfassung): `reported_by`, `order` (optional), `note`, `photos` (Originalfotos, JPEG ≤ 3200 px, geschützt, max. 30), `analysis` (JSON: Ecken automatisch/final, OCR-Wörter mit Koordinaten, gelesene Zeilen, Zuordnung, erkannte und eingetragene Mengen, erkannte Probleme; Format-Version `REPORT_VERSION` in `report.js`), `created`. Kurzlebig: werden nach dem Abholen auf dem Server gelöscht.
 
 **Artikelnummer-Regel:** `part_number` ist **immer die Shop-Bestellnummer** des jeweiligen Lieferanten (z. B. `595-SN74HC595N` bei Mouser), nicht die Herstellernummer. Eingabemaske und Moodle-Formular weisen darauf hin. Gespeichert wird normalisiert: Großbuchstaben, außen getrimmt, mehrfacher bzw. „unsichtbarer“ Leerraum (Tabulator, geschützte Leerzeichen aus kopierten Texten) zu **einem** Leerzeichen zusammengefasst. Einzelne Leerzeichen bleiben, weil sie z. B. bei Reichelt zur Nummer gehören (`MKDS 1,5 3 5,08`). Der Sammelkorb vergleicht ebenfalls normalisiert, auch gegen ältere Positionen. Eine spätere Prüf-/Korrektur-Erweiterung ist als Modul denkbar.
@@ -126,7 +134,7 @@ Projekt/
    * **nicht vorhanden:** neue Position anlegen;
    * **vorhanden (Merge):** `qty_ordered` += Menge; Gruppe zu `groups` hinzufügen; Eintrag in `group_allocations` erhöhen bzw. anlegen; `group_allocation_note` neu erzeugen. Name/URL/Preis werden nur ergänzt, wenn bisher leer.
 3. Antwort: `{order, item, merged: bool}`.
-4. **Sammel-Import** (Route `POST /api/lab/cart-items/batch`, Moodle-Import): `{groups: [{ref, name, course, semester}], items: [{line, …, group | groupRef}]}`. Legt neue Gruppen an und bucht jede Position nach 1.–2. – **alles oder nichts** in einer Transaktion; Fehler nennen die CSV-Zeile.
+4. **Sammel-Import** (Route `POST /api/lab/cart-items/batch`, Moodle-Import und Favoriten): `{groups: [{ref, name, course, semester}], items: [{line, …, group | groupRef}]}`. Legt neue Gruppen an und bucht jede Position nach 1.–2. – **alles oder nichts** in einer Transaktion; Fehler nennen die CSV-Zeile.
 
 ### 4.3 Status-Workflow
 * Kette: `angefragt` → `bestellt` → `teilgeliefert` → `geliefert` → `geprueft` → `abgerechnet`.
@@ -158,6 +166,15 @@ Projekt/
 Für Muster, Direktkäufe oder am System vorbei bestellte Ware. Im Scanner, wenn keine Bestellung passt:
 * **Bestellung aus Lieferschein anlegen** (Route `POST /api/lab/orders/from-delivery-note`, nur wenn ein Lieferanten-Profil erkannt wurde): Lieferant, interne Bestellnummer (falls auf dem Beleg) und Positionen sind vorbelegt und änderbar, Gruppe je Position optional. **Interne Bestellnummer angeben oder ausdrücklich „ohne interne Bestellnummer“ wählen** (gespeichert wie beim Statuswechsel; bei Würth vorausgewählt, wenn keine Nummer erkannt wurde). In einer Transaktion: Bestellung (`status = bestellt`, `origin = lieferschein`), Positionen (gleiche Nummern zusammengefasst, bestellt = geliefert) und Lieferung mit dem Beleg-PDF → „geliefert“. Der offene Warenkorb des Lieferanten bleibt unberührt. Die Bestellung zeigt „aus Lieferschein angelegt“.
 * **In Ablage legen** (ohne Profil nur diese Möglichkeit): Beleg-PDF mit Lieferant, ggf. Nummer und Notiz in `unmatched_receipts`. Das Dashboard zeigt den Abschnitt „Lieferscheine ohne Bestellung“, solange etwas abgelegt ist. **Zuordnen** (Route `POST /api/lab/unmatched-receipts/{id}/assign`) hängt den Beleg an die gewählte Bestellung (`attachments`) und entfernt den Ablage-Eintrag; Löschen mit Rückfrage.
+
+### 4.7 Favoriten
+Merklisten für Artikel, die wieder bestellt werden sollen (z. B. Standardsortiment Bürobedarf, wiederkehrende Bauteile).
+* **Eine Liste je Lieferant** (bei `other` je Shop-Name, Groß-/Kleinschreibung egal) – sonst ließe sie sich nicht als ein Warenkorb bestellen.
+* **Übersicht** (`#/favorites`): Listen nach Lieferant gegliedert. Voreingestellter Filter **„nur eigene und öffentliche“**; ausgeschaltet sind alle Listen sichtbar. Der Filter wird pro Browser gemerkt.
+* **Liste** (`#/favorites/{id}`): Titel, Beschreibung, Besitzer, öffentlich ja/nein. Der Besitzer bearbeitet Liste und Artikel von Hand (Bestellnummer, Bezeichnung, Link, Standardmenge, Preis).
+* **Aus einer Bestellung übernehmen** (Knopf „In Favoriten“ in der Bestellung, Route `POST /api/lab/favorite-lists/from-order`, `{order, items?: [ids], list | new_list: {title, description?, is_public?}}`): alle oder ausgewählte Positionen in eine eigene Liste desselben Lieferanten oder in eine neue Liste. In einer Transaktion, alles oder nichts. Standardmenge = bestellt − storniert (mindestens 1), Preis mit dem Anlagedatum der Bestellung als Stand. **Steht die Nummer schon in der Liste**, wird sie nicht doppelt angelegt; leere Bezeichnung/Link werden ergänzt und der Preis aktualisiert, wenn die Bestellung nicht älter als der gespeicherte Stand ist. Antwort: `{list, added, existing, priceUpdated}`.
+* **In den Warenkorb legen** (aus jeder Liste, auch fremden): Artikel auswählen, Menge (vorbelegt mit der Standardmenge) und Gruppe je Artikel (oder eine für alle) → Sammel-Import `POST /api/lab/cart-items/batch` (Kap. 4.2, alles oder nichts). Der Preis wird mitgegeben und im Korb nur übernommen, wenn die Position dort noch keinen hat. Die Liste selbst bleibt unverändert. Danach öffnet sich der Warenkorb.
+* Später: Liste kopieren (fremde Liste als eigene übernehmen).
 
 ## 5. Modul-Schnittstelle (`core/plugin-registry.js`)
 Module registrieren sich beim App-Start an festen Slots:
@@ -216,6 +233,7 @@ registerPlugin({
 ## 7. UI-Konventionen
 * **Mobile-First:** große Touch-Ziele (Schnellbuttons „+1“, „Rest komplett“), Modals als Bottom-Sheet auf dem Smartphone.
 * **Dashboard:** Filter (Status, Lieferant, Gruppe) auf dem Smartphone einklappbar, aktive Filter als entfernbare Chips; Filter werden pro Browser gemerkt.
+* **Hauptnavigation:** *Bestellungen*, *Gruppen/Projekte*, *Favoriten*. Der Schriftzug „Labor-Bestellungen“ erscheint erst ab Tablet-Breite, damit die Kopfzeile auf dem Smartphone nicht überläuft.
 * **Gruppenauswahl:** immer nach Veranstaltung/Semester gegliedert (neuestes Semester zuerst).
 * **Meldungen:** höchstens drei Toasts gleichzeitig (älteste fällt weg).
 * **Sicherheitsabfragen:** eigener Dialog im Stil der App (`confirmAction()` in `core/ui.js`, natives `<dialog>` mit `showModal()`; auf dem Smartphone als Bottom-Sheet), keine Browser-Dialoge. Der Bestätigungsknopf nennt die Aktion („Löschen“, „Buchen“, „Zurücksetzen“ …). Endgültiges Löschen oder Verwerfen wird rot dargestellt, der Fokus liegt dann auf „Abbrechen“. Escape, ein Klick neben den Dialog und „Abbrechen“ brechen ab, darunterliegende Modals bleiben offen.
@@ -223,7 +241,7 @@ registerPlugin({
 
 ## 8. Qualitätssicherung
 * `tests/run.sh` startet eine frische PocketBase-Instanz (+ Mailpit als Test-Mailserver) außerhalb von Dropbox, importiert das Schema und führt `node --test` aus (nur Node-Bordmittel, kein npm).
-* `tests/run.sh --e2e` führt zusätzlich die Browser-Durchläufe in headless Chrome aus (App-Ablauf und Lieferschein-Erfassung); sie schlagen auch bei Fehlern in der Browser-Konsole fehl.
+* `tests/run.sh --e2e` führt zusätzlich die Browser-Durchläufe in headless Chrome aus (App-Ablauf, Lieferschein-Erfassung, Moodle-Import, Shop-Export, Favoriten); sie schlagen auch bei Fehlern in der Browser-Konsole fehl. Klicks warten, bis das Element sichtbar ist (Alpine schaltet `x-show` erst im nächsten Animation-Frame um).
 * Testdaten sind synthetisch. Der Scanner-Test erzeugt einen Lieferschein im Reichelt-Layout als HTML und „fotografiert“ ihn schräg; echte Belege (`samples/`) gelangen nie ins Repo.
 * Nach Änderungen an `pb_hooks/` oder am Schema: `tests/run.sh`; nach UI-Änderungen zusätzlich `scripts/build-css.sh` und `tests/run.sh --e2e`.
 
