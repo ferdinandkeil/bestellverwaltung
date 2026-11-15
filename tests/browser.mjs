@@ -79,17 +79,27 @@ export async function launchBrowser(profileDir) {
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
     })()`),
-    clickText: (selector, text) => evaluate(`(() => {
-      const all = [...document.querySelectorAll(${JSON.stringify(selector)})];
-      const el = all.find((e) => e.offsetParent !== null && e.textContent.trim().startsWith(${JSON.stringify(text)}));
-      if (!el) {
+    /**
+     * Sichtbares Element mit passendem Text anklicken. Wartet (wie ein Mensch) bis es sichtbar ist:
+     * Alpine schaltet x-show erst im nächsten Animation-Frame um, unter Last also nach der Zustandsänderung.
+     */
+    async clickText(selector, text, timeoutMs = 8000) {
+      const attempt = `(() => {
+        const all = [...document.querySelectorAll(${JSON.stringify(selector)})];
+        const el = all.find((e) => e.offsetParent !== null && e.textContent.trim().startsWith(${JSON.stringify(text)}));
+        if (el) { el.click(); return ''; }
         // Für die Fehlersuche: was stattdessen da ist (sichtbar/unsichtbar, Text, deaktiviert)
-        const seen = all.slice(0, 15).map((e) => (e.offsetParent === null ? '(unsichtbar) ' : '') +
-          JSON.stringify(e.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)) + (e.disabled ? ' (deaktiviert)' : ''));
-        throw new Error('Element nicht gefunden: ' + ${JSON.stringify(text)} + ' – vorhanden: ' + (seen.join(', ') || 'keine'));
+        return all.slice(0, 15).map((e) => (e.offsetParent === null ? '(unsichtbar) ' : '') +
+          JSON.stringify(e.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)) + (e.disabled ? ' (deaktiviert)' : '')).join(', ') || 'keine';
+      })()`;
+      let seen = '';
+      for (let t = 0; t < timeoutMs; t += 100) {
+        seen = await evaluate(attempt);
+        if (seen === '') return;
+        await sleep(100);
       }
-      el.click();
-    })()`),
+      throw new Error('Element nicht gefunden: ' + text + ' – vorhanden: ' + seen);
+    },
     /** Sicherheitsabfrage (#confirm-dialog) abwarten, Knopftext prüfen und bestätigen. */
     async confirmDialog(label) {
       await this.waitFor(`document.querySelector('#confirm-dialog')?.open`, 'Sicherheitsabfrage: ' + label);
