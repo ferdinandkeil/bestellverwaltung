@@ -15,7 +15,7 @@ function errorText(err) {
 /**
  * body: {
  *   groups: [{ ref, name, course, semester }]               – neu anzulegende Gruppen
- *   items:  [{ line?, supplier, supplier_custom_name?, part_number, name?, qty, url?,
+ *   items:  [{ line?, supplier, supplier_custom_name?, part_number, name?, qty, url?, price_unit?,
  *              group?: <id bestehender Gruppe>, groupRef?: <ref einer neuen Gruppe> }]
  * }
  * → { items: n, merged: m, orders: k, groups: g }
@@ -65,6 +65,7 @@ function importItems(app, body, userId) {
         name: input.name,
         qty: input.qty,
         url: input.url,
+        price_unit: input.price_unit,
         group: group,
       }, userId);
     } catch (err) {

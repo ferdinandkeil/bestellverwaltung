@@ -1133,5 +1133,276 @@
     "createRule": "@request.auth.id != \"\" && @request.auth.collectionName = \"users\" && uploaded_by = @request.auth.id",
     "updateRule": null,
     "deleteRule": "@request.auth.id != \"\" && @request.auth.collectionName = \"users\""
+  },
+  {
+    "id": "pb_favorite_lists_col",
+    "name": "favorite_lists",
+    "type": "base",
+    "system": false,
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "primaryKey": true,
+        "min": 15,
+        "max": 15,
+        "pattern": "^[a-z0-9]+$",
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "id": "fav_title",
+        "name": "title",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "hidden": false,
+        "min": 1,
+        "max": 150,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "id": "fav_description",
+        "name": "description",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "min": 0,
+        "max": 1000,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "id": "fav_owner",
+        "name": "owner",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "hidden": false,
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "id": "fav_public",
+        "name": "is_public",
+        "type": "bool",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "id": "fav_supplier",
+        "name": "supplier",
+        "type": "select",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "hidden": false,
+        "maxSelect": 1,
+        "values": [
+          "mouser",
+          "farnell",
+          "reichelt",
+          "voelkner",
+          "tme",
+          "wuerth",
+          "printus",
+          "other"
+        ]
+      },
+      {
+        "id": "fav_supplier_name",
+        "name": "supplier_custom_name",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "min": 0,
+        "max": 100,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "id": "pb_favorite_lists_col_created",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false,
+        "system": false,
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "id": "pb_favorite_lists_col_updated",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true,
+        "system": false,
+        "presentable": false,
+        "hidden": false
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX `idx_favorite_lists_owner` ON `favorite_lists` (`owner`)"
+    ],
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\" && @request.auth.collectionName = \"users\" && owner = @request.auth.id",
+    "updateRule": "@request.auth.id != \"\" && owner = @request.auth.id && @request.body.owner:isset = false && @request.body.supplier:isset = false",
+    "deleteRule": "@request.auth.id != \"\" && owner = @request.auth.id"
+  },
+  {
+    "id": "pb_favorite_items_col",
+    "name": "favorite_items",
+    "type": "base",
+    "system": false,
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "primaryKey": true,
+        "min": 15,
+        "max": 15,
+        "pattern": "^[a-z0-9]+$",
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "id": "fvi_list",
+        "name": "list",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "hidden": false,
+        "collectionId": "pb_favorite_lists_col",
+        "cascadeDelete": true,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "id": "fvi_part_no",
+        "name": "part_number",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "hidden": false,
+        "min": 1,
+        "max": 100,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "id": "fvi_name",
+        "name": "name",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": true,
+        "hidden": false,
+        "min": 0,
+        "max": 300,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "id": "fvi_url",
+        "name": "url",
+        "type": "url",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "exceptDomains": [],
+        "onlyDomains": []
+      },
+      {
+        "id": "fvi_qty",
+        "name": "qty",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "hidden": false,
+        "min": 1,
+        "max": null,
+        "onlyInt": true
+      },
+      {
+        "id": "fvi_price",
+        "name": "price_unit",
+        "type": "number",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "min": 0,
+        "max": null,
+        "onlyInt": false
+      },
+      {
+        "id": "fvi_price_date",
+        "name": "price_date",
+        "type": "date",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "hidden": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "id": "pb_favorite_items_col_created",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false,
+        "system": false,
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "id": "pb_favorite_items_col_updated",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true,
+        "system": false,
+        "presentable": false,
+        "hidden": false
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_favorite_items_part` ON `favorite_items` (`list`, `part_number`)"
+    ],
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\" && list.owner = @request.auth.id",
+    "updateRule": "@request.auth.id != \"\" && list.owner = @request.auth.id && @request.body.list:isset = false",
+    "deleteRule": "@request.auth.id != \"\" && list.owner = @request.auth.id"
   }
 ]

@@ -67,3 +67,45 @@ onRecordAfterDeleteSuccess((e) => {
     e.app.logger().debug("recalculateOrderStatus übersprungen", "error", String(err));
   }
 }, "order_items");
+
+/** Favoritenlisten: Titel trimmen, Lieferant/Shop-Name prüfen (ARCHITECTURE.md Kap. 4.7). */
+onRecordValidate((e) => {
+  const { normalizeListSupplier } = require(`${__hooks}/lib/favorites.js`);
+  const list = e.record;
+  list.set("title", list.getString("title").trim());
+  list.set("description", list.getString("description").trim());
+  normalizeListSupplier(list);
+  e.next();
+}, "favorite_lists");
+
+/**
+ * Favoriten-Artikel: Bestellnummer normalisieren, je Liste eindeutig (verständliche Meldung statt Index-Fehler).
+ * Preisstand: ohne Preis leer; wird der Preis ohne neuen Stand geändert (von Hand), gilt „jetzt“.
+ */
+onRecordValidate((e) => {
+  const { normalizePartNumber } = require(`${__hooks}/lib/util.js`);
+  const fav = e.record;
+  const part = normalizePartNumber(fav.getString("part_number"));
+  fav.set("part_number", part);
+  fav.set("name", fav.getString("name").trim());
+
+  let duplicate = null;
+  try {
+    duplicate = e.app.findFirstRecordByFilter("favorite_items", "list = {:list} && part_number = {:part} && id != {:id}",
+      { list: fav.getString("list"), part: part, id: fav.id });
+  } catch (_) { /* keine Dublette */ }
+  if (duplicate) throw new BadRequestError("Die Bestellnummer " + part + " steht schon in dieser Liste.");
+
+  const price = fav.getFloat("price_unit");
+  if (!(price > 0)) {
+    fav.set("price_date", "");
+  } else if (fav.isNew()) {
+    if (fav.getDateTime("price_date").isZero()) fav.set("price_date", new DateTime());
+  } else {
+    const before = fav.original();
+    const priceChanged = before.getFloat("price_unit") !== price;
+    const dateUnchanged = before.getDateTime("price_date").string() === fav.getDateTime("price_date").string();
+    if (priceChanged && dateUnchanged) fav.set("price_date", new DateTime());
+  }
+  e.next();
+}, "favorite_items");
