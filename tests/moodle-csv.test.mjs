@@ -45,6 +45,7 @@ test('Hilfsfunktionen: HTML, Lieferant, Bestellnummer', () => {
   assert.deepEqual(suggestSupplier('reichelt elektronik'), { supplier: 'reichelt', supplier_custom_name: '' });
   assert.deepEqual(suggestSupplier('TME'), { supplier: 'tme', supplier_custom_name: '' });
   assert.deepEqual(suggestSupplier('Würth Elektronik'), { supplier: 'wuerth', supplier_custom_name: '' });
+  assert.deepEqual(suggestSupplier('Printus GmbH'), { supplier: 'printus', supplier_custom_name: '' });
   assert.deepEqual(suggestSupplier('Conrad'), { supplier: 'other', supplier_custom_name: 'Conrad' });
   assert.deepEqual(suggestSupplier(''), { supplier: '', supplier_custom_name: '' });
   assert.equal(normalizePartNumber(' debo  jt esp32-c '), 'DEBO JT ESP32-C');

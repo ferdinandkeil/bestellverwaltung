@@ -11,6 +11,8 @@ export const SUPPLIERS = [
   { value: 'tme', label: 'TME' },
   // Bestellung per Mail, meist Muster: „ohne interne Bestellnummer“ ist vorausgewählt.
   { value: 'wuerth', label: 'Würth Elektronik', withoutInternalOrderNo: true },
+  // Bürobedarf, Bestellung im Webshop.
+  { value: 'printus', label: 'Printus' },
   { value: 'other', label: 'Sonstiger Lieferant' },
 ];
 

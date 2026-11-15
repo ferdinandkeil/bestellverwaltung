@@ -1,6 +1,6 @@
 // Gemeinsame Hilfsfunktionen für die Hooks (CommonJS, wird per require() geladen).
 
-const SUPPLIERS = ["mouser", "farnell", "reichelt", "voelkner", "tme", "wuerth", "other"];
+const SUPPLIERS = ["mouser", "farnell", "reichelt", "voelkner", "tme", "wuerth", "printus", "other"];
 const STATUSES = ["angefragt", "bestellt", "teilgeliefert", "geliefert", "geprueft", "abgerechnet"];
 /** Status, in denen der Lieferstatus automatisch berechnet wird. */
 const AUTO_STATUSES = ["bestellt", "teilgeliefert", "geliefert"];

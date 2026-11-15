@@ -70,7 +70,10 @@ test('Bestellnummer: mehrfacher und unsichtbarer Leerraum wird zusammengefasst, 
 test('verschiedene Lieferanten landen in verschiedenen Körben', async () => {
   const r1 = await addItem(u.token, { supplier: 'mouser', part_number: 'X1', name: 'X', qty: 1 });
   const r2 = await addItem(u.token, { supplier: 'farnell', part_number: 'X1', name: 'X', qty: 1 });
+  const r3 = await addItem(u.token, { supplier: 'printus', part_number: 'X1', name: 'X', qty: 1 });
   assert.notEqual(r1.order.id, r2.order.id);
+  assert.equal(r3.order.supplier, 'printus');
+  assert.equal(new Set([r1.order.id, r2.order.id, r3.order.id]).size, 3);
 });
 
 test('„other“: ein Korb je Shop-Name, Groß-/Kleinschreibung egal', async () => {
