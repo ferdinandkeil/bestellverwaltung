@@ -257,6 +257,88 @@ export function deleteUnmatchedReceipt(id) {
 }
 
 // ---------------------------------------------------------------------------
+// Favoriten (ARCHITECTURE.md Kap. 4.7)
+// ---------------------------------------------------------------------------
+
+/** Alle Favoritenlisten (für alle sichtbar) mit Besitzer und Artikeln (für die Anzahl). */
+export function listFavoriteLists() {
+  return pb.collection('favorite_lists').getFullList({
+    sort: 'title',
+    expand: 'owner,favorite_items_via_list',
+  });
+}
+
+export function getFavoriteList(id) {
+  return pb.collection('favorite_lists').getOne(id, { expand: 'owner' });
+}
+
+/** Eigene Listen eines Lieferanten (Ziel für „In Favoriten“). Bei „sonstige“ wird der Shop-Name im Browser verglichen. */
+export function listOwnFavoriteLists(supplier) {
+  return pb.collection('favorite_lists').getFullList({
+    filter: pb.filter('owner = {:owner} && supplier = {:supplier}', { owner: pb.authStore.record?.id ?? '', supplier }),
+    sort: 'title',
+  });
+}
+
+/** data: { title, description, is_public, supplier, supplier_custom_name } – Besitzer ist der angemeldete Nutzer. */
+export function createFavoriteList(data) {
+  return pb.collection('favorite_lists').create({ ...data, owner: pb.authStore.record?.id ?? '' });
+}
+
+/** Änderbar: title, description, is_public, supplier_custom_name (Lieferant und Besitzer sind fest). */
+export function updateFavoriteList(id, data) {
+  return pb.collection('favorite_lists').update(id, data);
+}
+
+export function deleteFavoriteList(id) {
+  return pb.collection('favorite_lists').delete(id);
+}
+
+export function listFavoriteItems(listId) {
+  return pb.collection('favorite_items').getFullList({ filter: pb.filter('list = {:id}', { id: listId }) });
+}
+
+/** data: { list, part_number, name?, url?, qty, price_unit? } */
+export function createFavoriteItem(data) {
+  return pb.collection('favorite_items').create(data);
+}
+
+export function updateFavoriteItem(id, data) {
+  return pb.collection('favorite_items').update(id, data);
+}
+
+export function deleteFavoriteItem(id) {
+  return pb.collection('favorite_items').delete(id);
+}
+
+/**
+ * Positionen einer Bestellung in eine Favoritenliste übernehmen.
+ * body: { order, items?: [ids], list?: id | new_list?: { title, description?, is_public? } }
+ * → { list, added, existing, priceUpdated }
+ */
+export function addFavoritesFromOrder(body) {
+  return pb.send('/api/lab/favorite-lists/from-order', { method: 'POST', body });
+}
+
+/**
+ * Mehrere Positionen in die Sammelkörbe buchen (alles oder nichts).
+ * items: [{ supplier, supplier_custom_name?, part_number, name?, url?, qty, price_unit?, group? }]
+ * → { items, merged, orders, groups }
+ */
+export function addItemsToCarts(items) {
+  return pb.send('/api/lab/cart-items/batch', { method: 'POST', body: { groups: [], items } });
+}
+
+/** Offener Warenkorb eines Lieferanten (bei „sonstige“ je Shop-Name) oder null. */
+export async function findOpenCart(supplier, supplierCustomName = '') {
+  const carts = await pb.collection('orders').getFullList({
+    filter: pb.filter('supplier = {:supplier} && status = "angefragt"', { supplier }),
+  });
+  const wanted = (supplierCustomName || '').trim().toLowerCase();
+  return carts.find((c) => (c.supplier_custom_name || '').toLowerCase() === wanted) ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Realtime
 // ---------------------------------------------------------------------------
 

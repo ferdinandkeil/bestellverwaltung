@@ -74,6 +74,10 @@ if [ "$status" -eq 0 ] && [ "$E2E" -eq 1 ]; then
     echo "--- Browser-Durchlauf Shop-Export ---"
     node "$ROOT/tests/e2e-shop-export.mjs" || status=$?
   fi
+  if [ "$status" -eq 0 ]; then
+    echo "--- Browser-Durchlauf Favoriten ---"
+    node "$ROOT/tests/e2e-favorites.mjs" || status=$?
+  fi
 fi
 if [ "$status" -ne 0 ]; then
   echo "--- pocketbase.log (letzte 40 Zeilen) ---" >&2

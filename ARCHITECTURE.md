@@ -100,7 +100,7 @@ Projekt/
 │   ├── run.sh                      # frische PocketBase + Mailpit, dann node --test [--e2e]
 │   ├── *.test.mjs                  # Server-, Rechte-, OTP- und Unit-Tests (migration.test.mjs: eigene Instanz)
 │   ├── browser.mjs                 # CDP-Client für headless Chrome
-│   ├── e2e.mjs, e2e-scanner.mjs    # Browser-Durchläufe App und Lieferschein-Erfassung
+│   ├── e2e*.mjs                    # Browser-Durchläufe: App, Lieferschein-Erfassung, Moodle-Import, Shop-Export, Favoriten
 │   └── helpers.mjs
 ├── samples/                        # echte Belege zur Entwicklung – nie committen (.gitignore)
 └── docs/DEPLOYMENT.md              # Uberspace-Betrieb, Deploy, Backup
@@ -232,7 +232,7 @@ registerPlugin({
 ## 7. UI-Konventionen
 * **Mobile-First:** große Touch-Ziele (Schnellbuttons „+1“, „Rest komplett“), Modals als Bottom-Sheet auf dem Smartphone.
 * **Dashboard:** Filter (Status, Lieferant, Gruppe) auf dem Smartphone einklappbar, aktive Filter als entfernbare Chips; Filter werden pro Browser gemerkt.
-* **Hauptnavigation:** *Bestellungen*, *Gruppen/Projekte*, *Favoriten*.
+* **Hauptnavigation:** *Bestellungen*, *Gruppen/Projekte*, *Favoriten*. Der Schriftzug „Labor-Bestellungen“ erscheint erst ab Tablet-Breite, damit die Kopfzeile auf dem Smartphone nicht überläuft.
 * **Gruppenauswahl:** immer nach Veranstaltung/Semester gegliedert (neuestes Semester zuerst).
 * **Meldungen:** höchstens drei Toasts gleichzeitig (älteste fällt weg).
 * **Sicherheitsabfragen:** eigener Dialog im Stil der App (`confirmAction()` in `core/ui.js`, natives `<dialog>` mit `showModal()`; auf dem Smartphone als Bottom-Sheet), keine Browser-Dialoge. Der Bestätigungsknopf nennt die Aktion („Löschen“, „Buchen“, „Zurücksetzen“ …). Endgültiges Löschen oder Verwerfen wird rot dargestellt, der Fokus liegt dann auf „Abbrechen“. Escape, ein Klick neben den Dialog und „Abbrechen“ brechen ab, darunterliegende Modals bleiben offen.
@@ -240,7 +240,7 @@ registerPlugin({
 
 ## 8. Qualitätssicherung
 * `tests/run.sh` startet eine frische PocketBase-Instanz (+ Mailpit als Test-Mailserver) außerhalb von Dropbox, importiert das Schema und führt `node --test` aus (nur Node-Bordmittel, kein npm).
-* `tests/run.sh --e2e` führt zusätzlich die Browser-Durchläufe in headless Chrome aus (App-Ablauf und Lieferschein-Erfassung); sie schlagen auch bei Fehlern in der Browser-Konsole fehl.
+* `tests/run.sh --e2e` führt zusätzlich die Browser-Durchläufe in headless Chrome aus (App-Ablauf, Lieferschein-Erfassung, Moodle-Import, Shop-Export, Favoriten); sie schlagen auch bei Fehlern in der Browser-Konsole fehl. Klicks warten, bis das Element sichtbar ist (Alpine schaltet `x-show` erst im nächsten Animation-Frame um).
 * Testdaten sind synthetisch. Der Scanner-Test erzeugt einen Lieferschein im Reichelt-Layout als HTML und „fotografiert“ ihn schräg; echte Belege (`samples/`) gelangen nie ins Repo.
 * Nach Änderungen an `pb_hooks/` oder am Schema: `tests/run.sh`; nach UI-Änderungen zusätzlich `scripts/build-css.sh` und `tests/run.sh --e2e`.
 
