@@ -84,11 +84,11 @@
 3. Später (Phase 6): Erfassung über den Printus-Produktlink (Nummer aus der URL übernehmen).
 
 ## Favoriten (Branch `favoriten`, eingeschoben 11/2026)
-Entscheidungen in ARCHITECTURE Kap. 2 (Rechte) und 4.7.
-1. Schema: `favorite_lists`, `favorite_items` (Rechte: alle lesen, nur Besitzer ändert), Record-Hooks (Nummer normalisieren, Lieferant/Shop-Name, Preisstand).
-2. Route `POST /api/lab/favorite-lists/from-order` (`lib/favorites.js`, transaktional); Sammel-Import gibt `price_unit` weiter.
-3. Oberfläche: Menüpunkt „Favoriten“ (Übersicht mit Filter „nur eigene und öffentliche“), Listenansicht (bearbeiten, in den Warenkorb legen), Knopf „In Favoriten“ in der Bestellung (`modules/favorites/`).
-4. Tests: Rechte, Übernahme (Auswahl, Lieferant, Dubletten, Preis), Browser-Durchlauf.
+**Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidungen in ARCHITECTURE Kap. 2 (Rechte) und 4.7.
+1. ✔ Schema: `favorite_lists`, `favorite_items` (Rechte: alle lesen, nur Besitzer ändert), Record-Hooks (Nummer normalisieren, Lieferant/Shop-Name, Preisstand).
+2. ✔ Route `POST /api/lab/favorite-lists/from-order` (`lib/favorites.js`, transaktional); Sammel-Import gibt `price_unit` weiter.
+3. ✔ Oberfläche: Menüpunkt „Favoriten“ (Übersicht mit Filter „nur eigene und öffentliche“), Listenansicht (bearbeiten, in den Warenkorb legen), Knopf „In Favoriten“ in der Bestellung (`modules/favorites/`).
+4. ✔ Tests: Rechte, Übernahme (Auswahl, Lieferant, Dubletten, Preis), Browser-Durchlauf (`tests/favorites.test.mjs`, `tests/e2e-favorites.mjs`).
 5. Später: Liste kopieren.
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
