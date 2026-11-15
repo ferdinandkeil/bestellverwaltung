@@ -109,5 +109,22 @@ await changeStatus(coToken, conrad, 'advance', { internal_order_no: '2026IW01050
 const litze = (await itemsOf(conrad)).find((it) => it.part_number === '7654321-62');
 await http('PATCH', `/api/collections/order_items/records/${litze.id}`, { token: coToken, json: { qty_cancelled: 2 } });
 
-console.log('Testdaten angelegt: 5 Gruppen, 7 Bestellungen (angefragt, bestellt, teilgeliefert, geliefert, abgerechnet).');
+// ---- Favoriten: eigene (öffentlich und nicht), fremde öffentliche und fremde nicht öffentliche ----
+const fromOrder = (token, body) => http('POST', '/api/lab/favorite-lists/from-order', { token, json: body });
+await fromOrder(meToken, { order: reichelt, new_list: {
+  title: 'Grundausstattung Elektronik-Projekt', description: 'Was jede Gruppe zu Semesterbeginn braucht.', is_public: true,
+} });
+const buero = await http('POST', '/api/collections/favorite_lists/records', {
+  token: meToken, json: { owner: me.id, title: 'Bürobedarf Standard', supplier: 'printus', is_public: false },
+});
+for (const it of [
+  { part_number: '892586', name: 'Kopierpapier A4, 500 Blatt', qty: 10, price_unit: 3.99 },
+  { part_number: '423741', name: 'Ordner breit, blau', qty: 5, price_unit: 1.85 },
+]) {
+  await http('POST', '/api/collections/favorite_items/records', { token: meToken, json: { list: buero.id, ...it } });
+}
+await fromOrder(coToken, { order: tme, new_list: { title: 'Messtechnik: Strommessung', is_public: true } });
+await fromOrder(coToken, { order: conrad, new_list: { title: 'Werkstatt Lötplatz', is_public: false } });
+
+console.log('Testdaten angelegt: 5 Gruppen, 7 Bestellungen (angefragt, bestellt, teilgeliefert, geliefert, abgerechnet), 4 Favoritenlisten.');
 console.log('Nutzer: ' + USERS.map((u) => `${u.email} (${u.name})`).join(', '));
