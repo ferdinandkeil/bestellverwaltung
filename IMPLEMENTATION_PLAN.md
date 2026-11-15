@@ -78,7 +78,10 @@
 3. ✔ „Ohne interne Bestellnummer“ beim Bestellen ausdrücklich wählbar und gespeichert (`orders.without_internal_order_no`), bei Würth vorausgewählt.
 4. Tests: `tests/migration.test.mjs` (eigene PocketBase-Instanz), Erweiterungen in `status`, `shop-export`, `e2e-shop-export`.
 
-**Nachtrag 11/2026 (Branch `lieferant-printus`):** ✔ Printus (Bürobedarf, Webshop mit interner Bestellnummer) als fester Lieferant `printus`; keine Migration (keine Altbestellungen), vorerst kein Export und kein Scanner-Profil.
+**Nachtrag 11/2026 (Branch `lieferant-printus`):**
+1. ✔ Printus (Bürobedarf, Webshop mit interner Bestellnummer) als fester Lieferant `printus`; keine Migration (keine Altbestellungen), vorerst kein Scanner-Profil.
+2. ✔ Export als **Abhakliste** (Printus nimmt je Eingabe nur eine Nummer ohne Menge an): je Position Haken für Nummer und Menge, Stand im Browser, „Bestellt“ erst bei vollständiger Liste (ARCHITECTURE Kap. 6). Tests in `shop-export.test.mjs` und `e2e-shop-export.mjs`.
+3. Später (Phase 6): Erfassung über den Printus-Produktlink (Nummer aus der URL übernehmen).
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
