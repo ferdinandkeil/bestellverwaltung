@@ -83,6 +83,14 @@
 2. ✔ Export als **Abhakliste** (Printus nimmt je Eingabe nur eine Nummer ohne Menge an): je Position Haken für Nummer und Menge, Stand im Browser, „Bestellt“ erst bei vollständiger Liste (ARCHITECTURE Kap. 6). Tests in `shop-export.test.mjs` und `e2e-shop-export.mjs`.
 3. Später (Phase 6): Erfassung über den Printus-Produktlink (Nummer aus der URL übernehmen).
 
+## Favoriten (Branch `favoriten`, eingeschoben 11/2026)
+Entscheidungen in ARCHITECTURE Kap. 2 (Rechte) und 4.7.
+1. Schema: `favorite_lists`, `favorite_items` (Rechte: alle lesen, nur Besitzer ändert), Record-Hooks (Nummer normalisieren, Lieferant/Shop-Name, Preisstand).
+2. Route `POST /api/lab/favorite-lists/from-order` (`lib/favorites.js`, transaktional); Sammel-Import gibt `price_unit` weiter.
+3. Oberfläche: Menüpunkt „Favoriten“ (Übersicht mit Filter „nur eigene und öffentliche“), Listenansicht (bearbeiten, in den Warenkorb legen), Knopf „In Favoriten“ in der Bestellung (`modules/favorites/`).
+4. Tests: Rechte, Übernahme (Auswahl, Lieferant, Dubletten, Preis), Browser-Durchlauf.
+5. Später: Liste kopieren.
+
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
 2. `modules/word-export/docx-generator.js` (PizZip + docxtemplater aus `vendor/`) im Slot `order-detail-actions`; Zusatzfelder in `orders.custom_fields`; Platzhalter u. a. `{supplier}`, `{total_net}`, `{total_gross}`, `{shipping_cost}`, Loop `{#items}…{/items}`.
