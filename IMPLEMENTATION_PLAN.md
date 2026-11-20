@@ -53,6 +53,8 @@
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
    * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege vorliegen (am einfachsten per „Problem melden“).
    * TME und Würth sind nur an je einem echten Beleg geprüft (11/2026); weitere Meldungen abwarten.
+   * **Auswertung Mouser/Farnell (20.11.2026):** Lieferant im Kopf gut lesbar; Mouser-Bestellnummern gut, die kleinen Mengen in den Tabellenzellen liest Tesseract auch bei voller Auflösung und als Ausschnitt nicht (Cactus Mirage als Alternative getestet: ebenso wenig). Interne Bestellnummer erst ohne Verkleinerung auf 3200 px lesbar. Farnell: Bestellnummer unterstrichen, Menge unter Barcode – beides nicht gelesen. Daraus geplant: volle Kameraauflösung, Drehen im Ecken-Schritt, Vorschaubilder im echten Seitenformat, Warnung bei fest gewählter, aber nicht passender Bestellung, Auswahlweg in der Meldung, Eckenerkennung bei gefaltetem Blatt, Lieferanten-Erkennung Mouser/Farnell; Mengenlesung Mouser noch offen.
+   * **Live-Kamera mit automatischem Auslösen** (Vorschlag 11/2026): Kamerabild im Scanner (`getUserMedia`), Live-Eckenerkennung, Auslösen bei ruhigem, scharfem, ausreichend großem Blatt, Foto über `ImageCapture.takePhoto()`; Taschenlampe statt Blitz. Vorab Machbarkeit auf dem Handy mit der Test-Seite `pb_public/dev/kamera-test.html` prüfen (ohne Login, keine Daten; wird nach der Entscheidung entfernt). Entscheidend: Auflösung von `takePhoto()` im Vergleich zur Kamera-App.
 
 ## Phase 3: Moodle-Import (Branch `phase-3-moodle-import`)
 

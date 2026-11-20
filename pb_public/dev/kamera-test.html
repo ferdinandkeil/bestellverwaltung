@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Kamera-Test (Entwicklung)</title>
+  <!--
+    Entwicklerwerkzeug, nicht Teil der App: prüft auf einem echten Handy, ob eine Live-Kamera im Browser
+    (getUserMedia + ImageCapture) für die Lieferschein-Erfassung taugt – Fotoauflösung von takePhoto(),
+    Taschenlampe/Fokus, Dauer der Live-Eckenerkennung, Schärfe, Stabilität für automatisches Auslösen.
+    Es wird nichts gesendet oder gespeichert; Fotos bleiben im Browser (optional „Foto speichern“).
+    Ohne Login erreichbar, greift auf keine Daten zu. Wird nach der Entscheidung wieder entfernt.
+  -->
+  <style>
+    :root { --bg: #f8fafc; --fg: #0f172a; --muted: #64748b; --line: #cbd5e1; --accent: #1d4ed8; --ok: #15803d; --warn: #b45309; --card: #fff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f172a; --fg: #e2e8f0; --muted: #94a3b8; --line: #334155; --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --card: #1e293b; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 12px 16px 48px; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
+    h1 { font-size: 1.25rem; margin: 0 0 4px; }
+    h2 { font-size: 1rem; margin: 20px 0 6px; }
+    p.note { color: var(--muted); margin: 0 0 12px; font-size: .875rem; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+    button, select, input[type=number] { font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button:disabled { opacity: .45; }
+    input[type=number] { width: 6.5em; padding: 6px 8px; }
+    label { display: inline-flex; gap: 6px; align-items: center; }
+    .stage { position: relative; width: 100%; background: #000; border-radius: 8px; overflow: hidden; touch-action: manipulation; }
+    .stage video { display: block; width: 100%; height: auto; }
+    .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    #status { position: absolute; left: 8px; top: 8px; right: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: .8rem; white-space: pre-line; }
+    pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; overflow-x: auto; font-size: .75rem; white-space: pre-wrap; word-break: break-word; margin: 0; }
+    .shot { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 8px 0; font-size: .85rem; }
+    .shot img { display: block; max-width: 100%; max-height: 260px; margin-bottom: 6px; border-radius: 4px; }
+    .ok { color: var(--ok); } .warn { color: var(--warn); }
+  </style>
+</head>
+<body>
+  <h1>Kamera-Test</h1>
+  <p class="note">Entwicklerwerkzeug für die Lieferschein-Erfassung. Es wird nichts gesendet oder gespeichert.
+    Ablauf: Kamera starten → Blatt ins Bild → beobachten, ob der Rahmen stabil erkannt wird → Foto auslösen
+    (von Hand oder automatisch) → Bericht kopieren und an Claude geben.</p>
+
+  <div class="bar">
+    <button id="start" class="primary">Kamera starten</button>
+    <button id="torch" disabled>Taschenlampe an</button>
+    <button id="shoot" disabled>Foto (takePhoto)</button>
+    <button id="grab" disabled>Standbild aus Video</button>
+  </div>
+  <div class="bar">
+    <label>Blitz bei takePhoto
+      <select id="fill"><option value="">Standard</option><option value="off">aus</option><option value="flash">Blitz</option><option value="auto">auto</option></select>
+    </label>
+    <label><input type="checkbox" id="auto"> automatisch auslösen</label>
+    <label>Schärfe ≥ <input type="number" id="sharpMin" value="60" min="0" step="10"></label>
+  </div>
+
+  <div class="stage" id="stage">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="status">Kamera nicht gestartet.</div>
+  </div>
+  <p class="note">Tippen ins Bild setzt (falls unterstützt) den Fokuspunkt.</p>
+
+  <h2>Fotos</h2>
+  <div id="shots"><p class="note">Noch keine.</p></div>
+
+  <h2>Bericht</h2>
+  <div class="bar"><button id="copy">Bericht kopieren</button><span id="copied" class="note"></span></div>
+  <pre id="report">–</pre>
+
+<script type="module">
+import { loadVision, detectCorners } from '../modules/delivery-scanner/vision.js';
+
+const $ = (id) => document.getElementById(id);
+const video = $('video');
+const overlay = $('overlay');
+const report = {
+  page: 'kamera-test v1',
+  userAgent: navigator.userAgent,
+  screen: { width: screen.width, height: screen.height, dpr: devicePixelRatio },
+  imageCaptureApi: 'ImageCapture' in window,
+  errors: [],
+  shots: [],
+};
+let track = null;
+let imageCapture = null;
+let caps = {};
+let torchOn = false;
+let busy = false;
+let lastShotAt = 0;
+
+// Live-Erkennung: Statistik und Zustand
+const live = { frames: 0, totalMs: 0, maxMs: 0, detected: 0, corners: null, stableSince: 0, sharp: 0, area: 0 };
+const DETECT_SIDE = 960;   // Breite des Vorschaubilds für die Erkennung (wie vision.js: ~1000 px)
+const STABLE_MS = 1000;    // so lange muss der Rahmen ruhig stehen
+const STABLE_TOL = 0.012;  // erlaubte Bewegung der Ecken (Anteil der Bildbreite)
+const MIN_AREA = 0.3;      // Blatt muss mindestens 30 % des Bildes füllen
+const small = document.createElement('canvas');
+
+function render() {
+  const r = { ...report, live: liveStats() };
+  $('report').textContent = JSON.stringify(r, null, 2);
+}
+function liveStats() {
+  return live.frames ? {
+    frames: live.frames,
+    avgMs: Math.round(live.totalMs / live.frames),
+    maxMs: Math.round(live.maxMs),
+    detectedShare: +(live.detected / live.frames).toFixed(2),
+  } : null;
+}
+function fail(where, err) {
+  const msg = `${where}: ${err?.name ?? ''} ${err?.message ?? err}`;
+  report.errors.push(msg);
+  $('status').textContent = msg;
+  render();
+}
+
+// ---- Kamera ------------------------------------------------------------------------
+$('start').addEventListener('click', async () => {
+  $('start').disabled = true;
+  try {
+    $('status').textContent = 'Kamera wird gestartet …';
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+    });
+    video.srcObject = stream;
+    await video.play();
+    track = stream.getVideoTracks()[0];
+    caps = track.getCapabilities?.() ?? {};
+    // Geräte-IDs weglassen – für den Test ohne Belang
+    const { deviceId, groupId, ...settings } = track.getSettings();
+    const { deviceId: _d, groupId: _g, ...capsShown } = caps;
+    report.videoSettings = settings;
+    report.videoCapabilities = capsShown;
+    if ('focusMode' in caps && caps.focusMode.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch((e) => fail('focusMode', e));
+    }
+    if ('ImageCapture' in window) {
+      imageCapture = new ImageCapture(track);
+      report.photoCapabilities = await imageCapture.getPhotoCapabilities().then(plain).catch((e) => ({ error: String(e) }));
+      report.photoSettings = await imageCapture.getPhotoSettings().then(plain).catch((e) => ({ error: String(e) }));
+      $('shoot').disabled = false;
+    }
+    $('grab').disabled = false;
+    $('torch').disabled = !caps.torch;
+    if (!caps.torch) $('torch').textContent = 'Taschenlampe (nicht unterstützt)';
+    render();
+
+    $('status').textContent = 'Bildverarbeitung wird geladen …';
+    const t0 = performance.now();
+    await loadVision();
+    report.visionLoadMs = Math.round(performance.now() - t0);
+    render();
+    requestAnimationFrame(loop);
+  } catch (err) {
+    fail('Kamera', err);
+    $('start').disabled = false;
+  }
+});
+
+/** MediaSettingsRange-Objekte u. ä. in einfache Objekte wandeln (für JSON). */
+function plain(o) {
+  const out = {};
+  for (const k in o) {
+    const v = o[k];
+    out[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...plainRange(v) } : v;
+  }
+  return out;
+}
+function plainRange(v) {
+  const out = {};
+  for (const k in v) out[k] = v[k];
+  return out;
+}
+
+$('torch').addEventListener('click', async () => {
+  try {
+    torchOn = !torchOn;
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    $('torch').textContent = torchOn ? 'Taschenlampe aus' : 'Taschenlampe an';
+  } catch (err) { fail('Taschenlampe', err); }
+});
+
+// Fokuspunkt per Tippen (pointsOfInterest, normiert 0..1)
+$('stage').addEventListener('click', async (e) => {
+  if (!track || !('pointsOfInterest' in caps)) return;
+  const r = video.getBoundingClientRect();
+  const p = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  try {
+    await track.applyConstraints({ advanced: [{ pointsOfInterest: [p], focusMode: 'single-shot' }] });
+    setTimeout(() => track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 1500);
+  } catch (err) { fail('Fokus', err); }
+});
+
+// ---- Live-Erkennung ---------------------------------------------------------------------
+function loop() {
+  if (!track || track.readyState !== 'live') return;
+  if (!busy && video.videoWidth) {
+    const t0 = performance.now();
+    const scale = DETECT_SIDE / video.videoWidth;
+    small.width = DETECT_SIDE;
+    small.height = Math.round(video.videoHeight * scale);
+    small.getContext('2d').drawImage(video, 0, 0, small.width, small.height);
+    const { corners, detected } = detectCorners(small);
+    const sharp = sharpness(small);
+    const ms = performance.now() - t0;
+    live.frames++; live.totalMs += ms; live.maxMs = Math.max(live.maxMs, ms);
+    if (detected) live.detected++;
+
+    const now = performance.now();
+    const area = detected ? quadArea(corners) / (small.width * small.height) : 0;
+    const moved = detected && live.corners ? maxMove(corners, live.corners) / small.width : 1;
+    if (!detected || moved > STABLE_TOL) live.stableSince = now;
+    live.corners = detected ? corners : null;
+    live.sharp = sharp;
+    live.area = area;
+    const stableMs = detected ? now - live.stableSince : 0;
+    const sharpOk = sharp >= Number($('sharpMin').value);
+    const ready = detected && area >= MIN_AREA && stableMs >= STABLE_MS && sharpOk;
+
+    drawOverlay(detected ? corners : null, small.width, small.height, ready);
+    $('status').textContent = [
+      `Video ${video.videoWidth}×${video.videoHeight} · Erkennung ${Math.round(ms)} ms (Ø ${Math.round(live.totalMs / live.frames)} ms)`,
+      detected ? `Blatt erkannt: ${Math.round(area * 100)} % des Bildes${area < MIN_AREA ? ' (näher heran)' : ''} · ruhig seit ${(stableMs / 1000).toFixed(1)} s` : 'Kein Blatt erkannt',
+      `Schärfe ${Math.round(sharp)}${sharpOk ? '' : ' (zu unscharf)'}${ready ? ' · BEREIT' : ''}`,
+    ].join('\n');
+
+    if (ready && $('auto').checked && now - lastShotAt > 3000) {
+      lastShotAt = now;
+      shoot(imageCapture ? 'takePhoto (automatisch)' : 'Standbild (automatisch)');
+    }
+    if (live.frames % 30 === 0) render();
+  }
+  // nicht jeden Frame: Erkennung kostet Rechenzeit, ~6–8 Durchläufe pro Sekunde genügen
+  setTimeout(() => requestAnimationFrame(loop), 120);
+}
+
+/** Schärfe: Varianz des Laplace-Filters auf dem Graubild (größer = schärfer). */
+function sharpness(canvas) {
+  const cv = window.cv;
+  const src = cv.imread(canvas);
+  const gray = new cv.Mat();
+  const lap = new cv.Mat();
+  const mean = new cv.Mat();
+  const std = new cv.Mat();
+  try {
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    cv.Laplacian(gray, lap, cv.CV_64F);
+    cv.meanStdDev(lap, mean, std);
+    return std.doubleAt(0, 0) ** 2;
+  } finally {
+    [src, gray, lap, mean, std].forEach((m) => m.delete());
+  }
+}
+
+const KEYS = ['topLeftCorner', 'topRightCorner', 'bottomRightCorner', 'bottomLeftCorner'];
+function quadArea(c) {
+  const p = KEYS.map((k) => c[k]);
+  let s = 0;
+  for (let i = 0; i < 4; i++) s += p[i].x * p[(i + 1) % 4].y - p[(i + 1) % 4].x * p[i].y;
+  return Math.abs(s) / 2;
+}
+function maxMove(a, b) {
+  return Math.max(...KEYS.map((k) => Math.hypot(a[k].x - b[k].x, a[k].y - b[k].y)));
+}
+function drawOverlay(corners, w, h, ready) {
+  const W = overlay.clientWidth * devicePixelRatio;
+  const H = overlay.clientHeight * devicePixelRatio;
+  overlay.width = W; overlay.height = H;
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  if (!corners) return;
+  ctx.lineWidth = 4 * devicePixelRatio;
+  ctx.strokeStyle = ready ? '#22c55e' : '#3b82f6';
+  ctx.fillStyle = ready ? 'rgba(34,197,94,.15)' : 'rgba(59,130,246,.12)';
+  ctx.beginPath();
+  KEYS.forEach((k, i) => {
+    const x = corners[k].x / w * W;
+    const y = corners[k].y / h * H;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+// ---- Fotos -------------------------------------------------------------------------------
+$('shoot').addEventListener('click', () => shoot('takePhoto'));
+$('grab').addEventListener('click', () => shoot('Standbild'));
+
+async function shoot(method) {
+  if (busy) return;
+  busy = true;
+  const t0 = performance.now();
+  try {
+    let blob;
+    const settings = {};
+    if (method.startsWith('takePhoto')) {
+      const pc = report.photoCapabilities ?? {};
+      if (pc.imageWidth?.max) settings.imageWidth = pc.imageWidth.max;
+      if (pc.imageHeight?.max) settings.imageHeight = pc.imageHeight.max;
+      if ($('fill').value) settings.fillLightMode = $('fill').value;
+      blob = await imageCapture.takePhoto(settings);
+    } else {
+      const c = document.createElement('canvas');
+      c.width = video.videoWidth; c.height = video.videoHeight;
+      c.getContext('2d').drawImage(video, 0, 0);
+      blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
+    }
+    const ms = Math.round(performance.now() - t0);
+    const bmp = await createImageBitmap(blob);
+    // Wie groß ist das Blatt im Foto? (entscheidend für die Lesbarkeit kleiner Schrift)
+    const full = document.createElement('canvas');
+    full.width = bmp.width; full.height = bmp.height;
+    full.getContext('2d').drawImage(bmp, 0, 0);
+    const { corners, detected } = detectCorners(full);
+    const paperWidth = detected
+      ? Math.round(Math.max(dist(corners.topLeftCorner, corners.topRightCorner), dist(corners.bottomLeftCorner, corners.bottomRightCorner)))
+      : null;
+    const shot = {
+      method, requested: settings, ms, width: bmp.width, height: bmp.height,
+      kB: Math.round(blob.size / 1024), type: blob.type, paperDetected: detected, paperWidthPx: paperWidth,
+      liveSharpness: Math.round(live.sharp), liveArea: +live.area.toFixed(2),
+    };
+    report.shots.push(shot);
+    addShot(shot, blob);
+    render();
+  } catch (err) {
+    fail(method, err);
+  } finally {
+    busy = false;
+  }
+}
+const dist = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+
+function addShot(shot, blob) {
+  const box = $('shots');
+  box.querySelector('p.note')?.remove();
+  const url = URL.createObjectURL(blob);
+  const div = document.createElement('div');
+  div.className = 'shot';
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = 'Foto ' + report.shots.length;
+  const info = document.createElement('div');
+  info.textContent = `${shot.method}: ${shot.width}×${shot.height} px, ${shot.kB} kB, ${shot.ms} ms · ` +
+    (shot.paperDetected ? `Blattbreite im Foto ${shot.paperWidthPx} px` : 'Blatt im Foto nicht erkannt');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `kamera-test-${report.shots.length}.jpg`;
+  a.textContent = 'Foto speichern';
+  div.append(img, info, a);
+  box.prepend(div);
+}
+
+// ---- Bericht -------------------------------------------------------------------------------
+$('copy').addEventListener('click', async () => {
+  render();
+  try {
+    await navigator.clipboard.writeText($('report').textContent);
+    $('copied').textContent = 'kopiert';
+  } catch {
+    $('copied').textContent = 'Kopieren nicht möglich – Text unten markieren';
+  }
+});
+render();
+</script>
+</body>
+</html>
