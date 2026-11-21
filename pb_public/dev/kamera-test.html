@@ -202,10 +202,14 @@ $('camera').addEventListener('change', async (e) => {
   try { await openCamera(e.target.value); } catch (err) { fail('Kamerawechsel', err); }
 });
 
-/** Hauptkamera hinten: bei Android „camera2 0, facing back“, sonst die erste Rückkamera. */
+/**
+ * Hauptkamera hinten: bei Android „camera 0, facing back“ bzw. „camera2 0, facing back“ (je nach
+ * Chrome-Version), sonst die Rückkamera mit der kleinsten Nummer, sonst die erste Rückkamera.
+ */
 function preferredCamera(cams) {
   const back = cams.filter((d) => /back|rück|environment/i.test(d.label));
-  return back.find((d) => /camera2 0\b/.test(d.label)) ?? back[0] ?? null;
+  const no = (d) => Number(d.label.match(/camera2? (\d+)/)?.[1] ?? Infinity);
+  return [...back].sort((x, y) => no(x) - no(y))[0] ?? null;
 }
 
 /** Kamera öffnen (deviceId = null: Rückkamera nach Wahl des Browsers) und alles daran ausrichten. */
@@ -215,7 +219,9 @@ async function openCamera(deviceId) {
   torchOn = false;
   $('torch').textContent = 'Taschenlampe an';
   $('status').textContent = 'Kamera wird gestartet …';
-  const size = { width: { ideal: 3840 }, height: { ideal: 2160 } };
+  // 4:3 wie das Foto von takePhoto(): bei 16:9 schneidet die Vorschau den Sensor an der kurzen Seite
+  // ab, das Blatt wirkt dort größer als im Foto. Angaben in Sensor-Ausrichtung (quer).
+  const size = { aspectRatio: { ideal: 4 / 3 }, width: { ideal: 4080 }, height: { ideal: 3060 } };
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: deviceId ? { deviceId: { exact: deviceId }, ...size } : { facingMode: { ideal: 'environment' }, ...size },
