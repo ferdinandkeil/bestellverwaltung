@@ -11,15 +11,22 @@ import {
   createOrderFromDeliveryNote, createUnmatchedReceipt,
 } from '../../core/api.js';
 import { toast, confirmAction } from '../../core/ui.js';
-import { loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, toGrayJpeg, toJpeg } from './vision.js';
-import { preloadOcr, recognizePage, terminateOcr } from './ocr.js';
-import { extractRows, matchRows, orderNumberTokens, rankOrders, findInternalOrderNumbers } from './matcher.js';
+import {
+  loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, prepareForOcr, sharpness, SHARPNESS_MIN,
+  downscale, toGrayJpeg, toJpeg,
+} from './vision.js';
+import { preloadOcr, recognizePage, recognizeNumbers, terminateOcr } from './ocr.js';
+import { extractRows, boxKey, matchRows, orderNumberTokens, rankOrders, findInternalOrderNumbers } from './matcher.js';
 import { detectProfile, profileForOrder, profileMatchesOrder } from './profiles/index.js';
 import { jpegsToPdf } from './pdf.js';
 import { assessRecognition, buildAnalysis } from './report.js';
 
 const MAX_RECEIPT_BYTES = 15 * 1024 * 1024; // = maxSize von deliveries.receipt
 const MAX_REPORT_PHOTO_BYTES = 5 * 1024 * 1024; // = maxSize von scan_reports.photos
+/** Längste Seite der Originalfotos in Problem-Meldungen (Dateigröße; für die Analyse genügt das). */
+const REPORT_PHOTO_SIDE = 3200;
+/** Längste Seite der Seitenbilder im Beleg-PDF (gut lesbar, PDF bleibt klein; die OCR nutzt die volle Auflösung). */
+const RECEIPT_PAGE_SIDE = 2600;
 const CORNER_KEYS = ['topLeftCorner', 'topRightCorner', 'bottomRightCorner', 'bottomLeftCorner'];
 const STATUS_COLORS = { sure: '#059669', check: '#d97706', none: '#dc2626' };
 
@@ -70,6 +77,7 @@ const template = /* html */ `
                   <span x-text="'Seite ' + (i + 1)"></span>
                   <button type="button" class="text-red-700" @click="removePage(i)" :aria-label="'Seite ' + (i + 1) + ' entfernen'">✕</button>
                 </div>
+                <p x-show="p.blurry" class="bg-amber-50 px-2 py-1 text-xs text-amber-900" data-blurry>Unscharf – besser neu aufnehmen</p>
               </li>
             </template>
           </ol>
@@ -279,7 +287,7 @@ const template = /* html */ `
                   <template x-for="u in unmatched" :key="u.key">
                     <li class="text-sm" :data-unmatched="u.key">
                       <div class="flex flex-wrap items-center gap-2">
-                        <span class="font-mono" x-text="u.qty + ' × ' + u.part"></span>
+                        <span class="font-mono" x-text="(u.qty ?? '?') + ' × ' + u.part"></span>
                         <select class="input ml-auto w-auto" x-model="u.assignTo" :disabled="u.assigned" @change="assignUnmatched(u)"
                                 :aria-label="'Zeile ' + u.part + ' zuordnen'">
                           <option value="">– zuordnen –</option>
@@ -472,8 +480,10 @@ function component() {
       try {
         await loadVision();
         const canvas = await fileToCanvas(file);
-        const { corners, detected } = detectCorners(canvas);
-        source = { canvas, corners, cornersAuto: detected ? structuredClone(corners) : null, detected, drag: null, display: null };
+        const { corners, detected, method } = detectCorners(canvas);
+        source = {
+          canvas, corners, cornersAuto: detected ? structuredClone(corners) : null, cornersMethod: method, detected, drag: null, display: null,
+        };
         this.cornersDetected = detected;
         this.step = 'corners';
         await this.$nextTick();
@@ -638,20 +648,29 @@ function component() {
       this.busyText = 'Seite wird entzerrt …';
       try {
         const canvas = rectify(source.canvas, source.corners);
-        const [jpeg, original] = await Promise.all([toGrayJpeg(canvas), toJpeg(source.canvas)]);
+        const sharp = sharpness(canvas);
+        // Meldungsfoto verkleinert; Eckpunkte deshalb in dessen Koordinaten umgerechnet
+        const reportPhoto = downscale(source.canvas, REPORT_PHOTO_SIDE);
+        const k = reportPhoto.width / source.canvas.width;
+        const scaled = (c) => c && Object.fromEntries(Object.entries(c).map(([n, q]) => [n, { x: q.x * k, y: q.y * k }]));
+        const [jpeg, original] = await Promise.all([toGrayJpeg(downscale(canvas, RECEIPT_PAGE_SIDE)), toJpeg(reportPhoto)]);
         pageData.push({
           canvas, jpeg, ocr: null,
-          // für Problem-Meldungen: Originalfoto und Eckpunkte (Koordinaten im Originalfoto)
+          prepared: null, // aufbereitete Seite für die OCR (vision.prepareForOcr), entsteht bei der Erkennung
+          reads: new Map(), // Zellen-Lesungen (boxKey → { value, conf })
+          // für Problem-Meldungen: Originalfoto und Eckpunkte (Koordinaten im Meldungsfoto)
           original,
           meta: {
-            source: { width: source.canvas.width, height: source.canvas.height },
+            source: { width: reportPhoto.width, height: reportPhoto.height },
             cornersDetected: source.detected,
-            cornersAuto: source.cornersAuto,
-            corners: structuredClone(source.corners),
+            cornersMethod: source.cornersMethod,
+            cornersAuto: scaled(source.cornersAuto),
+            corners: scaled(source.corners),
             rectified: { width: canvas.width, height: canvas.height },
+            sharpness: sharp,
           },
         });
-        this.pages.push({ id: ++pageCounter, thumb: URL.createObjectURL(jpeg) });
+        this.pages.push({ id: ++pageCounter, thumb: URL.createObjectURL(jpeg), blurry: sharp < SHARPNESS_MIN });
         source = null;
       } catch (err) {
         toast.error('Entzerrung fehlgeschlagen: ' + (err?.message ?? err));
@@ -675,13 +694,19 @@ function component() {
         for (let i = 0; i < pageData.length; i++) {
           const label = pageData.length > 1 ? `Seite ${i + 1} von ${pageData.length}: ` : '';
           this.progress = { value: 0, label: label + 'Texterkennung wird vorbereitet …' };
-          pageData[i].ocr ??= await recognizePage(pageData[i].canvas, (value, status) => {
-            this.progress = {
-              value: (i + value) / pageData.length,
-              label: label + (status === 'recognizing text' ? 'Text wird erkannt …' : 'Texterkennung wird geladen …'),
-            };
-          });
+          const p = pageData[i];
+          if (!p.ocr) {
+            p.prepared ??= prepareForOcr(p.canvas);
+            const ocr = await recognizePage(p.prepared.canvas, (value, status) => {
+              this.progress = {
+                value: (i + value) / pageData.length,
+                label: label + (status === 'recognizing text' ? 'Text wird erkannt …' : 'Texterkennung wird geladen …'),
+              };
+            });
+            p.ocr = { ...ocr, lines: p.prepared.lines };
+          }
         }
+        this.progress = { value: 1, label: 'Mengen werden gelesen …' };
         await this.analyze();
         this.step = 'review';
         await this.$nextTick();
@@ -712,7 +737,7 @@ function component() {
           this.warnings.push(`Auf dem Lieferschein steht die Bestellnummer ${internalNos.join(', ')}, diese Bestellung hat ${own}. Bitte prüfen.`);
         }
       }
-      this.computeReview();
+      await this.computeReview();
       this.updateAssessment();
     },
 
@@ -782,7 +807,7 @@ function component() {
       }
       try {
         [this.order, this.items] = await Promise.all([getOrder(id), listOrderItems(id)]);
-        this.computeReview();
+        await this.computeReview();
         this.updateAssessment();
         await this.$nextTick();
         this.drawReviewPages();
@@ -791,18 +816,32 @@ function component() {
       }
     },
 
-    computeReview() {
-      if (!this.order) return;
-      const profile = profileForOrder(this.order);
+    /**
+     * Positionszeilen aller Seiten mit einem Profil lesen. Die Mengenbereiche der Zeilen werden dabei gezielt
+     * als Zahl gelesen (einmal je Bereich, Ergebnisse je Seite gemerkt) und fließen in die Zeilen ein.
+     */
+    async readRows(profile) {
       const rows = [];
       const missingHeader = [];
-      if (profile) {
-        pageData.forEach((p, page) => {
-          const res = extractRows(p.ocr, profile);
-          if (res.headerFound === false) missingHeader.push(page + 1);
-          res.rows.forEach((r) => rows.push({ ...r, page }));
-        });
+      for (const [page, p] of pageData.entries()) {
+        const boxes = extractRows(p.ocr, profile, p.reads).rows
+          .flatMap((r) => Object.values(r.cells ?? {}).map((c) => c.box))
+          .filter((b) => !p.reads.has(boxKey(b)));
+        if (boxes.length) {
+          const res = await recognizeNumbers(p.prepared.canvas, boxes);
+          boxes.forEach((b, i) => p.reads.set(boxKey(b), res[i]));
+        }
+        const res = extractRows(p.ocr, profile, p.reads);
+        if (res.headerFound === false) missingHeader.push(page + 1);
+        res.rows.forEach((r) => rows.push({ ...r, page }));
       }
+      return { rows, missingHeader };
+    },
+
+    async computeReview() {
+      if (!this.order) return;
+      const profile = profileForOrder(this.order);
+      const { rows, missingHeader } = profile ? await this.readRows(profile) : { rows: [], missingHeader: [] };
       this.warnings = this.warnings.filter((w) => !w.startsWith('Für ') && !w.startsWith('Auf Seite'));
       if (!profile) {
         this.warnings.push(`Für ${supplierLabel(this.order)} gibt es noch kein Lieferschein-Profil. Bitte die Mengen von Hand eintragen.`);
@@ -831,7 +870,7 @@ function component() {
       });
       this.unmatched = assignments
         .filter((a) => a.status === 'none')
-        .map((a, i) => ({ key: i, part: a.row.part, qty: a.row.qty, assignTo: '', assigned: false, addNew: false, name: '', group: '' }));
+        .map((a, i) => ({ key: i, part: a.row.part, qty: a.row.qty, assignTo: '', assigned: false, addNew: false, name: '', group: '' })); // qty null = nicht lesbar
     },
 
     updateAssessment() {
@@ -862,9 +901,9 @@ function component() {
       }
       const row = this.reviewRows.find((r) => r.itemId === u.assignTo);
       if (!row) return;
-      row.qty = (row.qty || 0) + u.qty;
+      row.qty = (row.qty || 0) + (u.qty ?? 0);
       row.status = 'check';
-      row.reasons = [...row.reasons, 'von Hand zugeordnet'];
+      row.reasons = [...row.reasons, u.qty == null ? 'von Hand zugeordnet, Menge nicht lesbar' : 'von Hand zugeordnet'];
       u.assigned = true;
     },
 
@@ -960,7 +999,7 @@ function component() {
 
     async startCreateOrder() {
       const p = detectedProfile;
-      const rows = this.rowsForProfile(p); // unabhängig von einer zuvor gewählten Bestellung
+      const rows = p ? (await this.readRows(p)).rows : []; // unabhängig von einer zuvor gewählten Bestellung
       let key = 0;
       this.create = {
         supplier: p?.supplier ?? 'other',
@@ -968,17 +1007,11 @@ function component() {
         internal_order_no: internalNos[0] ?? '',
         without_internal_order_no: defaultWithoutInternalOrderNo({ supplier: p?.supplier, internal_order_no: internalNos[0] }),
         supplier_order_no: '',
-        items: rows.map((r) => ({ key: ++key, include: true, qty: r.qty, part_number: r.part, name: '', group: '' })),
+        items: rows.map((r) => ({ key: ++key, include: true, qty: r.qty ?? r.qtyOrdered ?? 1, part_number: r.part, name: '', group: '' })),
       };
       if (!this.create.items.length) this.addCreateItem();
       this.noOrder = { mode: 'create' };
       await this.loadGroupCourses();
-    },
-
-    /** Zeilen ohne gewählte Bestellung mit dem erkannten Profil lesen. */
-    rowsForProfile(profile) {
-      if (!profile) return [];
-      return pageData.flatMap((p, page) => extractRows(p.ocr, profile).rows.map((r) => ({ ...r, page })));
     },
 
     addCreateItem() {
