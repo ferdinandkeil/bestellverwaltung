@@ -5,16 +5,20 @@
 //     id, label,
 //     supplier:  fester Wert aus orders.supplier (nicht „other“),
 //     detect:    RegExp, die im oberen Seitenbereich (y < 0.3) auf den Lieferanten hinweist,
-//     und eine der beiden Lesarten der Positionstabelle:
+//     und eine der Lesarten der Positionstabelle:
 //       columns: { qty, part, desc }     – Überschriften der Spalten (Kopfzeile, z. B. Reichelt)
 //       rowAnchor: 'unit', unit: 'ST'    – Zeilen über die Mengeneinheit („4 ST“/„4ST“), ohne Kopfzeile (z. B. TME, Würth)
+//       rowAnchor: 'part', partPattern, qtyColumns
+//                                        – Zeilen über das Muster der Teilenummer, Mengen aus Tabellenspalten
+//                                          (von rechts gezählt) zwischen den Tabellenlinien (z. B. Mouser)
 //   }
 // Neue Lieferanten: Datei in diesem Ordner anlegen und unten eintragen.
 import reichelt from './reichelt.js';
 import tme from './tme.js';
 import wuerth from './wuerth.js';
+import mouser from './mouser.js';
 
-export const PROFILES = [reichelt, tme, wuerth];
+export const PROFILES = [reichelt, tme, wuerth, mouser];
 
 export function profileById(id) {
   return PROFILES.find((p) => p.id === id) ?? null;
