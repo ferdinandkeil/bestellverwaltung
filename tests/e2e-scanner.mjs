@@ -62,6 +62,41 @@ const UNKNOWN_HTML = noteHtml({
   rows: [[2, 'MT-4711', 'Beispielteil']],
 });
 
+/**
+ * Synthetischer Lieferschein im Layout von Mouser (A4 quer, gerahmte Tabelle, Mengen klein und allein in den Zellen,
+ * wie im Original ≈ 6,5 pt). Gerendert mit 300 dpi, damit der Pfad mit voller Auflösung durchlaufen wird.
+ */
+const MOUSER_NO = '2026IW09876';
+const MOUSER_ROWS = [ // [Mouser-Nr., bestellt, geliefert, ausstehend]
+  ['595-SN74HC595N', 10, 10, 0], ['511-LD1117S33TR', 4, 4, 0], ['81-GRM188R71H104KA3D', 100, 100, 0],
+  ['710-885012206046', 25, 20, 5], ['652-3362P-1-103LF', 3, 3, 0], ['621-1N4148W-F', 50, 50, 0],
+];
+const MOUSER_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+  body { margin: 0; width: 297mm; height: 210mm; background: #fff; font-family: Arial, Helvetica, sans-serif; color: #000; zoom: 3.125; position: relative; }
+  div { position: absolute; }
+  .t { left: 0; right: 0; top: 9mm; text-align: center; font-weight: bold; font-size: 11pt; }
+  .logo { left: 22mm; top: 20mm; font-size: 30pt; font-weight: 900; }
+  .send { left: 22mm; top: 40mm; font-size: 6pt; font-weight: bold; line-height: 1.25; }
+  .ship { left: 98mm; top: 33mm; font-size: 8pt; line-height: 1.3; }
+  .po { right: 14mm; top: 40mm; width: 72mm; border: .3mm solid #000; text-align: center; font-size: 6.5pt; font-weight: bold; padding: 1mm 0; }
+  table { position: absolute; left: 12mm; top: 70mm; width: 273mm; border-collapse: collapse; }
+  th, td { border: .3mm solid #000; vertical-align: top; }
+  th { background: #bbb; font-size: 7pt; text-align: left; padding: .6mm 1mm; height: 9mm; }
+  td { height: 15mm; font-size: 8pt; line-height: 1.12; padding: .5mm 1mm; }
+  td.q { width: 18mm; text-align: right; font-size: 6.5pt; padding: .5mm .8mm; }
+</style></head><body>
+  <div class="t">LIEFERSCHEIN / PACKING LIST</div>
+  <div class="logo">MOUSER</div>
+  <div class="send">Mouser Electronics Inc<br>1000 N. Main Street<br>Mansfield , TX, 76063<br>Ph. (800) 346-6873</div>
+  <div class="ship"><u>Versand an: / SHIP TO:</u><br>MUSTER-HOCHSCHULE<br>TESTSTRASSE 1<br>12345 MUSTERSTADT</div>
+  <div class="po">Bestellnummer / Purchase Order Number:<br>${MOUSER_NO}</div>
+  <table><tr><th style="width:8mm">Nr.<br>LN</th><th>Mouser-Teilenummer / Mouser Part Number<br>Beschreibung / Description</th><th style="width:26mm">Datecode<br>Lot Code</th>
+    <th>Bestellte Menge<br>Quantity Ordered</th><th>Gelieferte Menge<br>Quantity Shipped</th><th>Austehende Menge<br>Quantity Pending</th></tr>
+  ${MOUSER_ROWS.map(([part, o, s, p], i) => `<tr><td>${String(i + 1).padStart(3, '0')}</td><td>${part}<br>Taric: 85423990${i}0 &nbsp; ECCN: EAR99<br>RoHS: compliant / RoHS: Konform</td>
+    <td>26${10 + i}<br>LOT${4711 + i}X</td><td class="q">${o}</td><td class="q">${s}</td><td class="q">${p}</td></tr>`).join('')}
+  </table>
+</body></html>`;
+
 async function seed() {
   await setup();
   await resetData();
@@ -75,7 +110,32 @@ async function seed() {
   // Zweite offene Reichelt-Bestellung: Zuordnung muss über die interne Bestellnummer erfolgen.
   const other = await addItem(owner.token, { supplier: 'reichelt', part_number: 'XIAO ESP32C6', name: 'andere Bestellung', qty: 1 });
   await changeStatus(owner.token, other.order.id, 'advance', { internal_order_no: '2026IW00999' });
-  return { orderId: order.id, login: await createUser('Scanner-Tester') };
+  let mouserOrder;
+  for (const [part, ordered] of MOUSER_ROWS) {
+    mouserOrder = (await addItem(owner.token, { supplier: 'mouser', part_number: part, name: 'Mouser-Teil', qty: ordered })).order;
+  }
+  await changeStatus(owner.token, mouserOrder.id, 'advance', { internal_order_no: MOUSER_NO });
+  return { orderId: order.id, mouserOrderId: mouserOrder.id, login: await createUser('Scanner-Tester') };
+}
+
+/** „Handyfoto“ eines Lieferscheins im Querformat (Mouser): 300-dpi-Rendering, schräg auf dunklem Tisch, 4000 × 3000. */
+async function makeLandscapePhoto(b, dir, html, name) {
+  const notePath = join(dir, name + '-note.png');
+  await b.setViewport({ width: 3508, height: 2480 }, false);
+  await b.navigate('about:blank');
+  await b.evaluate(`document.open(); document.write(${JSON.stringify(html)}); document.close();`);
+  await sleep(300);
+  await b.screenshotTo(notePath, 'png');
+  const dataUrl = 'data:image/png;base64,' + readFileSync(notePath).toString('base64');
+  await b.setViewport({ width: 4000, height: 3000 }, false);
+  await b.evaluate(`document.open(); document.write(${JSON.stringify(`<!doctype html><html><body style="margin:0;height:3000px;background:#3b2f25;display:flex;align-items:center;justify-content:center;perspective:5000px">
+    <img src="${dataUrl}" style="width:3500px;transform:rotateX(6deg) rotateZ(-2deg);box-shadow:0 20px 40px rgba(0,0,0,.5)">
+  </body></html>`)}); document.close();`);
+  await b.waitFor(`document.querySelector('img')?.complete`, 'Foto-Seite');
+  await sleep(300);
+  const photoPath = join(dir, name + '.jpg');
+  await b.screenshotTo(photoPath, 'jpeg', 90);
+  return photoPath;
 }
 
 /** Erzeugt mit dem Browser ein „Handyfoto“ des synthetischen Lieferscheins. */
@@ -100,7 +160,7 @@ async function makePhoto(b, dir, html = NOTE_HTML, name = 'foto') {
 }
 
 const ok = (msg) => console.log('✔', msg);
-const { orderId, login } = await seed();
+const { orderId, mouserOrderId, login } = await seed();
 await enableRateLimits(); // Browser-Durchlauf unter Produktionsbedingungen
 const work = mkdtempSync(join(tmpdir(), 'bestellverwaltung-e2e-scanner-'));
 const b = await launchBrowser(join(work, 'profile'));
@@ -111,6 +171,7 @@ try {
   const photo = await makePhoto(b, work);
   const directPhoto = await makePhoto(b, work, DIRECT_HTML, 'direkt');
   const unknownPhoto = await makePhoto(b, work, UNKNOWN_HTML, 'unbekannt');
+  const mouserPhoto = await makeLandscapePhoto(b, work, MOUSER_HTML, 'mouser');
   ok('synthetischen Lieferschein fotografiert (schräg auf dunklem Tisch)');
 
   await b.setViewport();
@@ -285,6 +346,19 @@ try {
   const assigned = (await listRecords('orders', `id = "${direct.id}"`))[0];
   if (assigned.attachments.length !== 1 || (await listRecords('unmatched_receipts')).length !== 0) throw new Error('Zuordnung: ' + JSON.stringify(assigned.attachments));
   ok('Lieferschein ohne Profil abgelegt und im Dashboard einer Bestellung zugeordnet (Anhang)');
+
+  // ---- Mouser: Mengen klein in gerahmten Zellen → Zellen-Lesen, Teillieferung mit Gegenprobe --------------
+  await scanFromDashboard(mouserPhoto);
+  const mouser = await b.evaluate(`JSON.parse(JSON.stringify({ order: ${scanner}.order?.id, profile: ${scanner}.profileLabel, rows: ${scanner}.reviewRows }))`);
+  if (mouser.order !== mouserOrderId || mouser.profile !== 'Mouser') throw new Error('Mouser-Zuordnung: ' + JSON.stringify({ order: mouser.order, profile: mouser.profile }));
+  const mouserWrong = [];
+  for (const [part, , shipped] of MOUSER_ROWS) {
+    const r = mouser.rows.find((x) => x.part === part);
+    if (!r || r.qty !== shipped || r.status !== 'sure') mouserWrong.push(`${part}: ${r ? `${r.qty} (${r.status}: ${r.reasons.join(', ')})` : 'fehlt'}`);
+  }
+  if (mouserWrong.length) throw new Error('Mouser-Mengen:\n  ' + mouserWrong.join('\n  '));
+  ok('Mouser: Profil erkannt, Mengen aus den Tabellenzellen gelesen (6 sicher, Teillieferung 20 von 25 bestätigt)');
+  await b.screenshot('scanner-09-mouser');
 
   const unexpected = b.problems.filter((p) => !/status of 4\d\d.*(auth-with-otp)/.test(p));
   if (unexpected.length) throw new Error('Fehler in der Browser-Konsole:\n  ' + unexpected.join('\n  '));

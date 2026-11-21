@@ -270,6 +270,9 @@ const MOUSER_PAGE = {
 
 test('Mouser: Erkennung, Zeilen über die Teilenummer, Mengen aus Tabellenspalten, Kopf ignoriert', () => {
   assert.equal(detectProfile([MOUSER_PAGE]).id, 'mouser');
+  // Logo nicht gelesen: Spaltenkopf der Tabelle genügt (größerer Suchbereich nur für Mouser)
+  assert.equal(detectProfile([{ words: [word('Mouser-Teilenummer', 0.08, 0.38), word('Würth', 0.1, 0.38)] }]).id, 'mouser');
+  assert.equal(detectProfile([{ words: [word('Würth', 0.1, 0.38)] }]), null, 'andere Profile nur im Kopf (y < 0,3)');
   assert.equal(profileForOrder({ supplier: 'mouser' }).id, 'mouser');
   const { rows } = extractRows(MOUSER_PAGE, mouser);
   assert.deepEqual(rows.map((r) => [r.part, r.qty, r.qtyOrdered, r.qtyPending]), [['595-TCAN332D', 4, 4, 0], ['511-LD1117S33TR', null, 25, 5]]);

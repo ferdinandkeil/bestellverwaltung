@@ -5,6 +5,7 @@
 //     id, label,
 //     supplier:  fester Wert aus orders.supplier (nicht „other“),
 //     detect:    RegExp, die im oberen Seitenbereich (y < 0.3) auf den Lieferanten hinweist,
+//     detectMaxY: optional größerer Suchbereich für detect (z. B. bis zur Kopfzeile der Tabelle),
 //     und eine der Lesarten der Positionstabelle:
 //       columns: { qty, part, desc }     – Überschriften der Spalten (Kopfzeile, z. B. Reichelt)
 //       rowAnchor: 'unit', unit: 'ST'    – Zeilen über die Mengeneinheit („4 ST“/„4ST“), ohne Kopfzeile (z. B. TME, Würth)
@@ -42,6 +43,5 @@ function headerText(page, maxY = 0.3) {
 /** Profil anhand der ersten Seite erkennen (oder null). */
 export function detectProfile(pages) {
   if (!pages.length) return null;
-  const text = headerText(pages[0]);
-  return PROFILES.find((p) => p.detect.test(text)) ?? null;
+  return PROFILES.find((p) => p.detect.test(headerText(pages[0], p.detectMaxY))) ?? null;
 }

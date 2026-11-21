@@ -14,7 +14,9 @@ export default {
   id: 'mouser',
   supplier: 'mouser',
   label: 'Mouser',
+  // Logo „MOUSER“ (wird von der OCR nicht immer gelesen) oder Spaltenkopf „Mouser-Teilenummer / Mouser Part Number“
   detect: /\bMOUSER\b/i,
+  detectMaxY: 0.45,
   rowAnchor: 'part',
   partPattern: /^\d{2,3}-[A-Z0-9][A-Z0-9\-/+.#]*$/,
   qtyColumns: { qty: 2, ordered: 3, pending: 1 },
