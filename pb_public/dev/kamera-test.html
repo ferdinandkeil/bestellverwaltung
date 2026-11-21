@@ -52,7 +52,7 @@
   </style>
 </head>
 <body>
-  <h1>Kamera-Test v2</h1>
+  <h1>Kamera-Test v2.1</h1>
   <p class="note">Entwicklerwerkzeug für die Lieferschein-Erfassung. Es wird nichts gesendet oder gespeichert.
     Ablauf: Kamera starten → Blatt ins Bild → mit dem runden Knopf auslösen oder automatisch auslösen lassen →
     Prüfergebnis unter „Fotos“ ansehen → Bericht kopieren und an Claude geben.</p>
@@ -61,6 +61,9 @@
     <button id="start" class="primary">Kamera starten</button>
     <button id="torch" disabled>Taschenlampe an</button>
     <label><input type="checkbox" id="auto"> automatisch auslösen</label>
+  </div>
+  <div class="bar" id="cameraBar" hidden>
+    <label>Kamera <select id="camera"></select></label>
   </div>
   <div class="bar" id="exposureBar" hidden>
     <label>Belichtung <input type="range" id="exposure"> <span id="exposureVal"></span></label>
@@ -110,7 +113,7 @@ const $ = (id) => document.getElementById(id);
 const video = $('video');
 const overlay = $('overlay');
 const report = {
-  page: 'kamera-test v2',
+  page: 'kamera-test v2.1',
   userAgent: navigator.userAgent,
   screen: { width: screen.width, height: screen.height, dpr: devicePixelRatio },
   imageCaptureApi: 'ImageCapture' in window,
@@ -125,7 +128,7 @@ let busy = false;
 let lastShotAt = 0;
 
 // Live-Erkennung: Statistik und Zustand
-const live = { frames: 0, totalMs: 0, maxMs: 0, detected: 0, corners: null, lastSeen: 0, stableSince: 0, sharp: 0, area: 0 };
+const live = { frames: 0, totalMs: 0, maxMs: 0, detected: 0, corners: null, lastSeen: 0, stableSince: 0, sharp: 0, area: 0, extent: 0 };
 const DETECT_SIDE = 960;   // Breite des Vorschaubilds für die Erkennung (wie vision.js: ~1000 px)
 const MISS_GRACE_MS = 400; // einzelne Aussetzer der Erkennung setzen die Ruhezeit nicht zurück
 const COOLDOWN_MS = 3000;  // Mindestabstand zwischen zwei automatischen Fotos
@@ -170,36 +173,18 @@ function fail(where, err) {
 $('start').addEventListener('click', async () => {
   $('start').disabled = true;
   try {
-    $('status').textContent = 'Kamera wird gestartet …';
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
-    });
-    video.srcObject = stream;
-    await video.play();
-    track = stream.getVideoTracks()[0];
-    caps = track.getCapabilities?.() ?? {};
-    // Geräte-IDs weglassen – für den Test ohne Belang
-    const { deviceId, groupId, ...settings } = track.getSettings();
-    const { deviceId: _d, groupId: _g, ...capsShown } = caps;
-    report.videoSettings = settings;
-    report.videoCapabilities = capsShown;
-    if ('focusMode' in caps && caps.focusMode.includes('continuous')) {
-      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch((e) => fail('focusMode', e));
-    }
-    setupExposure(settings);
-    if ('ImageCapture' in window) {
-      imageCapture = new ImageCapture(track);
-      report.photoCapabilities = await imageCapture.getPhotoCapabilities().then(plain).catch((e) => ({ error: String(e) }));
-      report.photoSettings = await imageCapture.getPhotoSettings().then(plain).catch((e) => ({ error: String(e) }));
-    } else {
-      $('method').value = 'grab';
-      $('method').disabled = true;
-    }
-    $('shutter').disabled = false;
-    $('torch').disabled = !caps.torch;
-    if (!caps.torch) $('torch').textContent = 'Taschenlampe (nicht unterstützt)';
-    render();
+    await openCamera(null);
+    // Erst nach der Kamerafreigabe liefert enumerateDevices() Namen. Android-Chrome wählt für
+    // facingMode „environment“ teils das Weitwinkel-Objektiv (0,5×), takePhoto() nutzt aber die
+    // Hauptkamera – deshalb Kameras auflisten und bevorzugt die Hauptkamera nehmen.
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    report.cameras = cams.map((d) => d.label || '(ohne Namen)');
+    const sel = $('camera');
+    sel.replaceChildren(...cams.map((d) => new Option(d.label || d.deviceId.slice(0, 8), d.deviceId)));
+    $('cameraBar').hidden = cams.length < 2;
+    const preferred = preferredCamera(cams);
+    if (preferred && preferred.deviceId !== track.getSettings().deviceId) await openCamera(preferred.deviceId);
+    sel.value = track.getSettings().deviceId ?? '';
 
     $('status').textContent = 'Bildverarbeitung wird geladen …';
     const t0 = performance.now();
@@ -212,6 +197,57 @@ $('start').addEventListener('click', async () => {
     $('start').disabled = false;
   }
 });
+
+$('camera').addEventListener('change', async (e) => {
+  try { await openCamera(e.target.value); } catch (err) { fail('Kamerawechsel', err); }
+});
+
+/** Hauptkamera hinten: bei Android „camera2 0, facing back“, sonst die erste Rückkamera. */
+function preferredCamera(cams) {
+  const back = cams.filter((d) => /back|rück|environment/i.test(d.label));
+  return back.find((d) => /camera2 0\b/.test(d.label)) ?? back[0] ?? null;
+}
+
+/** Kamera öffnen (deviceId = null: Rückkamera nach Wahl des Browsers) und alles daran ausrichten. */
+async function openCamera(deviceId) {
+  track?.stop();
+  track = null;
+  torchOn = false;
+  $('torch').textContent = 'Taschenlampe an';
+  $('status').textContent = 'Kamera wird gestartet …';
+  const size = { width: { ideal: 3840 }, height: { ideal: 2160 } };
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: deviceId ? { deviceId: { exact: deviceId }, ...size } : { facingMode: { ideal: 'environment' }, ...size },
+  });
+  video.srcObject = stream;
+  await video.play();
+  track = stream.getVideoTracks()[0];
+  caps = track.getCapabilities?.() ?? {};
+  // Geräte-IDs weglassen – für den Test ohne Belang
+  const { deviceId: _id, groupId, ...settings } = track.getSettings();
+  const { deviceId: _d, groupId: _g, ...capsShown } = caps;
+  report.camera = track.label;
+  report.videoSettings = settings;
+  report.videoCapabilities = capsShown;
+  if ('focusMode' in caps && caps.focusMode.includes('continuous')) {
+    await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch((e) => fail('focusMode', e));
+  }
+  setupExposure(settings);
+  if ('ImageCapture' in window) {
+    imageCapture = new ImageCapture(track);
+    report.photoCapabilities = await imageCapture.getPhotoCapabilities().then(plain).catch((e) => ({ error: String(e) }));
+    report.photoSettings = await imageCapture.getPhotoSettings().then(plain).catch((e) => ({ error: String(e) }));
+  } else {
+    $('method').value = 'grab';
+    $('method').disabled = true;
+  }
+  $('shutter').disabled = false;
+  $('torch').disabled = !caps.torch;
+  if (!caps.torch) $('torch').textContent = 'Taschenlampe (nicht unterstützt)';
+  live.corners = null;
+  render();
+}
 
 /** MediaSettingsRange-Objekte u. ä. in einfache Objekte wandeln (für JSON). */
 function plain(o) {
@@ -233,14 +269,14 @@ function plainRange(v) {
 // auf −1 gesetzt (soweit unterstützt) und beim Ausschalten zurück auf 0. Der Regler bleibt frei einstellbar.
 function setupExposure(settings) {
   const r = caps.exposureCompensation;
+  $('exposureBar').hidden = !r;
   if (!r) return;
   const input = $('exposure');
   input.min = r.min; input.max = r.max; input.step = r.step || 0.1;
   input.value = settings.exposureCompensation ?? 0;
   $('exposureVal').textContent = Number(input.value).toFixed(1);
-  $('exposureBar').hidden = false;
-  input.addEventListener('change', () => applyExposure(Number(input.value)));
 }
+$('exposure').addEventListener('change', () => applyExposure(Number($('exposure').value)));
 async function applyExposure(value) {
   const r = caps.exposureCompensation;
   if (!r) return;
@@ -278,8 +314,8 @@ $('stage').addEventListener('click', async (e) => {
 
 // ---- Live-Erkennung ---------------------------------------------------------------------
 function loop() {
-  if (!track || track.readyState !== 'live') return;
-  if (!busy && video.videoWidth) {
+  // läuft dauerhaft weiter; während eines Kamerawechsels (kein aktiver Track) wird nur gewartet
+  if (!busy && track?.readyState === 'live' && video.videoWidth) {
     const p = params();
     const t0 = performance.now();
     const scale = DETECT_SIDE / video.videoWidth;
@@ -307,6 +343,7 @@ function loop() {
     live.corners = corners;
     live.sharp = sharp;
     live.area = corners ? quadArea(corners) / (small.width * small.height) : 0;
+    live.extent = corners ? longExtent(corners, small.width, small.height) : 0;
 
     const stableMs = corners ? now - live.stableSince : 0;
     const areaOk = live.area >= p.minArea;
@@ -361,6 +398,14 @@ function quadArea(c) {
   for (let i = 0; i < 4; i++) s += p[i].x * p[(i + 1) % 4].y - p[(i + 1) % 4].x * p[i].y;
   return Math.abs(s) / 2;
 }
+/**
+ * Anteil der langen Bildseite, den das Blatt überspannt. Vorschau (16:9) und Foto (4:3) schneiden
+ * den Sensor nur an der kurzen Seite unterschiedlich zu – entlang der langen Seite sind sie vergleichbar.
+ */
+function longExtent(c, w, h) {
+  const v = KEYS.map((k) => (h >= w ? c[k].y : c[k].x));
+  return (Math.max(...v) - Math.min(...v)) / Math.max(w, h);
+}
 function maxMove(a, b) {
   return Math.max(...KEYS.map((k) => Math.hypot(a[k].x - b[k].x, a[k].y - b[k].y)));
 }
@@ -414,7 +459,7 @@ async function shoot(trigger) {
     const shot = await checkPhoto(blob, p);
     Object.assign(shot, {
       trigger, method: p.method, requested, ms, kB: Math.round(blob.size / 1024), type: blob.type,
-      liveSharpness: Math.round(live.sharp), liveArea: +live.area.toFixed(2),
+      liveSharpness: Math.round(live.sharp), liveArea: +live.area.toFixed(2), liveExtent: +live.extent.toFixed(2),
       params: { stableMs: p.stableMs, tol: p.tol, minArea: p.minArea, torch: p.torch, exposureCompensation: p.exposureCompensation },
     });
     report.shots.push(shot);
@@ -442,16 +487,22 @@ async function checkPhoto(blob, p) {
   const { corners, detected } = detectCorners(full);
   const c = corners;
   const paperWidthPx = Math.round(Math.max(dist(c.topLeftCorner, c.topRightCorner), dist(c.bottomLeftCorner, c.bottomRightCorner)));
+  const photoArea = detected ? +(quadArea(corners) / (full.width * full.height)).toFixed(2) : null;
   const page = rectify(full, corners);
   const photoSharpness = Math.round(sharpness(page));
   const problems = [];
   if (!detected) problems.push('Blatt im Foto nicht erkannt');
   else if (paperWidthPx < p.paperMinPx) problems.push(`Blatt zu klein (${paperWidthPx} px breit, Ziel ≥ ${p.paperMinPx})`);
+  // Zeigt das Foto einen anderen Ausschnitt als die Vorschau (z. B. andere Linse)?
+  const photoExtent = detected ? +longExtent(corners, full.width, full.height).toFixed(2) : null;
+  if (detected && live.extent > 0 && Math.abs(photoExtent - live.extent) / live.extent > 0.2) {
+    problems.push(`Foto zeigt anderen Ausschnitt als die Vorschau (Blatt über ${Math.round(live.extent * 100)} % → ${Math.round(photoExtent * 100)} % der Bildlänge)`);
+  }
   if (photoSharpness < p.photoSharpMin) problems.push(`zu unscharf (${photoSharpness}, Ziel ≥ ${p.photoSharpMin})`);
   const pageUrl = await new Promise((r) => page.toBlob((b) => r(URL.createObjectURL(b)), 'image/jpeg', 0.85));
   return {
     width: full.width, height: full.height, paperDetected: detected,
-    paperWidthPx: detected ? paperWidthPx : null, photoSharpness, ok: problems.length === 0, problems, pageUrl,
+    paperWidthPx: detected ? paperWidthPx : null, photoArea, photoExtent, photoSharpness, ok: problems.length === 0, problems, pageUrl,
   };
 }
 const dist = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
@@ -475,7 +526,7 @@ function addShot(shot, blob) {
   verdict.textContent = shot.ok ? `Foto ${no}: in Ordnung` : `Foto ${no}: ${shot.problems.join(', ')}`;
   const info = document.createElement('div');
   info.textContent = `${shot.method} (${shot.trigger}): ${shot.width}×${shot.height} px, ${shot.kB} kB, ${shot.ms} ms · ` +
-    (shot.paperDetected ? `Blattbreite ${shot.paperWidthPx} px` : 'Blatt nicht erkannt') + ` · Schärfe ${shot.photoSharpness}`;
+    (shot.paperDetected ? `Blattbreite ${shot.paperWidthPx} px, Blattlänge ${Math.round(shot.photoExtent * 100)} % des Bildes (Vorschau ${Math.round(shot.liveExtent * 100)} %)` : 'Blatt nicht erkannt') + ` · Schärfe ${shot.photoSharpness}`;
   const a = document.createElement('a');
   a.href = url;
   a.download = `kamera-test-${no}.jpg`;
