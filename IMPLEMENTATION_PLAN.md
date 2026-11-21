@@ -1,6 +1,6 @@
 # Implementierungsplan
 
-> Stand: 2026-11-13. Phase 1 und 4 abgenommen (Nachtrag TME/Würth deployt); Go-Live erfolgt; Phase 2 und 3 als Beta im Betrieb getestet (bleiben Beta bis zur Abnahme nach längerer Erprobung). Phase 5 zurückgestellt; Hilfe vor dem Rollout an weitere Nutzer eingeplant.
+> Stand: 2026-11-21 (Scanner: Erkennung verbessert, Mouser-Profil, Phase 2 Punkt 8). Phase 1 und 4 abgenommen (Nachtrag TME/Würth deployt); Go-Live erfolgt; Phase 2 und 3 als Beta im Betrieb getestet (bleiben Beta bis zur Abnahme nach längerer Erprobung). Phase 5 zurückgestellt; Hilfe vor dem Rollout an weitere Nutzer eingeplant.
 >
 > Phasenweise arbeiten, nach jeder Phase Feedback einholen. Kein JS-Build (kein npm/Vite/Webpack); einzige Ausnahme ist der CSS-Build mit dem Tailwind Standalone CLI. Vorgaben: `ARCHITECTURE.md`, `pb_schema.json`, `CLAUDE.md`.
 
@@ -48,12 +48,17 @@
 5. ✔ **Positionen nachtragen** (11/2026): nicht zugeordnete Lieferschein-Zeile als vergessene Position nachtragen und mitbuchen; ebenso in der Detailansicht; gekennzeichnet (ARCHITECTURE Kap. 4.5).
 6. ✔ **Lieferscheine ohne Bestellung** (11/2026): Bestellung aus dem Lieferschein anlegen (Nummer oder ausdrücklich ohne) bzw. ohne Profil in die Ablage „Lieferscheine ohne Bestellung“ legen und später zuordnen (ARCHITECTURE Kap. 4.6). Profile verbessert („3ST“).
 7. ✔ **Bedienung auf dem Handy** (11/2026, Rückmeldung aus dem Test im Betrieb): Eckenauswahl ohne Scrollen (Bild eingepasst, feste Knopfleiste), Lupe beim Ziehen eines Eckpunkts.
-8. Offen:
+8. ✔ **Erkennung verbessert, Mouser-Profil** (21.11.2026, Branch `scanner-ocr-verbesserung`): volle Auflösung, Aufbereitung der Seite für die OCR (Hintergrund ausgleichen, Tabellenlinien entfernen), Mengenzellen gezielt als Zahl lesen, Plausibilität über bestellte/ausstehende Menge, Hinweis bei unscharfem Foto, Ersatz-Eckensuche (helle Fläche; hilft bei gefaltetem Blatt). Bewertet mit allen bisher gemeldeten echten Belegen und Handyfotos von Testbelegen (Regressionsvergleich vorher/nachher, Werkzeuge in `samples/testbelege/`, nicht im Repo):
+   * Mouser (echter Beleg, 10 Positionen): Mengen 0/10 → 9/10 richtig, 1 als „nicht lesbar“ markiert (offene Menge vorgeschlagen).
+   * TME 1/2 → 2/2; interne Bestellnummer jetzt auch bei Reichelt, Mouser und Farnell gelesen; Würth, TME 2, Reichelt unverändert richtig.
+   * Keine falsche Menge ohne Prüfhinweis (Fotos des Mouser-Nachbaus mit leichter Unschärfe: 3–4 von 6 sicher, Rest markiert).
+   * Alternativen geprüft: PaddleOCR (RapidOCR/ONNX) liest frei stehenden Text besser, übersieht aber die einzelnen Ziffern in Mouser-Zellen ganz und ist 2–4× langsamer → bei Tesseract geblieben. Eigenes Ziffern-Netz zurückgestellt (nur falls das Zellen-Lesen nicht reicht).
+9. Offen:
    * Gemeldete Lieferscheine auswerten und Erkennung/Profile nachbessern (erste Auswertung 11/2026: TME und Würth ohne Profil, OCR gut; daraus die Zuordnung über die interne Bestellnummer).
    * Test mit echten Handyfotos **im Labor** (Labor ist nicht vor Ort; später). Dafür die Dev-Instanz im WLAN erreichbar machen (Option für `scripts/dev-server.sh`, noch nicht umgesetzt) oder nach dem Go-Live direkt auf Uberspace testen.
-   * Profile für Mouser, Farnell, Voelkner, sobald Beispielbelege vorliegen (am einfachsten per „Problem melden“).
+   * Profile für Farnell und Voelkner, sobald Beispielbelege vorliegen (am einfachsten per „Problem melden“). Mouser ist an einem echten Beleg (2 Seiten) geprüft; weitere Meldungen abwarten.
    * TME und Würth sind nur an je einem echten Beleg geprüft (11/2026); weitere Meldungen abwarten.
-   * **Auswertung Mouser/Farnell (20.11.2026):** Lieferant im Kopf gut lesbar; Mouser-Bestellnummern gut, die kleinen Mengen in den Tabellenzellen liest Tesseract auch bei voller Auflösung und als Ausschnitt nicht (Cactus Mirage als Alternative getestet: ebenso wenig). Interne Bestellnummer erst ohne Verkleinerung auf 3200 px lesbar. Farnell: Bestellnummer unterstrichen, Menge unter Barcode – beides nicht gelesen. Daraus geplant: volle Kameraauflösung, Drehen im Ecken-Schritt, Vorschaubilder im echten Seitenformat, Warnung bei fest gewählter, aber nicht passender Bestellung, Auswahlweg in der Meldung, Eckenerkennung bei gefaltetem Blatt, Lieferanten-Erkennung Mouser/Farnell; Mengenlesung Mouser noch offen.
+   * **Auswertung Mouser/Farnell (20.11.2026):** Lieferant im Kopf gut lesbar; Mouser-Bestellnummern gut, die kleinen Mengen in den Tabellenzellen liest Tesseract auch bei voller Auflösung und als Ausschnitt nicht (Cactus Mirage als Alternative getestet: ebenso wenig). Interne Bestellnummer erst ohne Verkleinerung auf 3200 px lesbar. Farnell: Bestellnummer unterstrichen, Menge unter Barcode – beides nicht gelesen. Daraus geplant: volle Kameraauflösung ✔, Eckenerkennung bei gefaltetem Blatt ✔ (teilweise, Ersatz über helle Fläche), Lieferanten-Erkennung Mouser ✔, Mengenlesung Mouser ✔ (Punkt 8). Noch offen: Drehen im Ecken-Schritt (Querformat-Belege werden oft hochkant fotografiert), Vorschaubilder im echten Seitenformat, Warnung bei fest gewählter, aber nicht passender Bestellung, Auswahlweg in der Meldung, Lieferanten-Erkennung Farnell.
    * **Live-Kamera mit automatischem Auslösen** (Vorschlag 11/2026): Kamerabild im Scanner (`getUserMedia`), Live-Eckenerkennung, Auslösen bei ruhigem, scharfem, ausreichend großem Blatt, Foto über `ImageCapture.takePhoto()`; Taschenlampe statt Blitz. Vorab Machbarkeit auf dem Handy mit der Test-Seite `pb_public/dev/kamera-test.html` prüfen (ohne Login, keine Daten; wird nach der Entscheidung entfernt). Entscheidend: Auflösung von `takePhoto()` im Vergleich zur Kamera-App.
 
 ## Phase 3: Moodle-Import (Branch `phase-3-moodle-import`)

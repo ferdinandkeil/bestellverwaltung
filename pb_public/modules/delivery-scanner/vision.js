@@ -5,12 +5,26 @@ const VENDOR = new URL('../../vendor/', import.meta.url).href;
 const OPENCV_URL = VENDOR + '@techstark/opencv-js@5.0.0-release.1/dist/opencv.js';
 const JSCANIFY_URL = VENDOR + 'jscanify@1.4.3/src/jscanify.js';
 
-/** Längste Bildseite beim Arbeiten (Handyfotos haben oft 4000 px und mehr). */
-const MAX_SOURCE_SIDE = 3200;
+/**
+ * Längste Bildseite beim Arbeiten. Handykameras liefern meist ~4000 px; die volle Auflösung wird gebraucht,
+ * damit kleine Ziffern (z. B. Mouser-Mengen, 6,5 pt) lesbar bleiben. Größere Fotos (50-MP-Modus) werden verkleinert.
+ */
+const MAX_SOURCE_SIDE = 4096;
 /** Längste Seite für die Eckenerkennung (schneller, genügt für die Kontur). */
 const DETECT_SIDE = 1000;
-/** Breite der entzerrten Seite in Pixeln (A4 bei ca. 220 dpi – gut für OCR). */
-export const PAGE_WIDTH = 1800;
+/**
+ * Breite der entzerrten Seite: so breit wie das Blatt im Foto (keine Auflösung verschenken),
+ * aber mindestens PAGE_MIN_WIDTH (kleine Fotos werden hochgerechnet, A4 ≈ 220 dpi) und höchstens PAGE_MAX_WIDTH.
+ */
+export const PAGE_MIN_WIDTH = 1800;
+export const PAGE_MAX_WIDTH = 4096;
+/** Breite, auf der die Schärfe gemessen wird (Werte damit unabhängig von der Fotoauflösung vergleichbar). */
+const SHARPNESS_WIDTH = 1800;
+/**
+ * Unter diesem Schärfewert (Varianz des Laplace-Filters auf der entzerrten Seite) gilt ein Foto als unscharf.
+ * Kalibriert 11/2026 an echten Belegen und dem Testblatt: lesbare Fotos 70–720, verwackelte < 40.
+ */
+export const SHARPNESS_MIN = 40;
 
 let readyPromise = null;
 
@@ -62,6 +76,11 @@ function scaledCopy(canvas, maxSide) {
   return { canvas: out, scale };
 }
 
+/** Verkleinerte Kopie (längste Seite ≤ maxSide); kleinere Bilder werden unverändert zurückgegeben. */
+export function downscale(canvas, maxSide) {
+  return Math.max(canvas.width, canvas.height) <= maxSide ? canvas : scaledCopy(canvas, maxSide).canvas;
+}
+
 /** Fläche eines Vierecks (Gaußsche Trapezformel). */
 function quadArea(c) {
   const pts = [c.topLeftCorner, c.topRightCorner, c.bottomRightCorner, c.bottomLeftCorner];
@@ -86,44 +105,280 @@ export function defaultCorners(width, height, inset = 0.04) {
   };
 }
 
-/**
- * Blattecken im Bild suchen.
- * → { corners, detected }  (detected = false: Standard-Ecken, Nutzer muss anpassen)
- */
-export function detectCorners(canvas) {
-  const { canvas: small, scale } = scaledCopy(canvas, DETECT_SIDE);
+/** Mindestanteil des Bildes, den ein erkanntes Blatt einnehmen muss. */
+const MIN_PAPER_SHARE = 0.2;
+
+/** Blattkontur über jscanify (Kanten). → Ecken im kleinen Bild oder null */
+function contourQuad(small) {
   const scanner = new window.jscanify();
   const mat = window.cv.imread(small);
   let contour = null;
   try {
     contour = scanner.findPaperContour(mat);
-    if (contour) {
-      const c = scanner.getCornerPoints(contour, mat);
-      const complete = c.topLeftCorner && c.topRightCorner && c.bottomLeftCorner && c.bottomRightCorner;
-      if (complete && quadArea(c) > 0.2 * small.width * small.height) {
-        const corners = Object.fromEntries(
-          Object.entries(c).map(([k, p]) => [k, { x: p.x / scale, y: p.y / scale }]));
-        return { corners, detected: true };
-      }
-    }
+    if (!contour) return null;
+    const c = scanner.getCornerPoints(contour, mat);
+    const complete = c.topLeftCorner && c.topRightCorner && c.bottomLeftCorner && c.bottomRightCorner;
+    return complete && quadArea(c) > MIN_PAPER_SHARE * small.width * small.height ? c : null;
   } finally {
     mat.delete();
     contour?.delete?.();
   }
-  return { corners: defaultCorners(canvas.width, canvas.height), detected: false };
+}
+
+/**
+ * Blatt als hellste große Fläche (Otsu-Schwelle), auf ein Viereck vereinfacht. Greift, wo die Kantensuche
+ * scheitert (helles Blatt auf hellem Tisch) oder nur einen Teil erfasst (Knick im gefalteten Blatt).
+ * Verworfen, wenn die Fläche praktisch das ganze Bild ist oder mehr als zwei Ecken am Bildrand liegen
+ * (dann ist der Untergrund mit erfasst). → Ecken im kleinen Bild oder null
+ */
+function brightQuad(small) {
+  const cv = window.cv;
+  const W = small.width;
+  const H = small.height;
+  const src = cv.imread(small);
+  const gray = new cv.Mat();
+  const bin = new cv.Mat();
+  const contours = new cv.MatVector();
+  const hierarchy = new cv.Mat();
+  const hull = new cv.Mat();
+  const approx = new cv.Mat();
+  try {
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
+    cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
+    cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    let best = -1;
+    let bestArea = 0;
+    for (let i = 0; i < contours.size(); i++) {
+      const a = cv.contourArea(contours.get(i));
+      if (a > bestArea) { bestArea = a; best = i; }
+    }
+    if (best < 0 || bestArea < MIN_PAPER_SHARE * W * H || bestArea > 0.97 * W * H) return null;
+    cv.convexHull(contours.get(best), hull);
+    // Auf vier Ecken vereinfachen; schneidet ein Schatten eine Ecke an (Fünfeck), gröber vereinfachen und
+    // notfalls die vier äußersten Punkte der Hülle nehmen.
+    const toPoints = (m) => Array.from({ length: m.rows }, (_, i) => ({ x: m.data32S[2 * i], y: m.data32S[2 * i + 1] }));
+    let pts = null;
+    for (const eps of [0.02, 0.04, 0.06]) {
+      cv.approxPolyDP(hull, approx, eps * cv.arcLength(hull, true), true);
+      if (approx.rows === 4) { pts = toPoints(approx); break; }
+    }
+    pts ??= toPoints(hull);
+    const pick = (f) => pts.reduce((m, p) => (f(p) < f(m) ? p : m));
+    const quad = {
+      topLeftCorner: pick((p) => p.x + p.y),
+      bottomRightCorner: pick((p) => -(p.x + p.y)),
+      topRightCorner: pick((p) => p.y - p.x),
+      bottomLeftCorner: pick((p) => p.x - p.y),
+    };
+    // Das Viereck muss die helle Fläche im Wesentlichen abdecken und darf nicht am Bildrand kleben
+    if (quadArea(quad) < 0.85 * bestArea) return null;
+    const margin = 0.015 * Math.max(W, H);
+    const atBorder = Object.values(quad).filter((p) => p.x < margin || p.y < margin || p.x > W - margin || p.y > H - margin).length;
+    return atBorder > 2 ? null : quad;
+  } finally {
+    [src, gray, bin, contours, hierarchy, hull, approx].forEach((m) => m.delete());
+  }
+}
+
+/**
+ * Blattecken im Bild suchen: zuerst die Kantenkontur (jscanify), sonst bzw. wenn diese deutlich kleiner ist
+ * als die helle Fläche (gefaltetes Blatt, nur eine Hälfte erfasst), die helle Fläche.
+ * → { corners, detected, method }  (detected = false: Standard-Ecken, Nutzer muss anpassen;
+ *    method: 'contour' | 'bright' | null)
+ */
+export function detectCorners(canvas) {
+  const { canvas: small, scale } = scaledCopy(canvas, DETECT_SIDE);
+  const byContour = contourQuad(small);
+  const byBrightness = brightQuad(small);
+  let c = byContour;
+  let method = 'contour';
+  if (byBrightness && (!byContour || quadArea(byContour) < 0.75 * quadArea(byBrightness))) {
+    c = byBrightness;
+    method = 'bright';
+  }
+  if (!c) return { corners: defaultCorners(canvas.width, canvas.height), detected: false, method: null };
+  const corners = Object.fromEntries(Object.entries(c).map(([k, p]) => [k, { x: p.x / scale, y: p.y / scale }]));
+  return { corners, detected: true, method };
 }
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** Entzerrt den durch `corners` begrenzten Bereich. Seitenverhältnis aus den Kantenlängen. */
+/**
+ * Entzerrt den durch `corners` begrenzten Bereich. Seitenverhältnis aus den Kantenlängen, Breite wie das Blatt
+ * im Foto (zwischen PAGE_MIN_WIDTH und PAGE_MAX_WIDTH).
+ */
 export function rectify(canvas, corners) {
   const c = corners;
   const w = Math.max(dist(c.topLeftCorner, c.topRightCorner), dist(c.bottomLeftCorner, c.bottomRightCorner));
   const h = Math.max(dist(c.topLeftCorner, c.bottomLeftCorner), dist(c.topRightCorner, c.bottomRightCorner));
-  const width = PAGE_WIDTH;
-  const height = Math.round(PAGE_WIDTH * (h / w));
+  const width = Math.round(Math.min(PAGE_MAX_WIDTH, Math.max(PAGE_MIN_WIDTH, w)));
+  const height = Math.round(width * (h / w));
   const scanner = new window.jscanify();
   return scanner.extractPaper(canvas, width, height, corners);
+}
+
+/**
+ * Schärfe der entzerrten Seite: Varianz des Laplace-Filters auf einer Kopie mit SHARPNESS_WIDTH Breite
+ * (größer = schärfer; hängt auch vom Inhalt ab – ein fast leeres Blatt hat wenig Kanten).
+ */
+export function sharpness(page) {
+  const cv = window.cv;
+  const k = SHARPNESS_WIDTH / page.width;
+  const copy = document.createElement('canvas');
+  copy.width = SHARPNESS_WIDTH;
+  copy.height = Math.round(page.height * k);
+  copy.getContext('2d').drawImage(page, 0, 0, copy.width, copy.height);
+  const src = cv.imread(copy);
+  const gray = new cv.Mat();
+  const lap = new cv.Mat();
+  const mean = new cv.Mat();
+  const std = new cv.Mat();
+  try {
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    cv.Laplacian(gray, lap, cv.CV_64F);
+    cv.meanStdDev(lap, mean, std);
+    return Math.round(std.doubleAt(0, 0) ** 2);
+  } finally {
+    [src, gray, lap, mean, std].forEach((m) => m.delete());
+  }
+}
+
+/** Kürzeste Länge (Anteil der Seitenbreite), ab der ein gerader Strich als Tabellen- bzw. Unterstreichungslinie gilt. */
+const LINE_MIN_SHARE = 1 / 40;
+/**
+ * Größte mittlere Strichstärke (Anteil der Seitenbreite) einer Linie. Dickere lange Striche sind Teile großer
+ * Schrift (Logo, Überschrift) und bleiben stehen. 0,4 % ≈ 0,8 mm auf A4 – Tabellenlinien sind deutlich dünner.
+ */
+const LINE_MAX_THICKNESS = 0.004;
+/** Grauwert, ab dem die ausgeglichene Seite als Papier (weiß) gilt. */
+const PAPER_WHITE = 215;
+/** Rand der entzerrten Seite (Anteil), der für die OCR weiß gesetzt wird. */
+const EDGE_MARGIN = 0.008;
+
+/**
+ * Seite für die Texterkennung aufbereiten (Tesseract teilt die Seite sonst an Tabellenlinien falsch auf und
+ * übergeht einzeln stehende Zahlen in Kästchen):
+ *   1. Hintergrund ausgleichen – Graubild durch den geschätzten Papierhintergrund teilen, Papier wird weiß
+ *      (Schatten, Farbstich und Helligkeitsverlauf verschwinden).
+ *   2. Lange waagerechte und senkrechte Linien finden und weiß übermalen (Tabellenrahmen, Unterstreichungen).
+ * Bewertet 11/2026 an echten Mouser-Belegen: Mengen in Tabellenzellen 0/20 → 18/20 gelesen; Testblatt KT1:
+ * Ziffern im Kästchen bis 5 pt lesbar. Andere Lieferanten unverändert oder besser.
+ * → { canvas (Graustufen, für die OCR), lines: { h: [{ x0, x1, y }], v: [{ x, y0, y1 }] } }  (normiert 0..1)
+ */
+export function prepareForOcr(page) {
+  const cv = window.cv;
+  const W = page.width;
+  const H = page.height;
+  const L = Math.max(15, Math.round(W * LINE_MIN_SHARE));
+  const mats = [];
+  const mat = (m) => (mats.push(m), m);
+  try {
+    const src = mat(cv.imread(page));
+    const gray = mat(new cv.Mat());
+    const bg = mat(new cv.Mat());
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    // Hintergrund: Schrift wegdehnen (Maximum 7×7), glätten (Median 31) → Papierhelligkeit je Stelle
+    cv.dilate(gray, bg, mat(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(7, 7))));
+    cv.medianBlur(bg, bg, 31);
+    cv.divide(gray, bg, gray, 255);
+
+    // Linien: Binärbild (dunkel = 255), Öffnen mit langen Strukturelementen behält nur lange Striche
+    const bin = mat(new cv.Mat());
+    cv.adaptiveThreshold(gray, bin, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, 25, 15);
+    const hMask = mat(new cv.Mat());
+    const vMask = mat(new cv.Mat());
+    cv.morphologyEx(bin, hMask, cv.MORPH_OPEN, mat(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(L, 1))));
+    cv.morphologyEx(bin, vMask, cv.MORPH_OPEN, mat(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(1, L))));
+    // nur dünne Striche sind Linien (Masken werden darauf beschränkt)
+    const maxThick = Math.max(3, W * LINE_MAX_THICKNESS);
+    const lines = { h: thinLines(hMask, bin, W, H, 'h', maxThick), v: thinLines(vMask, bin, W, H, 'v', maxThick) };
+
+    const mask = mat(new cv.Mat());
+    cv.bitwise_or(hMask, vMask, mask);
+    cv.dilate(mask, mask, mat(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3))));
+    gray.setTo(new cv.Scalar(255), mask);
+
+    // Fast-Weiß (blasse Säume um entfernte Linien, Papierstruktur) auf Weiß ziehen: bei PAPER_WHITE kappen
+    // und auf 0..255 strecken – Schrift bleibt dunkel, der Hintergrund wird gleichmäßig weiß.
+    cv.threshold(gray, gray, PAPER_WHITE, 255, cv.THRESH_TRUNC);
+    gray.convertTo(gray, -1, 255 / PAPER_WHITE, 0);
+    // Schmaler Rand ringsum weiß: dort liegen nach dem Entzerren oft Reste des Untergrunds, die die OCR
+    // als „|“, „1“ oder „3“ liest (und z. B. für eine Positionsnummer hält).
+    const mx = Math.round(W * EDGE_MARGIN);
+    const my = Math.round(H * EDGE_MARGIN);
+    for (const [x, y, w, h] of [[0, 0, W, my], [0, H - my, W, my], [0, 0, mx, H], [W - mx, 0, mx, H]]) {
+      mat(gray.roi(new cv.Rect(x, y, w, h))).setTo(new cv.Scalar(255));
+    }
+
+    const out = document.createElement('canvas');
+    cv.imshow(out, gray);
+    return { canvas: out, lines };
+  } finally {
+    mats.forEach((m) => m.delete());
+  }
+}
+
+/**
+ * Linienstücke einer Maske (zusammenhängende Bereiche). Als Linie gilt nur ein Stück, das
+ *   – dünn ist (mittlere Strichstärke = Fläche/Länge ≤ maxThick Pixel; lange dicke Striche gehören zu großer Schrift),
+ *   – frei steht: in schmalen Streifen beidseits (über/unter bzw. links/rechts) ist es überwiegend hell. Innerhalb
+ *     fetter Schrift, deren Buchstaben sich berühren, entstehen sonst dünne „Linien“ quer durch die Buchstaben.
+ * Die Maske wird auf diese Stücke beschränkt. → Linienstücke in normierten Koordinaten
+ */
+function thinLines(mask, bin, W, H, dir, maxThick) {
+  const cv = window.cv;
+  const labels = new cv.Mat();
+  const stats = new cv.Mat();
+  const centroids = new cv.Mat();
+  const keep = cv.Mat.zeros(mask.rows, mask.cols, cv.CV_8U);
+  try {
+    const n = cv.connectedComponentsWithStats(mask, labels, stats, centroids, 8, cv.CV_32S);
+    const out = [];
+    const r = (v) => Math.round(v * 10000) / 10000;
+    for (let i = 1; i < n; i++) {  // 0 = Hintergrund
+      const x = stats.intAt(i, cv.CC_STAT_LEFT);
+      const y = stats.intAt(i, cv.CC_STAT_TOP);
+      const w = stats.intAt(i, cv.CC_STAT_WIDTH);
+      const h = stats.intAt(i, cv.CC_STAT_HEIGHT);
+      const length = dir === 'h' ? w : h;
+      if (stats.intAt(i, cv.CC_STAT_AREA) / length > maxThick) continue;
+      if (!standsFree(bin, x, y, w, h, dir)) continue;
+      cv.rectangle(keep, new cv.Point(x, y), new cv.Point(x + w - 1, y + h - 1), new cv.Scalar(255), -1);
+      out.push(dir === 'h'
+        ? { x0: r(x / W), x1: r((x + w) / W), y: r((y + h / 2) / H) }
+        : { x: r((x + w / 2) / W), y0: r(y / H), y1: r((y + h) / H) });
+    }
+    cv.bitwise_and(mask, keep, mask);
+    return out;
+  } finally {
+    [labels, stats, centroids, keep].forEach((m) => m.delete());
+  }
+}
+
+/** Anteil dunkler Pixel, ab dem ein Seitenstreifen neben einem Linienstück als „bedeckt“ gilt. */
+const LINE_SIDE_DARK = 0.5;
+
+/** Ist es beidseits des Linienstücks (Streifen 2 px, 2 px Abstand) überwiegend hell? */
+function standsFree(bin, x, y, w, h, dir) {
+  const cv = window.cv;
+  const gap = 2;
+  const band = 2;
+  const sides = dir === 'h'
+    ? [[x, y - gap - band, w, band], [x, y + h + gap, w, band]]
+    : [[x - gap - band, y, band, h], [x + w + gap, y, band, h]];
+  for (const [sx, sy, sw, sh] of sides) {
+    const cx = Math.max(0, sx);
+    const cy = Math.max(0, sy);
+    const cw = Math.min(bin.cols, sx + sw) - cx;
+    const ch = Math.min(bin.rows, sy + sh) - cy;
+    if (cw <= 0 || ch <= 0) continue; // am Seitenrand
+    const roi = bin.roi(new cv.Rect(cx, cy, cw, ch));
+    const dark = cv.countNonZero(roi) / (cw * ch);
+    roi.delete();
+    if (dark > LINE_SIDE_DARK) return false;
+  }
+  return true;
 }
 
 /** Canvas → JPEG-Blob in Farbe (Originalfoto für Problem-Meldungen). */

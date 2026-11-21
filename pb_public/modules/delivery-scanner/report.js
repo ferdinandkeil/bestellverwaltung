@@ -2,8 +2,12 @@
 // für die Collection scan_reports. Reine Funktionen (ohne DOM), damit sie ohne Browser testbar sind.
 import { profileMatchesOrder } from './profiles/index.js';
 
-/** Version des Formats von scan_reports.analysis – bei Änderungen erhöhen. */
-export const REPORT_VERSION = 1;
+/**
+ * Version des Formats von scan_reports.analysis – bei Änderungen erhöhen.
+ *   2 (11/2026): Seiten mit cornersMethod und sharpness, OCR mit Tabellenlinien (lines), Zeilen mit
+ *                qtyOrdered/qtyConflict und gelesenen Mengenzellen (cells); Fotos ≤ 3200 px, Ecken in deren Koordinaten.
+ */
+export const REPORT_VERSION = 2;
 
 /**
  * Einschätzung der Erkennung.
@@ -51,6 +55,7 @@ function compactOcr(ocr) {
     width: ocr.width,
     height: ocr.height,
     text: ocr.text,
+    lines: ocr.lines ?? null,
     words: ocr.words.map((w) => ({
       text: w.text, conf: Math.round(w.conf),
       bbox: { x0: round(w.bbox.x0), y0: round(w.bbox.y0), x1: round(w.bbox.x1), y1: round(w.bbox.y1) },
@@ -60,7 +65,8 @@ function compactOcr(ocr) {
 
 /**
  * Analyse-Daten für scan_reports.analysis.
- *   pages:   [{ source: {width,height}, cornersAuto, cornersDetected, corners, rectified: {width,height}, ocr }]
+ *   pages:   [{ source: {width,height}, cornersAuto, cornersDetected, cornersMethod, corners, rectified: {width,height},
+ *              sharpness, ocr }]
  *   review:  Zeilen der Prüfansicht (erkannte und zuletzt eingetragene Mengen)
  */
 export function buildAnalysis({ pages, detectedProfile, order, items = [], rows = [], assignments = [], review = [], assessment, warnings = [], internalOrderNos = [], client = {} }) {
@@ -80,16 +86,21 @@ export function buildAnalysis({ pages, detectedProfile, order, items = [], rows 
       index,
       source: p.source,
       cornersDetected: p.cornersDetected,
+      cornersMethod: p.cornersMethod ?? null,
       cornersAuto: p.cornersAuto,
       corners: p.corners,
       rectified: p.rectified,
+      sharpness: p.sharpness ?? null,
       ocr: compactOcr(p.ocr),
     })),
     items: items.map((it) => ({
       id: it.id, part_number: it.part_number, name: it.name,
       qty_ordered: it.qty_ordered, qty_delivered: it.qty_delivered, qty_cancelled: it.qty_cancelled,
     })),
-    rows: rows.map((r) => ({ page: r.page, qty: r.qty, part: r.part, box: r.box, conf: r.conf })),
+    rows: rows.map((r) => ({
+      page: r.page, qty: r.qty, qtyOrdered: r.qtyOrdered ?? null, qtyConflict: !!r.qtyConflict, part: r.part, box: r.box, conf: r.conf,
+      cells: r.cells ?? null,
+    })),
     assignments: assignments.map((a) => ({ part: a.row.part, page: a.row.page, itemId: a.itemId, sim: a.sim, status: a.status, reason: a.reason })),
     review: review.map((r) => ({ itemId: r.itemId, part: r.part, recognized: r.recognized, entered: r.qty, status: r.status })),
   };

@@ -30,13 +30,14 @@ export function similarity(a, b) {
 /**
  * Mengen-Text → Zahl. Typische OCR-Verwechslungen (O→0, I/l/|→1) werden nur korrigiert,
  * wenn der Text ansonsten aus Ziffern besteht (sonst würde z. B. „Volksbank“ zu 1).
+ * allowZero: 0 ist eine gültige Angabe (z. B. ausstehende Menge); Liefermengen sind mindestens 1.
  */
-export function parseQty(text) {
+export function parseQty(text, allowZero = false) {
   const raw = String(text).trim().replace(/[.,]$/, '');
   if (!/^[0-9OoIl|]+$/.test(raw) || !/[0-9]/.test(raw)) return null;
   const cleaned = raw.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1');
   const n = Number(cleaned);
-  return cleaned && Number.isInteger(n) && n > 0 ? n : null;
+  return cleaned && Number.isInteger(n) && (n > 0 || (allowZero && n === 0)) ? n : null;
 }
 
 const center = (b) => ({ x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 });
@@ -48,12 +49,68 @@ const unionBox = (ws) => ({
 });
 
 /**
- * Positionszeilen einer Seite lesen – je nach Profil über die Kopfzeile oder über die Mengeneinheit.
- * → { headerFound, rows: [{ qty, part, box, conf }] }   (box normiert 0..1)
- *   headerFound: true/false bei Kopfzeilen-Profilen, null bei Profilen ohne Kopfzeile (rowAnchor 'unit')
+ * Positionszeilen einer Seite lesen – je nach Profil über die Kopfzeile, die Mengeneinheit oder die Teilenummer.
+ *   reads: Ergebnisse des Zellen-Lesens (Map boxKey → { value, conf }), optional. Jede Zeile nennt in `cells`
+ *          die Bildbereiche ihrer Mengen; der Scanner liest sie gezielt als Zahl (ocr.recognizeNumbers) und
+ *          ruft extractRows mit den Ergebnissen erneut auf.
+ * → { headerFound, rows: [{ qty, qtyOrdered, qtyPending, qtyConflict, part, box, conf, cells }] }   (Boxen normiert 0..1)
+ *   qty: gelieferte Menge oder null (nicht lesbar); qtyOrdered / qtyPending: bestellte bzw. ausstehende Menge laut
+ *   Lieferschein (nur wenn das Profil sie liest); qtyConflict: Seiten- und Zellen-Lesen ergeben verschiedene Zahlen.
+ *   headerFound: true/false bei Kopfzeilen-Profilen, sonst null
  */
-export function extractRows(page, profile) {
-  return profile.rowAnchor === 'unit' ? extractRowsByUnit(page, profile) : extractRowsByHeader(page, profile);
+export function extractRows(page, profile, reads = null) {
+  const res = profile.rowAnchor === 'unit' ? extractRowsByUnit(page, profile)
+    : profile.rowAnchor === 'part' ? extractRowsByPart(page, profile)
+      : extractRowsByHeader(page, profile);
+  for (const row of res.rows) resolveQuantities(row, reads);
+  return res;
+}
+
+/** Schlüssel eines Bildbereichs (für die Zuordnung der Zellen-Lesungen). */
+export function boxKey(b) {
+  return [b.x0, b.y0, b.x1, b.y1].map((v) => v.toFixed(4)).join(',');
+}
+
+/** Ab dieser Sicherheit (Tesseract-Konfidenz) zählt das Zellen-Lesen mehr als das Seiten-Lesen. */
+const CELL_CONF_MIN = 60;
+
+/**
+ * Mengen einer Zeile aus Seiten-OCR (row.cells[k].word) und Zellen-Lesen (reads) bestimmen.
+ * Stimmen beide überein oder fehlt eins, gilt das vorhandene; widersprechen sie sich, gilt das Zellen-Lesen
+ * (bei ausreichender Sicherheit) und die Zeile wird als unsicher markiert.
+ */
+function resolveQuantities(row, reads) {
+  for (const [key, cell] of Object.entries(row.cells ?? {})) {
+    const read = reads?.get(boxKey(cell.box));
+    const cellValue = read?.value ?? null;
+    let value = cell.word;
+    let conflict = false;
+    if (cellValue != null) {
+      if (value == null) value = cellValue;
+      else if (value !== cellValue) {
+        conflict = true;
+        if (read.conf >= CELL_CONF_MIN) value = cellValue;
+      }
+    }
+    if (key === 'qty') {
+      row.qty = value;
+      row.qtyConflict = conflict;
+    } else if (key === 'ordered') {
+      row.qtyOrdered = value;
+    } else if (key === 'pending') {
+      row.qtyPending = value;
+    }
+  }
+}
+
+/**
+ * Bereich um eine Zahl für das Zellen-Lesen: etwas Rand, damit keine Ziffer abgeschnitten wird.
+ * h: Schrifthöhe (normiert auf die Seitenhöhe); der seitliche Rand wird über das Seitenverhältnis umgerechnet.
+ */
+function numberBox(page, b, h) {
+  const hx = h * (page.height && page.width ? page.height / page.width : 1);
+  const r = (v) => Math.round(Math.min(1, Math.max(0, v)) * 10000) / 10000;
+  return { x0: r(b.x0 - 0.6 * hx), y0: r(b.y0 - 0.35 * h), x1: r(b.x1 + 0.6 * hx), y1: r(b.y1 + 0.35 * h), textHeight: h };
 }
 
 /** Position, Satzzeichen: gehören nicht zur Bestellnummer. */
@@ -65,6 +122,8 @@ const isPunctuation = (w) => !/[0-9A-Za-z]/.test(w.text);
  * Die OCR liest Menge und Einheit teils als ein Wort („3ST“) – auch das wird erkannt.
  * Menge = Zahl direkt links der Einheit (darf durch die OCR leicht versetzt sein),
  * Bestellnummer = Wörter derselben Zeile links der Menge, ohne führende Positionsnummer.
+ * Ist die Menge auf der Seite nicht lesbar (z. B. „10“ als „To“ gelesen) oder fehlt sie, entsteht die Zeile
+ * trotzdem – die Menge kommt dann aus dem Zellen-Lesen des Bereichs vor der Einheit.
  * Tabellen ohne Einheit (z. B. Pack- oder Chargenlisten) liefern so keine Zeilen.
  */
 function extractRowsByUnit(page, profile) {
@@ -72,32 +131,40 @@ function extractRowsByUnit(page, profile) {
   const rows = [];
   const unitOnly = new RegExp(`^(${profile.unit})\\.?$`);
   const merged = new RegExp(`^([0-9OoIl|]+)(${profile.unit})\\.?$`);
+  const aspect = page.height && page.width ? page.height / page.width : 1;
   const anchors = [];
   for (const w of words) {
     const t = w.text.trim();
+    const h = w.bbox.y1 - w.bbox.y0;
     if (unitOnly.test(t)) {
       const uc = center(w.bbox);
-      const h = w.bbox.y1 - w.bbox.y0;
-      // Menge: Zahl rechtsbündig vor der Einheit, vertikal höchstens etwa eine Zeilenhöhe versetzt
+      // Menge: kurzes Wort rechtsbündig vor der Einheit, vertikal höchstens etwa eine Zeilenhöhe versetzt
       const qtyWord = words
         .filter((q) => q !== w && q.bbox.x1 <= w.bbox.x0 + 0.005 && q.bbox.x1 >= w.bbox.x0 - 0.06
-          && Math.abs(center(q.bbox).y - uc.y) < h * 1.2 && parseQty(q.text))
+          && Math.abs(center(q.bbox).y - uc.y) < h * 1.2 && q.text.trim().length <= 5)
         .sort((a, b) => b.bbox.x1 - a.bbox.x1)[0];
-      if (qtyWord) anchors.push({ unit: w, qtyWord, qty: parseQty(qtyWord.text) });
+      // ohne Wort: Bereich von etwa vier Ziffernbreiten vor der Einheit
+      const qtyArea = qtyWord?.bbox ?? { x0: w.bbox.x0 - 2.4 * h * aspect, y0: w.bbox.y0, x1: w.bbox.x0, y1: w.bbox.y1 };
+      anchors.push({ unit: w, qtyWord, left: qtyArea.x0, qty: qtyWord ? parseQty(qtyWord.text) : null, qtyArea });
     } else {
       const m = merged.exec(t);
       const qty = m && parseQty(m[1]);
-      if (qty) anchors.push({ unit: w, qtyWord: w, qty });
+      if (qty) {
+        // nur der Ziffernteil des Worts („4ST“ → „4“), anteilig nach Zeichen
+        const b = w.bbox;
+        const qtyArea = { x0: b.x0, y0: b.y0, x1: b.x0 + (b.x1 - b.x0) * (m[1].length / t.length), y1: b.y1 };
+        anchors.push({ unit: w, qtyWord: w, left: b.x0, qty, qtyArea });
+      }
     }
   }
 
-  for (const { unit, qtyWord, qty } of anchors) {
+  for (const { unit, qtyWord, left, qty, qtyArea } of anchors) {
     const uc = center(unit.bbox);
     const h = unit.bbox.y1 - unit.bbox.y0;
     // Bestellnummer: Zeile links der Menge. Bei leicht schiefem Blatt liegt die Folgezeile (Hersteller,
     // Beschreibung) ähnlich nah – daher Textzeilen bilden und die Zeile mit Positionsnummer bevorzugen.
     const nearby = words
-      .filter((w) => w !== qtyWord && w !== unit && w.bbox.x1 <= qtyWord.bbox.x0 && Math.abs(center(w.bbox).y - uc.y) < h * 2)
+      .filter((w) => w !== qtyWord && w !== unit && w.bbox.x1 <= left && Math.abs(center(w.bbox).y - uc.y) < h * 2)
       .sort((a, b) => center(a.bbox).y - center(b.bbox).y);
     const lines = [];
     for (const w of nearby) {
@@ -126,8 +193,9 @@ function extractRowsByUnit(page, profile) {
     rows.push({
       qty,
       part: partWords.map((w) => w.text).join(' ').replace(/[\s/]+$/, ''),
-      box: unionBox([...partWords, qtyWord, unit]),
+      box: unionBox([...partWords, ...(qtyWord ? [qtyWord] : []), unit]),
       conf: Math.round(Math.min(...partWords.map((w) => w.conf ?? 0))),
+      cells: { qty: { word: qty, box: numberBox(page, qtyArea, h) } },
     });
   }
   rows.sort((a, b) => a.box.y0 - b.box.y0);
@@ -169,14 +237,105 @@ function extractRowsByHeader(page, profile) {
     if (!qtyWords.length || !partWords.length) continue;
     const qty = parseQty(qtyWords.map((w) => w.text).join(''));
     if (!qty) continue;
+    const qtyBox = unionBox(qtyWords);
     rows.push({
       qty,
       part: partWords.map((w) => w.text).join(' '),
       box: unionBox([...qtyWords, ...partWords]),
       conf: Math.round(Math.min(...partWords.map((w) => w.conf ?? 0))),
+      cells: { qty: { word: qty, box: numberBox(page, qtyBox, qtyBox.y1 - qtyBox.y0) } },
     });
   }
   return { headerFound: true, rows };
+}
+
+/**
+ * Lesart „Teilenummer“ (Mouser): Tabelle mit Rahmenlinien, Mengen stehen allein in eigenen Spalten.
+ *   Zeilen:  jedes Wort im Muster profile.partPattern (z. B. „595-TCAN332D“), das in der Tabelle liegt
+ *            (links und rechts davon senkrechte Tabellenlinien).
+ *   Mengen:  Spalten zwischen den senkrechten Tabellenlinien, gezählt von rechts (profile.qtyColumns,
+ *            z. B. { ordered: 3, qty: 2 } = drittletzte bzw. vorletzte Spalte); Bereich = Höhe der Teilenummer.
+ *   Linien kommen aus vision.prepareForOcr (page.lines). Ohne Linien keine Mengen (→ Zellen leer, „prüfen“).
+ */
+function extractRowsByPart(page, profile) {
+  const words = page.words;
+  const vertical = tableBorders(page.lines?.v ?? []);
+  const horizontal = rules(page.lines?.h ?? []);
+  const rows = [];
+  for (const w of words) {
+    const t = w.text.trim().replace(/[.,;:]$/, '');
+    if (!profile.partPattern.test(t)) continue;
+    const cy = center(w.bbox).y;
+    // Spaltengrenzen auf Höhe dieser Zeile
+    const xs = vertical.filter((v) => v.y0 <= cy && v.y1 >= cy).map((v) => v.x);
+    const leftOf = xs.filter((x) => x < w.bbox.x0);
+    const rightOf = xs.filter((x) => x > w.bbox.x1);
+    if (!leftOf.length || !rightOf.length) continue; // nicht in der Tabelle (z. B. Telefonnummer im Kopf)
+    const h = w.bbox.y1 - w.bbox.y0;
+    const cells = {};
+    for (const [key, fromRight] of Object.entries(profile.qtyColumns)) {
+      if (xs.length < fromRight + 1) continue;
+      const x1 = xs[xs.length - fromRight];
+      const x0 = xs[xs.length - fromRight - 1];
+      if (x0 <= w.bbox.x1) continue; // Spalte läge links der Teilenummer – Tabelle nicht vollständig erkannt
+      // Abstand zu den (in der aufbereiteten Seite entfernten) Linien; kleiner war in der Auswertung 11/2026 schlechter
+      const inset = 0.003;
+      const box = { x0: x0 + inset, y0: Math.max(0, w.bbox.y0 - 0.6 * h), x1: x1 - inset, y1: Math.min(1, w.bbox.y1 + 0.6 * h), textHeight: h };
+      // Seiten-OCR: Zahl, deren Mitte im Bereich liegt
+      const inCell = words.filter((q) => q !== w && center(q.bbox).x > box.x0 && center(q.bbox).x < box.x1
+        && center(q.bbox).y > box.y0 && center(q.bbox).y < box.y1);
+      const r = (v) => Math.round(v * 10000) / 10000;
+      cells[key] = {
+        word: inCell.length ? parseQty(inCell.map((q) => q.text).join(''), key === 'pending') : null,
+        box: { x0: r(box.x0), y0: r(box.y0), x1: r(box.x1), y1: r(box.y1), textHeight: h },
+      };
+    }
+    const cellRight = Math.max(0, ...Object.values(cells).map((c) => c.box.x1));
+    if (!cellRight) continue;
+    // Positionstabelle: über der Zeile liegt eine waagerechte Linie (Zeilen- oder Kopftrenner), die von der
+    // Teilenummer bis über die Mengenspalten reicht. Schließt Treffer im Kopf aus (Telefonnummer neben einem
+    // Strichcode, dessen Striche als senkrechte Linien gelten).
+    const ruled = horizontal.some((l) => l.y < w.bbox.y0 && l.y > w.bbox.y0 - 0.25
+      && l.x0 <= w.bbox.x0 + 0.01 && l.x1 >= cellRight - 0.01);
+    if (!ruled) continue;
+    rows.push({ qty: null, part: t, box: { ...w.bbox }, conf: Math.round(w.conf ?? 0), cells });
+  }
+  rows.sort((a, b) => a.box.y0 - b.box.y0);
+  return { headerFound: null, rows };
+}
+
+/**
+ * Senkrechte Tabellenlinien: Linienstücke mit (fast) gleichem x zusammenfassen (Unterbrechungen durch
+ * Waagerechte oder Lücken im Druck). → [{ x, y0, y1 }] nach x sortiert, nur Linien ab 5 % Seitenhöhe
+ */
+function tableBorders(segments) {
+  const merged = [];
+  for (const s of [...segments].sort((a, b) => a.x - b.x)) {
+    const m = merged.find((g) => Math.abs(g.x - s.x) < 0.006 && s.y0 <= g.y1 + 0.02 && s.y1 >= g.y0 - 0.02);
+    if (m) {
+      m.x = (m.x + s.x) / 2;
+      m.y0 = Math.min(m.y0, s.y0);
+      m.y1 = Math.max(m.y1, s.y1);
+    } else {
+      merged.push({ ...s });
+    }
+  }
+  return merged.filter((g) => g.y1 - g.y0 >= 0.05).sort((a, b) => a.x - b.x);
+}
+
+/** Waagerechte Linien: Stücke auf (fast) gleicher Höhe mit kleinen Lücken zusammenfassen. → [{ x0, x1, y }] */
+function rules(segments) {
+  const merged = [];
+  for (const s of [...segments].sort((a, b) => a.x0 - b.x0)) {
+    const m = merged.find((g) => Math.abs(g.y - s.y) < 0.004 && s.x0 <= g.x1 + 0.02);
+    if (m) {
+      m.x1 = Math.max(m.x1, s.x1);
+      m.y = (m.y + s.y) / 2;
+    } else {
+      merged.push({ ...s });
+    }
+  }
+  return merged;
 }
 
 /** Schwellen für die Zuordnung. */
@@ -217,27 +376,41 @@ export function matchRows(rows, items) {
   });
 
   const perItem = {};
+  const check = (entry, reason) => {
+    entry.status = 'check';
+    if (!entry.reasons.includes(reason)) entry.reasons.push(reason);
+  };
   for (const a of assignments) {
     if (!a.itemId) continue;
-    const entry = (perItem[a.itemId] ??= { qty: 0, status: 'sure', reasons: [], rows: 0 });
-    entry.qty += a.row.qty;
+    const entry = (perItem[a.itemId] ??= { qty: 0, status: 'sure', reasons: [], rows: 0, unreadable: false });
+    const it = items.find((x) => x.id === a.itemId);
     entry.rows += 1;
-    if (a.status === 'check') {
-      entry.status = 'check';
-      entry.reasons.push(a.reason);
+    if (a.row.qty == null) entry.unreadable = true;
+    else entry.qty += a.row.qty;
+    if (a.status === 'check') check(entry, a.reason);
+    if (a.row.qtyConflict) check(entry, 'Menge unsicher gelesen');
+    // Bestellte Menge laut Lieferschein (falls das Profil sie liest) mit der Bestellung vergleichen
+    const { qty, qtyOrdered, qtyPending } = a.row;
+    if (qtyOrdered != null && qtyOrdered !== it.qty_ordered) {
+      check(entry, `bestellt laut Lieferschein ${qtyOrdered}, in der Bestellung ${it.qty_ordered}`);
+    }
+    // Teillieferung laut Lieferschein: nur sicher, wenn geliefert + ausstehend = bestellt aufgeht – sonst kann
+    // auch eine verlesene Ziffer dahinterstecken („20“ als „2“)
+    if (qty != null && qtyOrdered != null && qty !== qtyOrdered && !(qtyPending != null && qty + qtyPending === qtyOrdered)) {
+      check(entry, 'Teillieferung – Menge bitte prüfen');
     }
   }
   for (const it of items) {
     const entry = perItem[it.id];
     if (!entry) continue;
-    if (entry.rows > 1) {
-      entry.status = 'check';
-      entry.reasons.push('mehrere Zeilen zugeordnet');
-    }
+    if (entry.rows > 1) check(entry, 'mehrere Zeilen zugeordnet');
     const backlog = Math.max(0, it.qty_ordered - (it.qty_delivered || 0) - (it.qty_cancelled || 0));
-    if (entry.qty > backlog) {
-      entry.status = 'check';
-      entry.reasons.push(`mehr als der Rückstand (${backlog})`);
+    if (entry.unreadable) {
+      // Menge nicht lesbar: offene Menge vorschlagen (bei Mouser meist richtig), immer prüfen lassen
+      entry.qty = Math.max(entry.qty, backlog);
+      check(entry, 'Menge nicht lesbar – offene Menge vorgeschlagen');
+    } else if (entry.qty > backlog) {
+      check(entry, `mehr als der Rückstand (${backlog})`);
     }
   }
   return { assignments, perItem };

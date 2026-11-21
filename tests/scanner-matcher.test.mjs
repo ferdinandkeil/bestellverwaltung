@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizePart, similarity, parseQty, extractRows, matchRows, orderNumberTokens, rankOrders,
-  parseInternalOrderNo, findInternalOrderNumbers,
+  parseInternalOrderNo, findInternalOrderNumbers, boxKey,
 } from '../pb_public/modules/delivery-scanner/matcher.js';
 import { detectProfile, profileById, profileForOrder, profileMatchesOrder } from '../pb_public/modules/delivery-scanner/profiles/index.js';
 
@@ -64,7 +64,8 @@ test('Normalisierung, Ähnlichkeit, Mengen mit OCR-Verwechslungen', () => {
 
 test('Profil wird über den Kopfbereich erkannt', () => {
   assert.equal(detectProfile([PAGE]).id, 'reichelt');
-  assert.equal(detectProfile([{ words: [word('Mouser Electronics', 0.1, 0.05)] }]), null);
+  assert.equal(detectProfile([{ words: [word('Mouser Electronics', 0.1, 0.05)] }]).id, 'mouser');
+  assert.equal(detectProfile([{ words: [word('Conrad Electronic', 0.1, 0.05)] }]), null, 'Lieferant ohne Profil');
 });
 
 test('Zeilen werden über die Kopfzeile gelesen, Fußzeile ignoriert', () => {
@@ -203,4 +204,114 @@ test('TME: Zeilen über die Einheit „ST“ – trotz schiefem Blatt, versetzte
 test('Würth: nur Lieferschein-Zeilen mit „STK“ zählen, Packliste nicht doppelt', () => {
   assert.deepEqual(extractRows(WE_DELIVERY, wuerth).rows.map((r) => [r.qty, r.part]), [[2, '1111111111105'], [3, '1111111111101']]);
   assert.deepEqual(extractRows(WE_PACKING, wuerth), { headerFound: null, rows: [] });
+});
+
+test('Einheit: unlesbare Menge vor „ST“ → Zeile ohne Menge, Zellen-Lesen ergänzt sie', () => {
+  const page = { words: [
+    word('TME', 0.04, 0.05),
+    word('1', 0.05, 0.30), word('TST-ABC123', 0.10, 0.30), word('4ST', 0.89, 0.30),
+    word('2', 0.05, 0.35), word('NTC-10K-1%', 0.10, 0.35), word('To', 0.88, 0.35), word('ST', 0.902, 0.35),
+  ] };
+  const first = extractRows(page, tme).rows;
+  assert.deepEqual(first.map((r) => [r.qty, r.part]), [[4, 'TST-ABC123'], [null, 'NTC-10K-1%']]);
+  assert.ok(first[1].cells.qty.box.x1 <= 0.902 + 0.01, 'Mengenbereich liegt vor der Einheit');
+  const reads = new Map([[boxKey(first[1].cells.qty.box), { value: 10, conf: 90 }]]);
+  assert.deepEqual(extractRows(page, tme, reads).rows.map((r) => r.qty), [4, 10]);
+});
+
+test('Zellen-Lesen widerspricht der Seiten-OCR → Zellenwert (bei ausreichender Sicherheit), Zeile unsicher', () => {
+  const page = { words: [word('1', 0.05, 0.30), word('TST-ABC123', 0.10, 0.30), word('7', 0.89, 0.30), word('ST', 0.902, 0.30)] };
+  const [row] = extractRows(page, tme).rows;
+  const key = boxKey(row.cells.qty.box);
+  const sure = extractRows(page, tme, new Map([[key, { value: 1, conf: 90 }]])).rows[0];
+  assert.deepEqual([sure.qty, sure.qtyConflict], [1, true]);
+  const weak = extractRows(page, tme, new Map([[key, { value: 1, conf: 30 }]])).rows[0];
+  assert.deepEqual([weak.qty, weak.qtyConflict], [7, true]);
+});
+
+// ---------------------------------------------------------------------------
+// Mouser: Zeilen über die Teilenummer, Mengen aus den Tabellenspalten (Linien aus vision.prepareForOcr)
+// ---------------------------------------------------------------------------
+const mouser = profileById('mouser');
+const hLine = (y, x0, x1) => ({ y, x0, x1 });
+const vLine = (x, y0, y1) => ({ x, y0, y1 });
+/** Mouser-Layout (A4 quer): Spalten LN | Teilenummer … | Lot | bestellt | geliefert | ausstehend. */
+const MOUSER_PAGE = {
+  width: 3000,
+  height: 2100,
+  words: [
+    word('MOUSER', 0.1, 0.08),
+    // Kopf: Telefonnummer neben einem Strichcode (senkrechte Striche) und dem Infokasten rechts
+    word('Ph.', 0.03, 0.2), word('(800)', 0.05, 0.2), word('346-6873', 0.09, 0.2),
+    word('Bestellnummer', 0.65, 0.1), word('2026IW01047', 0.75, 0.13),
+    // Position 1: alle Mengen auf der Seite gelesen
+    word('001', 0.04, 0.43), word('595-TCAN332D', 0.08, 0.43), word('Taric:', 0.3, 0.45), word('8542399000', 0.36, 0.45),
+    ...lineAt(0.47, 0.08, ['TI', 'CAN', 'Interface', 'IC', '3.3-V']),
+    word('4', 0.785, 0.43), word('4', 0.885, 0.43), word('0', 0.965, 0.43),
+    // Position 2: gelieferte Menge auf der Seite nicht gelesen (nur im Zellen-Lesen)
+    word('002', 0.04, 0.56), word('511-LD1117S33TR', 0.08, 0.56), word('25', 0.776, 0.56), word('5', 0.965, 0.56),
+    ...lineAt(0.60, 0.08, ['STMicroelectronics', 'LDO', '3.3V']),
+  ],
+  lines: {
+    v: [
+      vLine(0.015, 0.05, 0.3), vLine(0.02, 0.05, 0.3), // Strichcode
+      vLine(0.62, 0.02, 0.25), vLine(0.72, 0.02, 0.25), vLine(0.98, 0.02, 0.25), // Infokasten
+      // Tabelle (eine Linie durch Zeilentrenner unterbrochen)
+      ...[0.03, 0.07, 0.55, 0.70, 0.80, 0.90, 0.98].map((x) => vLine(x, 0.36, 0.95)),
+      vLine(0.801, 0.36, 0.5), vLine(0.802, 0.51, 0.95),
+    ],
+    h: [
+      hLine(0.05, 0.62, 0.98), hLine(0.15, 0.62, 0.98), // Infokasten
+      hLine(0.36, 0.03, 0.98), hLine(0.42, 0.03, 0.6), hLine(0.42, 0.61, 0.98), // Kopfzeile, mit kleiner Lücke
+      hLine(0.55, 0.03, 0.98), hLine(0.68, 0.03, 0.98),
+    ],
+  },
+};
+
+test('Mouser: Erkennung, Zeilen über die Teilenummer, Mengen aus Tabellenspalten, Kopf ignoriert', () => {
+  assert.equal(detectProfile([MOUSER_PAGE]).id, 'mouser');
+  // Logo nicht gelesen: Spaltenkopf der Tabelle genügt (größerer Suchbereich nur für Mouser)
+  assert.equal(detectProfile([{ words: [word('Mouser-Teilenummer', 0.08, 0.38), word('Würth', 0.1, 0.38)] }]).id, 'mouser');
+  assert.equal(detectProfile([{ words: [word('Würth', 0.1, 0.38)] }]), null, 'andere Profile nur im Kopf (y < 0,3)');
+  assert.equal(profileForOrder({ supplier: 'mouser' }).id, 'mouser');
+  const { rows } = extractRows(MOUSER_PAGE, mouser);
+  assert.deepEqual(rows.map((r) => [r.part, r.qty, r.qtyOrdered, r.qtyPending]), [['595-TCAN332D', 4, 4, 0], ['511-LD1117S33TR', null, 25, 5]]);
+  // Mengenbereich „geliefert“ liegt in der vorletzten Spalte, auf Höhe der Teilenummer
+  const box = rows[1].cells.qty.box;
+  assert.ok(box.x0 > 0.80 && box.x1 < 0.90 && box.y0 < 0.56 && box.y1 > 0.568, JSON.stringify(box));
+  const reads = new Map([[boxKey(box), { value: 20, conf: 90 }]]);
+  assert.deepEqual(extractRows(MOUSER_PAGE, mouser, reads).rows.map((r) => r.qty), [4, 20]);
+});
+
+test('Mouser: ohne Tabellenlinien keine Mengen (Zeilen werden nicht geraten)', () => {
+  assert.deepEqual(extractRows({ ...MOUSER_PAGE, lines: null }, mouser).rows, []);
+});
+
+test('Abgleich: unlesbare Menge → offene Menge vorgeschlagen, abweichende Bestellmenge und Widerspruch → prüfen', () => {
+  const items = [
+    { id: 'a', part_number: '595-TCAN332D', qty_ordered: 4, qty_delivered: 1, qty_cancelled: 0 },
+    { id: 'b', part_number: '511-LD1117S33TR', qty_ordered: 25, qty_delivered: 0, qty_cancelled: 0 },
+    { id: 'c', part_number: '81-GRM188R71H104KA3D', qty_ordered: 100, qty_delivered: 0, qty_cancelled: 0 },
+  ];
+  const rows = [
+    { part: '595-TCAN332D', qty: null, qtyOrdered: 4, box: {} },
+    { part: '511-LD1117S33TR', qty: 20, qtyOrdered: 30, box: {} },
+    { part: '81-GRM188R71H104KA3D', qty: 100, qtyOrdered: 100, qtyConflict: true, box: {} },
+  ];
+  const { perItem } = matchRows(rows, items);
+  assert.deepEqual([perItem.a.qty, perItem.a.status], [3, 'check']);
+  assert.ok(perItem.a.reasons.includes('Menge nicht lesbar – offene Menge vorgeschlagen'));
+  assert.deepEqual([perItem.b.qty, perItem.b.status], [20, 'check']);
+  assert.ok(perItem.b.reasons.includes('bestellt laut Lieferschein 30, in der Bestellung 25'));
+  assert.deepEqual([perItem.c.qty, perItem.c.status, perItem.c.reasons], [100, 'check', ['Menge unsicher gelesen']]);
+});
+
+test('Abgleich: Teillieferung nur sicher, wenn geliefert + ausstehend = bestellt', () => {
+  const items = [{ id: 'a', part_number: '710-885012206046', qty_ordered: 25, qty_delivered: 0, qty_cancelled: 0 }];
+  const run = (row) => matchRows([{ part: '710-885012206046', box: {}, ...row }], items).perItem.a;
+  assert.equal(run({ qty: 20, qtyOrdered: 25, qtyPending: 5 }).status, 'sure');
+  assert.equal(run({ qty: 25, qtyOrdered: 25, qtyPending: null }).status, 'sure');
+  const misread = run({ qty: 2, qtyOrdered: 25, qtyPending: 5 }); // „20“ als „2“ gelesen
+  assert.deepEqual([misread.status, misread.reasons], ['check', ['Teillieferung – Menge bitte prüfen']]);
+  assert.equal(run({ qty: 2, qtyOrdered: 25, qtyPending: null }).status, 'check');
 });
