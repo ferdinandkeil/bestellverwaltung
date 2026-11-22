@@ -109,15 +109,15 @@ const template = /* html */ `
   </p>
 
   <!-- Bestellungen als Tabelle. PC (lg+): alle Schritt-Spalten, Klick auf Nr./Wo/Was öffnet die Bestellung.
-       Smartphone/Tablet: nur Nr., Wo, Was (ab sm), Datum und Phase; Antippen klappt die Schritte auf. -->
+       Smartphone/Tablet: nur Datum, Nr., Wo, Was (ab sm) und Phase; Antippen klappt die Schritte auf. -->
   <div x-show="rows.length" class="card overflow-x-auto" data-overview-table>
     <table class="w-full text-sm">
       <thead class="text-xs text-slate-500">
         <tr>
-          <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold">Bestell-Nr.</th>
+          <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold">Datum</th>
+          <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold"><span class="sm:hidden">Best.-Nr.</span><span class="hidden sm:inline">Bestell-Nr.</span></th>
           <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold">Wo</th>
           <th rowspan="2" class="hidden px-3 py-2 text-left align-bottom font-semibold sm:table-cell">Was</th>
-          <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold">Datum</th>
           <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold lg:hidden">Phase</th>
           <th rowspan="2" class="w-8 lg:hidden"><span class="sr-only">Aufklappen</span></th>
           <template x-for="g in columnGroups" :key="g.label">
@@ -135,18 +135,20 @@ const template = /* html */ `
       <template x-for="row in rows" :key="row.order.id">
         <tbody class="border-t border-slate-100" :class="row.closed && 'text-slate-400'">
           <tr class="cursor-pointer hover:bg-slate-50/60 lg:cursor-auto" :data-order="row.order.id" @click="rowClicked(row, $event)">
+            <td class="whitespace-nowrap px-3 py-2.5 text-xs lg:py-2" :class="row.closed ? 'text-slate-400' : 'text-slate-600'" :title="'angelegt ' + fmt.date(row.order.created)">
+              <span class="sm:hidden" x-text="fmt.shortDate(row.order.created)"></span>
+              <span class="hidden sm:inline" x-text="fmt.date(row.order.created)"></span>
+            </td>
             <td class="whitespace-nowrap px-3 py-2.5 font-mono text-xs lg:py-2">
-              <a :href="'#/orders/' + row.order.id" class="pointer-events-none hover:text-blue-700 hover:underline lg:pointer-events-auto" x-text="row.number"></a>
+              <a :href="'#/orders/' + row.order.id" class="pointer-events-none hover:text-blue-700 hover:underline lg:pointer-events-auto" :title="row.number">
+                <span class="sm:hidden" x-text="row.shortNumber"></span><span class="hidden sm:inline" x-text="row.number"></span>
+              </a>
             </td>
             <td class="max-w-28 truncate px-3 py-2.5 sm:max-w-none sm:whitespace-nowrap lg:py-2">
               <a :href="'#/orders/' + row.order.id" class="pointer-events-none font-medium hover:text-blue-700 hover:underline lg:pointer-events-auto" x-text="supplierLabel(row.order)"></a>
             </td>
             <td class="hidden px-3 py-2.5 sm:table-cell lg:py-2">
               <a :href="'#/orders/' + row.order.id" class="pointer-events-none line-clamp-1 hover:text-blue-700 hover:underline lg:pointer-events-auto" x-text="row.order.subject || '–'"></a>
-            </td>
-            <td class="whitespace-nowrap px-3 py-2.5 text-xs text-slate-600 lg:py-2" :class="row.closed && 'text-slate-400'" :title="'angelegt ' + fmt.date(row.order.created)">
-              <span class="sm:hidden" x-text="fmt.shortDate(row.order.created)"></span>
-              <span class="hidden sm:inline" x-text="fmt.date(row.order.created)"></span>
             </td>
             <td class="whitespace-nowrap px-3 py-2.5 lg:hidden">
               <span class="badge" :class="statusMeta(row.order.status).badge" x-text="statusMeta(row.order.status).short || statusMeta(row.order.status).label"></span>
@@ -160,9 +162,9 @@ const template = /* html */ `
               <template x-for="(s, i) in track.steps" :key="s.value">
                 <td class="hidden px-1 py-2 text-center lg:table-cell" :class="{ 'border-l border-slate-100': i === 0, 'opacity-50': row.closed }">
                   <button type="button" class="inline-flex rounded align-middle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                          :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :disabled="!s.clickable"
-                          :title="s.tooltip" :aria-label="s.tooltip" :data-step="s.value" :data-state="s.state"
-                          @click="toggleStep(row.order, row.steps, s.value)">${STEP_BOX}</button>
+                          :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :aria-disabled="!s.clickable"
+                          x-tip="s.tip" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
+                          @click="s.clickable && toggleStep(row.order, row.steps, s.value)">${STEP_BOX}</button>
                 </td>
               </template>
             </template>
@@ -176,9 +178,9 @@ const template = /* html */ `
                   <div class="w-20 shrink-0 pt-1 text-xs font-semibold text-slate-500" x-text="track.label"></div>
                   <div class="flex flex-wrap gap-x-1 gap-y-0.5">
                     <template x-for="s in track.steps" :key="s.value">
-                      <button type="button" class="inline-flex items-center gap-1.5 rounded px-1 py-1 text-xs text-slate-700 disabled:text-slate-400"
-                              :disabled="!s.clickable" :title="s.tooltip" :aria-label="s.tooltip" :data-step="s.value" :data-state="s.state"
-                              @click="toggleStep(row.order, row.steps, s.value)">${STEP_BOX}<span x-text="s.short"></span></button>
+                      <button type="button" class="inline-flex items-center gap-1.5 rounded px-1 py-1 text-xs text-slate-700 aria-disabled:cursor-default aria-disabled:text-slate-400"
+                              :aria-disabled="!s.clickable" x-tip="s.tip" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
+                              @click="s.clickable && toggleStep(row.order, row.steps, s.value)">${STEP_BOX}<span x-text="s.short"></span></button>
                     </template>
                   </div>
                 </div>
@@ -356,6 +358,8 @@ function component() {
             view: stepView(order, steps, order.expand?.deliveries_via_order ?? []),
             closed: order.status === 'abgeschlossen',
             number: order.internal_order_no || (order.without_internal_order_no ? 'ohne Nr.' : '–'),
+            // schmale Bildschirme: ohne Jahr und Kürzel („2026IW01051“ → „01051“)
+            shortNumber: (order.internal_order_no || '').replace(/^.*IW/i, '') || (order.without_internal_order_no ? 'ohne' : '–'),
           };
         }).sort(compareRows);
         this.error = '';

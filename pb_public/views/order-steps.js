@@ -41,6 +41,9 @@ function localDay(value) {
   return value ? new Date(value.replace(' ', 'T')).toLocaleDateString('sv-SE') : '';
 }
 
+/** Tooltip für erledigte Schritte ohne bekanntes Datum (z. B. aus der Migration). */
+const NO_DATE = 'kein Datum';
+
 function whoAndWhen(record) {
   if (!record) return '';
   const who = record.expand?.done_by?.name || record.expand?.done_by?.email || '';
@@ -80,7 +83,8 @@ export function nextStepOf(order, steps) {
 
 /**
  * Spuren Bestellung, Ware, Rechnung mit Zustand je Schritt:
- * { value, label, short, state: done|skipped|open, record, detail, tooltip, clickable, disabledReason, next }.
+ * { value, label, short, state: done|skipped|open, record, detail, tip, ariaLabel, clickable, disabledReason, next }.
+ * tip: Tooltip am Kästchen – nur das Datum erledigter Schritte („kein Datum“, wenn unbekannt), sonst leer.
  * deliveries: Lieferbuchungen der Bestellung (für „teilgeliefert“; mehr als eine Buchung = in Teilen geliefert).
  */
 export function stepView(order, steps, deliveries = []) {
@@ -100,9 +104,10 @@ export function stepView(order, steps, deliveries = []) {
     if (s.state === 'done') detail = s.record ? whoAndWhen(s.record) : 'automatisch';
     else if (s.state === 'skipped') detail = 'übersprungen';
     else if (s.hint && s.value !== 'closed') detail = s.hint;
-    const action = s.state === 'done' ? 'Klick entfernt den Haken' : 'Klick hakt ab (heute)';
-    const tooltip = `${s.label}: ${detail || 'offen'}` + (disabledReason ? ` – ${disabledReason}` : ` – ${action}`);
-    return { ...s, detail, tooltip, next: s.value === next, clickable: !disabledReason, disabledReason };
+    let tip = '';
+    if (s.state === 'done') tip = s.record ? (s.record.done_at ? fmt.date(s.record.done_at) : NO_DATE) : (fmt.date(order.closed_at) || NO_DATE);
+    const ariaLabel = `${s.label}: ${tip || (s.state === 'skipped' ? 'übersprungen' : 'offen')}`;
+    return { ...s, detail, tip, ariaLabel, next: s.value === next, clickable: !disabledReason, disabledReason };
   });
 
   // Ware: aus den Lieferbuchungen
@@ -119,8 +124,8 @@ export function stepView(order, steps, deliveries = []) {
       detail = fmt.date(order.delivered_at);
     }
     const disabledReason = 'Ergibt sich automatisch aus den Lieferbuchungen.';
-    return { ...w, state, detail, record: null, next: false, clickable: false, disabledReason,
-      tooltip: `${w.label}: ${detail || 'offen'} – ${disabledReason}` };
+    const tip = state === 'done' ? detail || NO_DATE : '';
+    return { ...w, state, detail, tip, ariaLabel: `${w.label}: ${tip || (state === 'skipped' ? 'übersprungen' : 'offen')}`, record: null, next: false, clickable: false, disabledReason };
   });
 
   const [orderTrack, invoiceTrack] = STEP_TRACKS;
@@ -303,9 +308,9 @@ export const orderStepsSection = /* html */ `
           <template x-for="s in track.steps" :key="s.value">
             <li class="flex items-start gap-2.5 px-1 py-1">
               <button type="button" class="mt-0.5 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                      :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :disabled="!s.clickable"
-                      :title="s.tooltip" :aria-label="s.tooltip" :data-step="s.value" :data-state="s.state"
-                      @click="toggleStep(order, steps, s.value)">${STEP_BOX}</button>
+                      :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :aria-disabled="!s.clickable"
+                      x-tip="s.tip" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
+                      @click="s.clickable && toggleStep(order, steps, s.value)">${STEP_BOX}</button>
               <span class="min-w-0 flex-1">
                 <span class="block text-sm"
                       :class="{ 'font-medium text-slate-900': s.state === 'done' || s.next, 'text-slate-400': s.state === 'skipped' || (!s.clickable && s.state === 'open'), 'text-slate-700': s.state === 'open' && s.clickable && !s.next }"

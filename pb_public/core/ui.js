@@ -14,6 +14,7 @@ const ICONS = {
 };
 
 export function initUiStore() {
+  registerTooltip();
   Alpine.store('toasts', {
     items: [],
     /** actions: [{ label, icon, run }] – Knöpfe im Toast (icon: Schlüssel aus ICONS, z. B. 'undo', 'calendar');
@@ -48,6 +49,51 @@ export function initUiStore() {
       this.resolve = null;
       resolve?.(result);
     },
+  });
+}
+
+/**
+ * Tooltip `x-tip="ausdruck"`: dunkle Sprechblase mit Pfeil direkt über dem Element (darunter, wenn oben kein Platz
+ * ist), sofort bei Hover oder Tastaturfokus. Leerer Text = kein Tooltip. Eine einzige Blase für die ganze Seite
+ * (`[data-tooltip]` in index.html), fest positioniert – so schneiden scrollende Tabellen sie nicht ab.
+ */
+function registerTooltip() {
+  Alpine.store('tooltip', { text: '', x: 0, y: 0, below: false });
+  const tip = Alpine.store('tooltip');
+  let anchor = null; // bewusst nicht reaktiv: sonst hinge jeder x-tip-Effekt vom Hover-Zustand ab
+  const show = (el, text) => {
+    if (!text) { hide(el); return; }
+    const r = el.getBoundingClientRect();
+    anchor = el;
+    tip.text = text;
+    tip.x = r.left + r.width / 2;
+    tip.below = r.top < 48;
+    tip.y = tip.below ? r.bottom + 8 : r.top - 8;
+  };
+  const hide = (el) => {
+    if (!el || anchor === el) { anchor = null; tip.text = ''; }
+  };
+  window.addEventListener('scroll', () => hide(), { capture: true, passive: true });
+  Alpine.directive('tip', (el, { expression }, { evaluateLater, effect, cleanup }) => {
+    const get = evaluateLater(expression);
+    let text = '';
+    effect(() => get((v) => {
+      text = v || '';
+      if (anchor === el) show(el, text); // Text nach dem Abhaken aktualisieren
+    }));
+    const enter = () => show(el, text);
+    const leave = () => hide(el);
+    el.addEventListener('mouseenter', enter);
+    el.addEventListener('focus', enter);
+    el.addEventListener('mouseleave', leave);
+    el.addEventListener('blur', leave);
+    cleanup(() => {
+      el.removeEventListener('mouseenter', enter);
+      el.removeEventListener('focus', enter);
+      el.removeEventListener('mouseleave', leave);
+      el.removeEventListener('blur', leave);
+      hide(el);
+    });
   });
 }
 

@@ -121,7 +121,7 @@ try {
 
   // Verwaltungsschritte ohne Rückfrage: Klick hakt sofort ab, Toast mit „Datum ändern“/„Rückgängig“
   const STEP = (v) => `document.querySelector('#view [data-step=${v}]')`;
-  await b.waitFor(`${STEP('invoice_received')}?.disabled === false`, 'Rechnungsschritte freigegeben');
+  await b.waitFor(`${STEP('invoice_received')} && ${STEP('invoice_received')}.getAttribute('aria-disabled') !== 'true'`, 'Rechnungsschritte freigegeben');
   await b.clickText('#view button[data-next-step]', '✓ Rechnung da');
   await b.waitFor(`${STEP('invoice_received')}.dataset.state === 'done' && document.querySelector('[data-order-steps]').innerText.includes('E2E Tester')`, 'Rechnung da erledigt');
   await b.evaluate(`${STEP('invoice_submitted')}.click()`);
@@ -182,7 +182,7 @@ try {
   if (!(await b.evaluate(`${TOASTS}.includes('Übersprungen: Formular unterschrieben, Formular in Verwaltung')`))) throw new Error('Toast: ' + await b.evaluate(TOASTS));
   await b.screenshot('05-bestellt');
   await b.navigate(PB_URL + '/#/');
-  await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('2026IW04711'))`, 'Nummer auf der Startseite');
+  await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('04711') && !a.innerText.includes('2026IW')) && document.querySelector('[data-overview-table] th').parentElement.innerText.includes('Best.-Nr.')`, 'Kurznummer auf der Startseite (Smartphone)');
   ok('Formular geschrieben (Nummer per Dialog, normalisiert), bestellt mit übersprungenen Schritten im Toast');
 
   // PC: Tabelle mit Schritt-Checkboxen, Abhaken direkt in der Zeile
@@ -193,6 +193,15 @@ try {
   if ((await b.evaluate(`[${cell('form_written')}, ${cell('form_signed')}, ${cell('ordered')}].map((e) => e.dataset.state).join()`)) !== 'done,skipped,done') {
     throw new Error('Tabelle: Zustände der Schritte falsch');
   }
+  // Tooltip: nur das Datum, als Sprechblase am Kästchen; offene Kästchen ohne Tooltip
+  const TIP = `(getComputedStyle(document.querySelector('[data-tooltip]')).display !== 'none' ? document.querySelector('[data-tooltip]').innerText.trim() : '')`;
+  await b.evaluate(`${cell('form_written')}.dispatchEvent(new MouseEvent('mouseenter'))`);
+  await b.waitFor(`/^\\d{1,2}\\.\\d{1,2}\\.\\d{4}$/.test(${TIP})`, 'Tooltip mit Datum');
+  await b.screenshot('05a-tooltip');
+  await b.evaluate(`${cell('form_written')}.dispatchEvent(new MouseEvent('mouseleave')); ${cell('invoice_signed')}.dispatchEvent(new MouseEvent('mouseenter'))`);
+  await b.waitFor(`${TIP} === ''`, 'kein Tooltip am offenen Kästchen');
+  await b.evaluate(`${cell('invoice_signed')}.dispatchEvent(new MouseEvent('mouseleave'))`);
+  ok('Tooltip am Kästchen zeigt nur das Datum');
   await b.evaluate(`${cell('invoice_received')}.click()`);
   await b.waitFor(`${cell('invoice_received')}.dataset.state === 'done'`, 'in der Tabelle abgehakt');
   await b.screenshot('05a-tabelle');
