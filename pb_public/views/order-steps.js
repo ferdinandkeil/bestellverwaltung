@@ -47,7 +47,7 @@ const NO_DATE = 'kein Datum';
 function whoAndWhen(record) {
   if (!record) return '';
   const who = record.expand?.done_by?.name || record.expand?.done_by?.email || '';
-  const when = record.done_at ? fmt.date(record.done_at) : 'Datum unbekannt';
+  const when = record.done_at ? fmt.date(record.done_at) : NO_DATE;
   return who ? `${when} · ${who}` : when;
 }
 
@@ -85,6 +85,7 @@ export function nextStepOf(order, steps) {
  * Spuren Bestellung, Ware, Rechnung mit Zustand je Schritt:
  * { value, label, short, state: done|skipped|open, record, detail, tip, ariaLabel, clickable, disabledReason, next }.
  * tip: Tooltip am Kästchen – nur das Datum erledigter Schritte („kein Datum“, wenn unbekannt), sonst leer.
+ * tipLong: wie tip, zusätzlich mit Nutzer („Datum · Name“) – für den Ablauf in der Bestellung.
  * deliveries: Lieferbuchungen der Bestellung (für „teilgeliefert“; mehr als eine Buchung = in Teilen geliefert).
  */
 export function stepView(order, steps, deliveries = []) {
@@ -107,7 +108,9 @@ export function stepView(order, steps, deliveries = []) {
     let tip = '';
     if (s.state === 'done') tip = s.record ? (s.record.done_at ? fmt.date(s.record.done_at) : NO_DATE) : (fmt.date(order.closed_at) || NO_DATE);
     const ariaLabel = `${s.label}: ${tip || (s.state === 'skipped' ? 'übersprungen' : 'offen')}`;
-    return { ...s, detail, tip, ariaLabel, next: s.value === next, clickable: !disabledReason, disabledReason };
+    // Ablauf in der Bestellung: Tooltip mit Datum und Nutzer (Startseite: nur Datum)
+    const tipLong = s.state === 'done' && s.record ? whoAndWhen(s.record) : tip;
+    return { ...s, detail, tip, tipLong, ariaLabel, next: s.value === next, clickable: !disabledReason, disabledReason };
   });
 
   // Ware: aus den Lieferbuchungen
@@ -125,7 +128,7 @@ export function stepView(order, steps, deliveries = []) {
     }
     const disabledReason = 'Ergibt sich automatisch aus den Lieferbuchungen.';
     const tip = state === 'done' ? detail || NO_DATE : '';
-    return { ...w, state, detail, tip, ariaLabel: `${w.label}: ${tip || (state === 'skipped' ? 'übersprungen' : 'offen')}`, record: null, next: false, clickable: false, disabledReason };
+    return { ...w, state, detail, tip, tipLong: tip, ariaLabel: `${w.label}: ${tip || (state === 'skipped' ? 'übersprungen' : 'offen')}`, record: null, next: false, clickable: false, disabledReason };
   });
 
   const [orderTrack, invoiceTrack] = STEP_TRACKS;
@@ -300,42 +303,117 @@ function registerDialog(Alpine) {
 export const orderStepsSection = /* html */ `
 <section class="card p-4" data-order-steps>
   <h2 class="mb-3 text-lg font-semibold">Ablauf</h2>
-  <div class="grid gap-5 md:grid-cols-3 md:gap-4">
-    <template x-for="track in stepView(order, steps, deliveries)" :key="track.key">
-      <div>
-        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="track.label"></h3>
-        <ol class="space-y-1">
-          <template x-for="s in track.steps" :key="s.value">
-            <li class="flex items-start gap-2.5 px-1 py-1">
-              <button type="button" class="mt-0.5 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                      :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :aria-disabled="!s.clickable"
-                      x-tip="s.tip" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
-                      @click="s.clickable && toggleStep(order, steps, s.value)">${STEP_BOX}</button>
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm"
-                      :class="{ 'font-medium text-slate-900': s.state === 'done' || s.next, 'text-slate-400': s.state === 'skipped' || (!s.clickable && s.state === 'open'), 'text-slate-700': s.state === 'open' && s.clickable && !s.next }"
-                      x-text="s.label"></span>
-                <template x-if="s.record">
-                  <button type="button" class="block text-left text-xs text-slate-500 hover:text-blue-700 hover:underline"
-                          title="Datum ändern" :data-step-date="s.value"
-                          @click="changeStepDate(order, s.value, localDay(s.record.done_at))"
-                          x-text="s.detail + (s.record.done_at ? '' : ' – eintragen')"></button>
-                </template>
-                <template x-if="!s.record && s.detail">
-                  <span class="block text-xs text-slate-500" x-text="s.detail"></span>
-                </template>
-              </span>
-            </li>
-          </template>
-        </ol>
-        <p x-show="track.hint" class="hint mt-1 px-1" x-text="track.hint"></p>
-      </div>
-    </template>
+  <!-- Linien zwischen den Kästchen: SVG darüber, aus den Positionen der Kästchen gezeichnet (stepLines) -->
+  <div class="relative" x-data="stepLines" x-effect="stepView(order, steps, deliveries); $nextTick(() => draw())">
+    <svg class="pointer-events-none absolute inset-0 size-full overflow-visible" aria-hidden="true" x-ref="lines" data-step-lines></svg>
+    <div class="relative grid gap-5 md:grid-cols-3 md:gap-8 md:pb-6">
+      <template x-for="track in stepView(order, steps, deliveries)" :key="track.key">
+        <div data-track>
+          <!-- Überschrift eingerückt: links läuft die Linie durch (Smartphone: Spuren untereinander) -->
+          <h3 class="pl-[2.125rem] text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="track.label"></h3>
+          <p x-show="track.hint" class="pl-[2.125rem] text-xs text-slate-500" x-text="track.hint"></p>
+          <ol class="mt-2 space-y-3">
+            <template x-for="s in track.steps" :key="s.value">
+              <li class="flex items-start gap-2.5 px-1">
+                <button type="button" class="relative mt-0.5 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                        :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :aria-disabled="!s.clickable"
+                        x-tip="s.tipLong" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
+                        @click="s.clickable && toggleStep(order, steps, s.value)">${STEP_BOX}</button>
+                <span class="min-w-0 flex-1">
+                  <!-- Fett nur der nächste Schritt. Am PC (ab md) ändert ein Klick auf die Beschriftung das Datum;
+                       Datum und Name stehen dort nur im Tooltip, auf dem Smartphone darunter (ebenso
+                       „übersprungen“ und Hinweise). -->
+                  <template x-if="s.record">
+                    <button type="button" class="block text-left text-sm md:hover:text-blue-700 md:hover:underline"
+                            :class="s.next ? 'font-semibold text-slate-900' : 'text-slate-700'"
+                            x-tip="s.tipLong" @click="changeStepDate(order, s.value, localDay(s.record.done_at))"
+                            :aria-label="s.label + ': Datum ändern'" :data-step-label="s.value" x-text="s.label"></button>
+                  </template>
+                  <template x-if="!s.record">
+                    <span class="block text-sm"
+                          :class="{ 'font-semibold text-slate-900': s.next, 'text-slate-400': s.state === 'skipped' || (!s.clickable && s.state === 'open'), 'text-slate-700': (s.state === 'open' && s.clickable && !s.next) || s.state === 'done' }"
+                          x-text="s.label"></span>
+                  </template>
+                  <template x-if="s.record">
+                    <button type="button" class="block text-left text-xs text-slate-500 hover:text-blue-700 hover:underline md:hidden"
+                            title="Datum ändern" :data-step-date="s.value"
+                            @click="changeStepDate(order, s.value, localDay(s.record.done_at))"
+                            x-text="s.detail + (s.record.done_at ? '' : ' – eintragen')"></button>
+                  </template>
+                  <template x-if="!s.record && s.detail">
+                    <span class="block text-xs text-slate-500 md:hidden" x-text="s.detail"></span>
+                  </template>
+                </span>
+              </li>
+            </template>
+          </ol>
+        </div>
+      </template>
+    </div>
   </div>
 </section>`;
 
+/** Ablauf-Linien: ein Stück gilt als erreicht, sobald das Kästchen, zu dem es führt, erledigt oder übersprungen ist. */
+const LINE_RADIUS = 12;   // Rundung der Bögen zwischen den Spuren
+const LINE_DROP = 10;     // Abstand unter dem letzten Eintrag einer Spur (inkl. Datum), auf dem der Bogen verläuft
+
+/**
+ * Zeichnet die Verbindungen als SVG-Pfade: in einer Spur senkrecht von Kästchen zu Kästchen; von der letzten Spur
+ * zur nächsten als geschwungener Bogen (Spalten nebeneinander, ab md) bzw. gerade weiter (Spuren untereinander).
+ * Offen: dünn, schwarz. Erreicht: dicker, grün, leichter Schatten.
+ */
+function stepLines() {
+  return {
+    observer: null,
+    init() {
+      this.observer = new ResizeObserver(() => this.draw());
+      this.observer.observe(this.$el);
+    },
+    destroy() {
+      this.observer?.disconnect();
+    },
+    draw() {
+      const svg = this.$refs.lines;
+      if (!svg) return;
+      const base = this.$el.getBoundingClientRect();
+      const rel = (r) => ({
+        left: r.left - base.left, right: r.right - base.left, top: r.top - base.top, bottom: r.bottom - base.top,
+        cx: r.left - base.left + r.width / 2, cy: r.top - base.top + r.height / 2,
+      });
+      const boxes = [...this.$el.querySelectorAll('[data-track] [data-step]')].map((el) => ({
+        ...rel(el.getBoundingClientRect()),
+        track: el.closest('[data-track]'),
+        itemBottom: rel(el.closest('li').getBoundingClientRect()).bottom,
+        reached: el.dataset.state === 'done' || el.dataset.state === 'skipped',
+      }));
+      const paths = [];
+      for (let i = 1; i < boxes.length; i++) {
+        const a = boxes[i - 1];
+        const b = boxes[i];
+        let d;
+        if (a.track === b.track || Math.abs(a.cx - b.cx) < 2) {
+          d = `M${a.cx} ${a.bottom} L${b.cx} ${b.top}`; // gleiche Spur bzw. Spuren untereinander: gerade
+        } else {
+          // Bogen: unter dem letzten Kästchen nach rechts in die Lücke zwischen den Spalten, dort hinauf und
+          // von links in das erste Kästchen der nächsten Spur.
+          const r = LINE_RADIUS;
+          const colA = rel(a.track.getBoundingClientRect());
+          const colB = rel(b.track.getBoundingClientRect());
+          const gap = (colA.right + colB.left) / 2;
+          const low = a.itemBottom + LINE_DROP;
+          d = `M${a.cx} ${a.bottom} L${a.cx} ${low - r} Q${a.cx} ${low} ${a.cx + r} ${low} L${gap - r} ${low} `
+            + `Q${gap} ${low} ${gap} ${low - r} L${gap} ${b.cy + r} Q${gap} ${b.cy} ${gap + r} ${b.cy} L${b.left} ${b.cy}`;
+        }
+        paths.push(`<path d="${d}" class="${b.reached ? 'step-line step-line-reached' : 'step-line'}"/>`);
+      }
+      svg.innerHTML = paths.join('');
+    },
+  };
+}
+
 export function registerOrderSteps(Alpine) {
   registerDialog(Alpine);
+  Alpine.data('stepLines', stepLines);
   Alpine.data('orderSteps', () => ({
     stepView, nextStepOf, stepMeta, toggleStep, changeStepDate, localDay,
   }));
