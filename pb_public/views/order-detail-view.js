@@ -64,11 +64,12 @@ const template = /* html */ `
           </div>
         </div>
 
-        <!-- Aktionen: nächster Verwaltungsschritt, Module -->
+        <!-- Aktionen: nächste Verwaltungsschritte, Module -->
         <div class="mt-4 flex flex-wrap gap-2">
-          <template x-if="nextStepOf(order, steps)">
-            <button type="button" class="btn btn-primary" data-next-step @click="toggleStep(order, steps, nextStepOf(order, steps))"
-                    x-text="'✓ ' + stepMeta(nextStepOf(order, steps)).label"></button>
+          <!-- nächste Schritte (nach „bestellt“ zwei: Geliefert und der nächste Rechnungsschritt) -->
+          <template x-for="next in nextStepsOf(order, steps)" :key="next">
+            <button type="button" class="btn btn-primary" data-next-step @click="toggleStep(order, steps, next)"
+                    x-text="'✓ ' + stepMeta(next).label"></button>
           </template>
           <template x-for="p in plugins()" :key="p.id">
             <button type="button" class="btn btn-secondary" @click="runPlugin(p)" x-text="p.label"></button>
