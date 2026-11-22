@@ -251,6 +251,28 @@ try {
   await b.waitFor(`${TIP} === ''`, 'kein Tooltip am offenen Kästchen');
   await b.evaluate(`${cell('invoice_signed')}.dispatchEvent(new MouseEvent('mouseleave'))`);
   ok('Tooltip am Kästchen zeigt nur das Datum, erst nach Verzögerung, Folgetooltip sofort');
+
+  // PC, Ablauf in der Bestellung: Verweilen über der Beschriftung → blau, unterstrichen, Stift; Klick → Datumsdialog
+  await b.evaluate(`${ROW('2026IW04711')}.querySelector('a').click()`);
+  await b.waitFor(`document.querySelector('[data-step-label=ordered]')?.offsetParent`, 'Bestellung (PC)');
+  const EDIT = `getComputedStyle(document.querySelector('[data-step-edit=ordered]')).opacity === '1'`;
+  await b.evaluate(`document.querySelector('[data-step-label=ordered]').dispatchEvent(new MouseEvent('mouseenter'))`);
+  await sleep(200);
+  if (await b.evaluate(EDIT)) throw new Error('Stift erscheint vor Ablauf der Wartezeit');
+  await b.waitFor(`${EDIT} && document.querySelector('[data-step-label=ordered]').classList.contains('text-blue-700') && document.querySelector('[data-step-label=ordered]').contains(document.querySelector('[data-step-edit=ordered]'))`, 'Stift nach Verweilen (im selben Knopf)');
+  await b.evaluate(`document.querySelector('[data-step-label=ordered]').click()`);
+  await b.waitFor(`document.querySelector('#step-date')?.offsetParent`, 'Datumsdialog über die Beschriftung');
+  await b.clickText('[data-step-dialog] button', 'Abbrechen');
+  await b.evaluate(`document.querySelector('[data-step-label=ordered]').dispatchEvent(new MouseEvent('mouseleave'))`);
+  await b.waitFor(`!(${EDIT})`, 'Stift weg nach Verlassen');
+  // warm wie Tooltips: innerhalb von 1 s die nächste Beschriftung → sofort
+  const EDIT2 = `getComputedStyle(document.querySelector('[data-step-edit=form_written]')).opacity === '1'`;
+  await b.evaluate(`document.querySelector('[data-step-label=form_written]').dispatchEvent(new MouseEvent('mouseenter'))`);
+  if (!(await b.evaluate(EDIT2))) throw new Error('Bearbeiten nicht sofort (warm)');
+  await b.evaluate(`document.querySelector('[data-step-label=form_written]').dispatchEvent(new MouseEvent('mouseleave'))`);
+  ok('PC: Beschriftung nach Verweilen blau mit Stift, Klick ändert das Datum');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`document.querySelector('[data-overview-table]')?.offsetParent && ${ROW('2026IW04711')}`, 'zurück zur Tabelle');
   await b.evaluate(`${cell('invoice_received')}.click()`);
   await b.waitFor(`${cell('invoice_received')}.dataset.state === 'done'`, 'in der Tabelle abgehakt');
   await b.screenshot('05a-tabelle');

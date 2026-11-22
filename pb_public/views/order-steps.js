@@ -10,7 +10,7 @@ import {
   STEP_TRACKS, WARE_STEPS, trackStates, stepMeta, supplierLabel, INTERNAL_ORDER_NO_RE, defaultWithoutInternalOrderNo,
 } from '../core/config.js';
 import { setOrderStep, bookRestDelivered, cancelDelivery, errorMessage } from '../core/api.js';
-import { fmt, toast } from '../core/ui.js';
+import { fmt, toast, TOOLTIP_DELAY_MS, TOOLTIP_WARM_MS } from '../core/ui.js';
 
 const CHECK = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-3.5" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>';
 
@@ -19,7 +19,7 @@ const CHECK = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-3.5" ari
  * Klassen vollständig ausgeschrieben, damit der Tailwind-Build sie findet.
  */
 export const STEP_BOX = /* html */ `
-<span class="flex size-5 shrink-0 items-center justify-center rounded border"
+<span class="flex size-5 shrink-0 items-center justify-center rounded border" data-step-box
       :class="{
         'border-emerald-600 bg-emerald-600 text-white': s.state === 'done',
         'border-slate-300 bg-slate-100 text-slate-500': s.state === 'skipped',
@@ -29,6 +29,10 @@ export const STEP_BOX = /* html */ `
       }">
   <template x-if="s.state === 'done'"><span>${CHECK}</span></template>
   <template x-if="s.state === 'skipped'"><span class="text-sm font-bold leading-none">–</span></template>
+  <!-- Vorschau: leeres, klickbares Kästchen zeigt beim Überfahren des Knopfs (group/step) nach 80 ms ein graues Häkchen -->
+  <template x-if="s.state === 'open' && s.clickable">
+    <span class="text-slate-400 opacity-0 transition-opacity delay-0 duration-100 group-hover/step:opacity-100 group-hover/step:delay-80">${CHECK}</span>
+  </template>
 </span>`;
 
 /** Heutiges Datum (lokal) als JJJJ-MM-TT. */
@@ -355,21 +359,39 @@ export const orderStepsSection = /* html */ `
           <p x-show="track.hint" class="pl-[2.125rem] text-xs text-slate-500" x-text="track.hint"></p>
           <ol class="mt-2 space-y-3">
             <template x-for="s in track.steps" :key="s.value">
-              <li class="px-1" x-data="{ info: false }">
-                <div class="group flex items-start gap-2.5">
-                  <button type="button" class="relative mt-0.5 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              <li class="px-1" x-data="stepItem">
+                <!-- offen und klickbar: Kästchen und Text sind ein Knopf (Überfahren zeigt das graue Vorschau-Häkchen) -->
+                <template x-if="s.state === 'open' && s.clickable">
+                  <button type="button" class="group/step flex cursor-pointer items-start gap-2.5 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                          :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state" @click="toggleStep(order, steps, s.value)">
+                    <span class="mt-0.5">${STEP_BOX}</span>
+                    <span class="text-sm" x-text="s.label" :data-step-label="s.value"
+                          :class="s.next ? 'font-semibold text-slate-900' : 'text-slate-700'"></span>
+                  </button>
+                </template>
+                <template x-if="!(s.state === 'open' && s.clickable)">
+                <div class="flex items-start gap-2.5">
+                  <button type="button" class="group/step relative mt-0.5 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                           :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :aria-disabled="!s.clickable"
                           x-tip="s.tipLong" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
                           @click="s.clickable && toggleStep(order, steps, s.value)">${STEP_BOX}</button>
                   <span class="flex min-w-0 flex-1 items-center gap-1">
-                    <!-- fett nur die nächsten Schritte -->
-                    <span class="text-sm" x-text="s.label"
-                          :class="{ 'font-semibold text-slate-900': s.next, 'text-slate-400': !s.next && (s.state === 'skipped' || (!s.clickable && s.state === 'open')), 'text-slate-700': !s.next && (s.state === 'done' || (s.state === 'open' && s.clickable)) }"></span>
-                    <!-- PC: Stift beim Überfahren → Datum ändern -->
+                    <!-- PC: Beschriftung eines erledigten Schritts ist mit dem Stift ein Knopf; nach kurzem Verweilen
+                         blau, unterstrichen, Stift sichtbar, dann ändert ein Klick das Datum. Fett nur die nächsten Schritte. -->
                     <template x-if="s.record">
-                      <button type="button" class="hidden rounded p-0.5 text-slate-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-blue-700 focus-visible:opacity-100 md:inline-flex"
-                              @click="changeStepDate(order, s.value, localDay(s.record.done_at))" :aria-label="s.label + ': Datum ändern'"
-                              x-tip="'Datum ändern'" :data-step-edit="s.value">${PENCIL}</button>
+                      <button type="button" class="inline-flex items-center gap-1 rounded text-left focus-visible:outline-2 focus-visible:outline-blue-600"
+                              :class="editable ? 'cursor-pointer text-blue-700' : 'cursor-default'"
+                              @mouseenter="hoverStart(s)" @mouseleave="hoverEnd()" @focus="editable = isDesktop()" @blur="hoverEnd()"
+                              @click="editable && changeStepDate(order, s.value, localDay(s.record.done_at))"
+                              :aria-label="s.label + ': Datum ändern'" :data-step-label="s.value">
+                        <span class="text-sm" x-text="s.label"
+                              :class="editable ? 'underline underline-offset-2' : (s.next ? 'font-semibold text-slate-900' : 'text-slate-700')"></span>
+                        <span class="hidden md:inline-flex" :class="editable ? 'opacity-100' : 'opacity-0'" :data-step-edit="s.value">${PENCIL}</span>
+                      </button>
+                    </template>
+                    <template x-if="!s.record">
+                      <span class="text-sm" x-text="s.label" :data-step-label="s.value"
+                            :class="s.state === 'done' ? 'text-slate-700' : 'text-slate-400'"></span>
                     </template>
                     <!-- Smartphone: Lupe → Details (Datum, Person) mit „Datum ändern“ -->
                     <template x-if="s.state === 'done'">
@@ -378,6 +400,7 @@ export const orderStepsSection = /* html */ `
                     </template>
                   </span>
                 </div>
+                </template>
                 <div x-show="info" x-transition class="mt-1 ml-[1.875rem] flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm md:hidden"
                      :data-step-details="s.value">
                   <span class="mr-auto text-slate-700" x-text="s.tipLong"></span>
@@ -427,7 +450,7 @@ function stepLines() {
       const tracks = [...this.$el.querySelectorAll('[data-track]')].map((col) => ({
         ...rel(col.getBoundingClientRect()),
         boxes: [...col.querySelectorAll('[data-step]')].map((el) => ({
-          ...rel(el.getBoundingClientRect()),
+          ...rel(el.querySelector('[data-step-box]').getBoundingClientRect()),
           itemBottom: rel(el.closest('li').getBoundingClientRect()).bottom,
           reached: el.dataset.state === 'done' || el.dataset.state === 'skipped',
         })),
@@ -469,8 +492,47 @@ function stepLines() {
   };
 }
 
+/**
+ * „Datum ändern“ über der Beschriftung: dieselbe Logik wie Tooltips – erst nach TOOLTIP_DELAY_MS Verweilen; wer
+ * innerhalb von TOOLTIP_WARM_MS zur nächsten Beschriftung wechselt, bekommt es sofort.
+ */
+let editShown = false;  // gerade eine Beschriftung im Bearbeiten-Zustand
+let editHiddenAt = 0;   // Zeitpunkt, zu dem der letzte Bearbeiten-Zustand endete
+
+/** Ein Schritt im Ablauf: Lupe (Smartphone) und „Datum ändern“ nach Verweilen über der Beschriftung (PC). */
+function stepItem() {
+  return {
+    info: false,
+    editable: false,
+    hoverTimer: null,
+    /** PC (ab md, kein Touch-Zeiger); auf dem Smartphone gibt es dafür die Lupe. */
+    isDesktop() {
+      return window.matchMedia('(min-width: 48rem)').matches && !window.matchMedia('(pointer: coarse)').matches;
+    },
+    hoverStart(s) {
+      clearTimeout(this.hoverTimer);
+      if (!s.record || !this.isDesktop()) return;
+      const show = () => { this.editable = true; editShown = true; };
+      if (editShown || Date.now() - editHiddenAt < TOOLTIP_WARM_MS) show();
+      else this.hoverTimer = setTimeout(show, TOOLTIP_DELAY_MS);
+    },
+    hoverEnd() {
+      clearTimeout(this.hoverTimer);
+      if (this.editable) {
+        editShown = false;
+        editHiddenAt = Date.now();
+      }
+      this.editable = false;
+    },
+    destroy() {
+      clearTimeout(this.hoverTimer);
+    },
+  };
+}
+
 export function registerOrderSteps(Alpine) {
   registerDialog(Alpine);
+  Alpine.data('stepItem', stepItem);
   Alpine.data('stepLines', stepLines);
   Alpine.data('orderSteps', () => ({
     stepView, nextStepsOf, stepMeta, toggleStep, changeStepDate, localDay,

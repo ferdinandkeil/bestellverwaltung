@@ -148,7 +148,7 @@ const template = /* html */ `
             <template x-for="track in row.view" :key="track.key">
               <template x-for="(s, i) in track.steps" :key="s.value">
                 <td class="hidden px-1 py-2 text-center lg:table-cell" :class="{ 'border-l border-slate-100': i === 0, 'opacity-50': row.closed }">
-                  <button type="button" class="inline-flex rounded align-middle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  <button type="button" class="group/step inline-flex rounded align-middle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                           :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :aria-disabled="!s.clickable"
                           x-tip="s.tip" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
                           @click="s.clickable && toggleStep(row.order, row.steps, s.value)">${STEP_BOX}</button>
@@ -165,7 +165,7 @@ const template = /* html */ `
                   <div class="w-20 shrink-0 pt-1 text-xs font-semibold text-slate-500" x-text="track.label"></div>
                   <div class="flex flex-wrap gap-x-1 gap-y-0.5">
                     <template x-for="s in track.steps" :key="s.value">
-                      <button type="button" class="inline-flex items-center gap-1.5 rounded px-1 py-1 text-xs text-slate-700 aria-disabled:cursor-default aria-disabled:text-slate-400"
+                      <button type="button" class="group/step inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-1 text-xs text-slate-700 aria-disabled:cursor-default aria-disabled:text-slate-400"
                               :aria-disabled="!s.clickable" x-tip="s.tip" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
                               @click="s.clickable && toggleStep(row.order, row.steps, s.value)">${STEP_BOX}<span x-text="s.short"></span></button>
                     </template>
