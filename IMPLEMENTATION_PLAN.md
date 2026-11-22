@@ -125,9 +125,13 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 3. Smartphone: Warenkorb als fester Knopf unten rechts, Seite Warenkörbe mit ✕ zurück; Navigation und Logout im Hamburger-Menü.
 4. Browser-Tests angepasst (Startseite, Merge, Moodle-Import, Ausklappfeld am PC, Menü und Knopf auf dem Smartphone).
 
+### Bestellansicht (Branch `ui-bestellung`)
+**Status:** in Arbeit. Offene Fragen (Positionen, Bearbeiten, Lieferungen, Inhalte je Phase, Kopf, Anordnung) werden mit dem Nutzer geklärt.
+1. ✔ Ablauf (22.11.2026): verbundene Kästchen mit Abzweig ab „Bestellt“, nächste Schritte, Tooltip/Stift/Lupe, Vorschau-Häkchen, keine Hauptknöpfe; „Geliefert“ bucht den Rest (`POST …/deliveries/rest`, Rückgängig über `DELETE /api/lab/deliveries/{id}`). Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
+2. Offen: Positionen kompakt (Tabelle am PC), Inhalte je Phase, Beträge entfernen, „Handeln statt fragen“ (Löschen, Shop-Export).
+
 ### Folgende Branches (Reihenfolge vorläufig)
-1. `ui-bestellung`: Positionen kompakt (Tabelle am PC), Inhalte je Phase, Beträge entfernen, „Handeln statt fragen“.
-2. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
+1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
