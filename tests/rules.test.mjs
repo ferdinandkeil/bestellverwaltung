@@ -72,6 +72,7 @@ test('Verwaltungsschritte und geliefert-am nur über die Route', async () => {
   await expectHttpError(patch('order_steps', step.id, { done_at: '2020-01-01 12:00:00.000Z' }), 403);
   await expectHttpError(http('DELETE', `/api/collections/order_steps/records/${step.id}`, { token: u.token }), 403);
   await expectHttpError(patch('orders', cart.order.id, { delivered_at: '2020-01-01 12:00:00.000Z' }), 404);
+  await expectHttpError(patch('orders', cart.order.id, { closed_at: '2020-01-01 12:00:00.000Z' }), 404);
   await patch('orders', cart.order.id, { subject: 'Kleinteile' });
 });
 

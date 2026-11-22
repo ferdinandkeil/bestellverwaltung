@@ -36,7 +36,7 @@ routerAdd("POST", "/api/lab/cart-items/batch", (e) => {
 
 /**
  * POST /api/lab/orders/{id}/steps   – Verwaltungsschritt abhaken, Datum ändern oder zurücknehmen (Kap. 4.3)
- * Body: { step, done?: true | false, date?: "JJJJ-MM-TT" (leer = jetzt),
+ * Body: { step, done?: true | false, date?: "JJJJ-MM-TT" (fehlt/leer = jetzt, null = Datum unbekannt),
  *         internal_order_no? | without_internal_order_no: true, supplier_order_no? }
  *   Formularschritte/Freigabe brauchen die interne Bestellnummer; „bestellt“ die Nummer oder
  *   ausdrücklich „ohne interne Bestellnummer“. Die Phase (status) wird danach neu abgeleitet.
