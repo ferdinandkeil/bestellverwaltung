@@ -1,6 +1,6 @@
 # Implementierungsplan
 
-> Stand: 2026-11-21 (Scanner: Erkennung verbessert, Mouser-Profil, Phase 2 Punkt 8). Phase 1 und 4 abgenommen (Nachtrag TME/Würth deployt); Go-Live erfolgt; Phase 2 und 3 als Beta im Betrieb getestet (bleiben Beta bis zur Abnahme nach längerer Erprobung). Phase 5 zurückgestellt; Hilfe vor dem Rollout an weitere Nutzer eingeplant.
+> Stand: 2026-11-22 (UI-Überarbeitung begonnen, zuerst Verwaltungsschritte). Phase 1 und 4 abgenommen (Nachtrag TME/Würth deployt); Go-Live erfolgt; Phase 2 und 3 als Beta im Betrieb getestet (bleiben Beta bis zur Abnahme nach längerer Erprobung). Phase 5 zurückgestellt; Hilfe vor dem Rollout an weitere Nutzer eingeplant.
 >
 > Phasenweise arbeiten, nach jeder Phase Feedback einholen. Kein JS-Build (kein npm/Vite/Webpack); einzige Ausnahme ist der CSS-Build mit dem Tailwind Standalone CLI. Vorgaben: `ARCHITECTURE.md`, `pb_schema.json`, `CLAUDE.md`.
 
@@ -98,9 +98,26 @@
 4. ✔ Tests: Rechte, Übernahme (Auswahl, Lieferant, Dubletten, Preis), Browser-Durchlauf (`tests/favorites.test.mjs`, `tests/e2e-favorites.mjs`).
 5. Später: Liste kopieren.
 
+## UI-Überarbeitung (eingeschoben 11/2026)
+Ziel: Bedienbarkeit und Orientierung am tatsächlichen Ablauf; Schwerpunkt UX, nicht visuelles Design. Ausgangslage (Rückmeldung des Nutzers): Hauptnutzer ist der Laboringenieur, gearbeitet wird am PC, das Handy dient fast nur zum Einscannen; Lieferscheine werden beim Auspacken gesammelt. Häufigste Aufgaben: Lieferungen buchen, Bestellungen auslösen. Schmerzpunkte: Übersicht auf der Startseite, Darstellung der Positionen. Der Verwaltungsweg (Formular, Unterschrift, Freigabe, Rechnung) wurde bisher in einer eigenen Tabelle geführt.
+Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Branch Abnahme.
+
+### Verwaltungsschritte (Branch `prozessschritte`)
+**Status:** in Arbeit. Entscheidungen in ARCHITECTURE Kap. 4.3.
+1. Schema: Collection `order_steps` (erledigt = Datensatz, Datum leer = unbekannt, kein „übersprungen“-Feld), `orders.subject` („Was“), `orders.delivered_at`; Phasen `angefragt|freigabe|bestellt|teilgeliefert|geliefert|abgeschlossen` statt `geprueft`/`abgerechnet`.
+2. Migration der Altbestellungen (Schritte bis zum Stand ohne Datum, Freigabe nicht, `geprueft`/`abgerechnet` auf Lieferstand zurück).
+3. Hooks: Route `POST /api/lab/orders/{id}/steps` ersetzt `/status`; Phase serverseitig abgeleitet; Lieferschein-Bestellung legt `ordered` (+ Formularschritte ohne Datum) an.
+4. Oberfläche: Schritte in der Bestellung (abhaken mit Datum, zurücknehmen, übersprungen grau), Shop-Export setzt „bestellt“, Phasen in Filtern und Ablage.
+5. Tests: Schritte, Phase, Rechte, Migration, Lieferschein, Browser-Durchläufe.
+
+### Folgende Branches (Reihenfolge vorläufig)
+1. `ui-startseite`: Übersicht wie die bisherige Tabelle (Zeile je Bestellung, Spuren mit Datum, Filter nach offenem Schritt); auf dem Handy Scanner im Vordergrund.
+2. `ui-bestellung`: Positionen kompakt (Tabelle am PC), Inhalte je Phase.
+3. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten, Gruppen.
+
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
-2. `modules/word-export/docx-generator.js` (PizZip + docxtemplater aus `vendor/`) im Slot `order-detail-actions`; Zusatzfelder in `orders.custom_fields`; Platzhalter u. a. `{supplier}`, `{total_net}`, `{total_gross}`, `{shipping_cost}`, Loop `{#items}…{/items}`.
+2. `modules/word-export/docx-generator.js` (PizZip + docxtemplater aus `vendor/`) im Slot `order-detail-actions`; Zusatzfelder in `orders.custom_fields`; erzeugtes Formular hakt „Formular geschrieben“ ab (ARCHITECTURE 4.3); Platzhalter u. a. `{supplier}`, `{total_net}`, `{total_gross}`, `{shipping_cost}`, Loop `{#items}…{/items}`.
 
 ## Phase 6: Prüfung der Bestellnummern (Branch `phase-6-part-number-check`)
 1. Vorab: Formatregeln der Shop-Bestellnummern zusammentragen und mit dem Nutzer abstimmen (z. B. Mouser `NNN-…`); klären, ob Online-Abfragen bei den Shops gewünscht/zulässig sind.

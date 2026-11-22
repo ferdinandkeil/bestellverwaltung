@@ -1,6 +1,6 @@
 # Architektur & Technische Spezifikation: Labor-Bestellsystem
 
-> Stand: 2026-11-15. Dieses Dokument ist die verbindliche Quelle für fachliche und technische Entscheidungen; neue Entscheidungen werden hier eingetragen.
+> Stand: 2026-11-22. Dieses Dokument ist die verbindliche Quelle für fachliche und technische Entscheidungen; neue Entscheidungen werden hier eingetragen.
 
 ## 1. System-Überblick & Leitprinzipien
 * **Zweck:** Browserbasierte Verwaltung von Laborbestellungen (Elektronik, Verbrauchsmaterial, Geräte) inkl. Sammel-Warenkörben, Moodle-CSV-Import, Shop-Bestellexport, Word-Formular-Generator und (später) Lieferschein-Erfassung.
@@ -22,8 +22,8 @@
    * **Lange Sessions:** Auth-Token-Dauer 30 Tage (2592000 s); beim App-Start wird das Token per `authRefresh()` verlängert.
 3. **Berechtigungen (API-Rules), Grundsatz „volle Transparenz im Labor“:** Alle eingeloggten Nutzer sehen alles. Einschränkungen:
    * `orders` löschen nur im Status `angefragt`; danach nur Admin.
-   * `order_items` löschen nur im offenen Korb (`angefragt`); ab `bestellt` wird storniert statt gelöscht. Ab `geprueft` sind Positionen gesperrt.
-   * `orders.status`, `order_items.qty_delivered`, `orders.created_by` sowie das Anlegen von `order_items`, `deliveries`, `delivery_items` sind per Rule für direkte Schreibzugriffe gesperrt und laufen ausschließlich über die Hook-Routen (Kap. 4).
+   * `order_items` löschen nur im offenen Korb (`angefragt`); danach wird storniert statt gelöscht. Ab `abgeschlossen` sind Positionen gesperrt.
+   * `orders.status`, `orders.delivered_at`, `order_items.qty_delivered`, `orders.created_by` sowie das Anlegen von `order_items`, `deliveries`, `delivery_items` und jede Änderung an `order_steps` sind per Rule für direkte Schreibzugriffe gesperrt und laufen ausschließlich über die Hook-Routen (Kap. 4).
    * `created_by` / `booked_by` werden serverseitig aus dem Auth-Kontext gesetzt (nicht fälschbar).
    * `deliveries` sind unveränderlich (kein Update/Delete für Nutzer); Korrekturen erfolgen per Gegenbuchung.
    * `unmatched_receipts` (Ablage „Lieferscheine ohne Bestellung“): für alle Labor-Nutzer sichtbar, anlegen im eigenen Namen, löschen erlaubt, nicht änderbar; Zuordnen nur über die Hook-Route (Kap. 4.6). `orders.origin` ist nicht von Hand änderbar.
@@ -50,7 +50,7 @@ Projekt/
 │       ├── delivery-notes.js       # Bestellung aus Lieferschein, Ablage zuordnen
 │       ├── favorites.js            # Favoriten: Artikel aus einer Bestellung übernehmen
 │       ├── deliveries.js           # Lieferbuchungen, qty_delivered-Summen
-│       └── status.js               # Status-Workflow & Auto-Lieferstatus
+│       └── status.js               # Verwaltungsschritte, abgeleitete Phase & Auto-Lieferstatus
 ├── pb_public/
 │   ├── index.html                  # App-Shell, Hauptnavigation, Router
 │   ├── assets/
@@ -112,8 +112,9 @@ Projekt/
 
 ### 4.1 Collections (Details: `pb_schema.json`)
 * **`groups`:** `name`, **`course`** (Veranstaltung, Pflicht), `semester` (Pflicht, Format `WS 2026/27` bzw. `SS 2027`), `is_active`. **Bewusst keine Kontaktdaten von Studierenden** (kein Name/E-Mail-Feld) – es werden keine personenbezogenen Daten Studierender gespeichert. Der Gruppenname ist nur **innerhalb von Veranstaltung + Semester eindeutig** (Unique-Index `idx_groups_unique_name`, Groß-/Kleinschreibung egal). Bei der Eingabe werden bestehende Veranstaltungen vorgeschlagen; in Auswahllisten erscheinen Gruppen nach Veranstaltung/Semester gegliedert.
-* **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|tme|wuerth|printus|other`; TME und Würth Elektronik seit 11/2026 fest, vorher „sonstige“ mit Shop-Namen – umgestellt durch `pb_migrations/1794601422_lieferanten_tme_wuerth.js`; **Printus** (Bürobedarf, Webshop mit interner Bestellnummer) seit 11/2026, ohne Migration, da es keine Altbestellungen gab; Export als Abhakliste (Kap. 6), vorerst ohne Scanner-Profil), `supplier_custom_name` (nur bei `other`, sonst leer), **`internal_order_no`** (interne Bestellnummer der Hochschule, Format `JJJJIW#####`, z. B. `2026IW01047`; eindeutig, Pflicht ab „bestellt“, danach korrigierbar, aber nicht mehr leer; ältere Bestellungen ohne Nummer bleiben bearbeitbar), **`without_internal_order_no`** (ausdrücklich ohne interne Bestellnummer bestellt, z. B. Muster; nur über die Status- bzw. Lieferschein-Route gesetzt, nicht per REST; entfällt automatisch, sobald eine Nummer eingetragen wird), `supplier_order_no` (optionale Auftragsnummer des Shops), `status`, **`origin`** (`warenkorb` bzw. leer = normal über den Sammelkorb, `lieferschein` = aus einem Lieferschein angelegt, Kap. 4.6), `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
+* **`orders`:** `supplier` (`mouser|farnell|reichelt|voelkner|tme|wuerth|printus|other`; TME und Würth Elektronik seit 11/2026 fest, vorher „sonstige“ mit Shop-Namen – umgestellt durch `pb_migrations/1794601422_lieferanten_tme_wuerth.js`; **Printus** (Bürobedarf, Webshop mit interner Bestellnummer) seit 11/2026, ohne Migration, da es keine Altbestellungen gab; Export als Abhakliste (Kap. 6), vorerst ohne Scanner-Profil), `supplier_custom_name` (nur bei `other`, sonst leer), **`internal_order_no`** (interne Bestellnummer der Hochschule, Format `JJJJIW#####`, z. B. `2026IW01047`; eindeutig, Pflicht ab dem ersten Formularschritt bzw. „bestellt“ (Kap. 4.3), danach korrigierbar, aber nicht mehr leer; ältere Bestellungen ohne Nummer bleiben bearbeitbar), **`without_internal_order_no`** (ausdrücklich ohne interne Bestellnummer bestellt, z. B. Muster; nur über die Schritt- bzw. Lieferschein-Route gesetzt, nicht per REST; entfällt automatisch, sobald eine Nummer eingetragen wird), `supplier_order_no` (optionale Auftragsnummer des Shops), `status`, **`origin`** (`warenkorb` bzw. leer = normal über den Sammelkorb, `lieferschein` = aus einem Lieferschein angelegt, Kap. 4.6), `created_by`, `attachments`, `custom_fields` (JSON), `notes`, **`subject`** (Kurzbeschreibung „Was“, z. B. „Kleinteile“, „Messgerät“; optional), **`delivered_at`** (Zeitpunkt der vollständigen Lieferung, nur Hook), **`shipping_cost`** (netto), **`invoice_total`** (tatsächlicher Rechnungsbetrag brutto, von Hand bei der Abrechnung).
 * **`order_items`:** `order`, `part_number`, `name` (**Bezeichnung, optional** – der Moodle-Export enthält keine; Formulare kennzeichnen sie als „empfohlen“, die Detailansicht zeigt „ohne Bezeichnung“), `url`, `qty_ordered`, `qty_delivered` (nur Hook), **`qty_cancelled`**, `price_unit` (netto), **`added_later_by`/`added_later_at`** (Kennzeichnung nachgetragener Positionen, Kap. 4.5), `groups`, `group_allocations` (JSON `[{groupId, groupName, qty}]`), `group_allocation_note` (z. B. `"Gruppe A: 5x | Gruppe B: 2x"`). `moodle_entry_ids` entfällt.
+* **`order_steps`** (Verwaltungsschritte, Kap. 4.3): `order` (wird mit der Bestellung gelöscht), `step` (`form_written|form_signed|form_submitted|approval|ordered|invoice_received|invoice_signed|invoice_submitted|closed`), `done_at` (Datum, **leer = Datum unbekannt**), `done_by` (leer bei übernommenen Schritten). Ein Datensatz bedeutet „erledigt“; je Bestellung und Schritt höchstens einer (Unique-Index `idx_order_steps_unique`). Nur über die Hook-Route änderbar.
 * **`deliveries`** (neu): `order`, `booked_by`, `note`, `receipt` (genau eine Datei, optional: Bild oder PDF; mehrseitige Belege als PDF, max. 15 MB ≈ 30 Seiten), `created`.
 * **`delivery_items`** (neu): `delivery`, `order_item`, `qty` (ganzzahlig, ≠ 0; negativ = Korrektur-Gegenbuchung).
 * **`unmatched_receipts`** (Ablage „Lieferscheine ohne Bestellung“): `supplier_name`, `internal_order_no` (falls auf dem Beleg erkannt, ungeprüft), `note`, `receipt` (eine Datei, PDF/Bild, max. 15 MB), `uploaded_by`, `created`.
@@ -137,20 +138,47 @@ Projekt/
 3. Antwort: `{order, item, merged: bool}`.
 4. **Sammel-Import** (Route `POST /api/lab/cart-items/batch`, Moodle-Import und Favoriten): `{groups: [{ref, name, course, semester}], items: [{line, …, group | groupRef}]}`. Legt neue Gruppen an und bucht jede Position nach 1.–2. – **alles oder nichts** in einer Transaktion; Fehler nennen die CSV-Zeile.
 
-### 4.3 Status-Workflow
-* Kette: `angefragt` → `bestellt` → `teilgeliefert` → `geliefert` → `geprueft` → `abgerechnet`.
-* **Manuelle Schritte** (Route `POST /api/lab/orders/{id}/status`, `{action: "advance" | "back", internal_order_no? | without_internal_order_no: true, supplier_order_no?}`):
-  * `angefragt → bestellt` **nur mit interner Bestellnummer** (im Body oder vorher an der Bestellung eingetragen) **oder ausdrücklich „ohne interne Bestellnummer“** (z. B. Muster; wird in `without_internal_order_no` gespeichert und gilt nach „zurück“ weiter; beides zugleich wird abgelehnt), optional mit `supplier_order_no`; der Korb ist damit für neue Positionen geschlossen, neue landen in einem neuen offenen Korb. Im UI ist „ohne interne Bestellnummer“ ein Häkchen beim Bestellen, bei Würth Elektronik (Bestellung meist als Muster) vorausgewählt (`withoutInternalOrderNo` in `config.js`).
-  * `geliefert → geprueft → abgerechnet`.
-  * **„Einen Schritt zurück“** mit Sicherheitsabfrage im UI. Zurück auf `angefragt` wird verweigert, wenn bereits ein anderer offener Korb für den Lieferanten existiert.
-* **Automatischer Lieferstatus** (bei `bestellt`, `teilgeliefert`, `geliefert`; ab `geprueft` keine Automatik), neu berechnet nach jeder Lieferbuchung und jeder Änderung von `qty_ordered`/`qty_cancelled`:
+### 4.3 Verwaltungsschritte & Status-Workflow
+Bildet den Verwaltungsweg ab, den der Laboringenieur bisher in einer eigenen Tabelle geführt hat (Entscheidungen 11/2026). Ersetzt die frühere Kette `… → geprueft → abgerechnet` und die Aktionen „weiter“/„Einen Schritt zurück“.
+
+* **Drei Spuren**, je Schritt mit Datum und Nutzer (`order_steps`, Kap. 4.1):
+
+  | Spur | Schritte |
+  |---|---|
+  | Bestellung | `form_written` Formular geschrieben → `form_signed` unterschrieben (Kostenstellenverantwortliche/r) → `form_submitted` in Verwaltung (Finanzabteilung) → `approval` Freigabe erteilt → `ordered` bestellt (Shop oder Mail) |
+  | Ware | teilgeliefert → geliefert – **automatisch** aus den Lieferbuchungen (keine Schritt-Datensätze; Zeitpunkt „geliefert“ in `orders.delivered_at`) |
+  | Rechnung | `invoice_received` Rechnung da → `invoice_signed` unterschrieben → `invoice_submitted` in Verwaltung → `closed` abgeschlossen |
+
+* **Erledigt, übersprungen, offen:** Ein Datensatz heißt „erledigt“. Es gibt **keine Markierung „übersprungen“**: Fehlt ein Schritt, während ein späterer derselben Spur erledigt ist, gilt er als übersprungen (grauer Haken). Wird der spätere Schritt zurückgenommen, ist der frühere wieder offen. Der Server erzwingt daher **keine Reihenfolge innerhalb einer Spur**; die Oberfläche fragt nach, bevor sie offene Schritte überspringt.
+  * **Freigabe** ist meist nicht nötig und wird nur angelegt, wenn sie bewusst abgehakt wird – nie automatisch.
+  * **Ohne interne Bestellnummer** (z. B. Würth-Muster) gibt es kein Formular: „bestellt“ direkt aus dem Warenkorb, die Formularschritte erscheinen übersprungen.
+  * **Abgeschlossen:** automatisch, sobald die Ware geliefert und „Rechnung in Verwaltung“ erledigt ist. Für Bestellungen ohne Rechnung (Muster) wird `closed` von Hand abgehakt; die Rechnungsschritte erscheinen dann übersprungen.
+* **Datum:** beim Abhaken vorbelegt mit heute, änderbar (nachträglich eintragen, z. B. „gestern unterschrieben“); ein Datum in der Zukunft wird abgelehnt. Auch das Datum eines erledigten Schritts ist korrigierbar (Nutzer bleibt). **Leer = Datum unbekannt** (übernommene Altbestellungen, Bestellungen aus Lieferschein), in der Oberfläche als „Datum unbekannt“ angezeigt und nachtragbar. Gewähltes Datum wird als 12:00 UTC des Tages gespeichert, „heute“ als aktueller Zeitpunkt.
+* **Feste Regeln** (Route `POST /api/lab/orders/{id}/steps`, `{step, done, date?, internal_order_no?, without_internal_order_no?, supplier_order_no?}`, transaktional; `done_by` aus dem Auth-Kontext):
+  * Formularschritte und Freigabe brauchen die **interne Bestellnummer** (im Body oder schon an der Bestellung); bei „ohne interne Bestellnummer“ abgelehnt.
+  * `ordered` braucht die interne Bestellnummer **oder ausdrücklich „ohne interne Bestellnummer“** (in `without_internal_order_no` gespeichert, gilt nach dem Zurücknehmen weiter; beides zugleich wird abgelehnt), optional `supplier_order_no`. Im UI ist „ohne interne Bestellnummer“ bei Würth Elektronik vorausgewählt (`withoutInternalOrderNo` in `config.js`).
+  * Der erste Schritt der Bestell-Spur **schließt den Warenkorb** (in der Regel „Formular geschrieben“; leerer Korb wird abgelehnt). Neue Positionen landen dann in einem neuen offenen Korb.
+  * Rechnungsschritte erst ab `ordered`; `closed` erst, wenn die Ware geliefert ist.
+  * **Zurücknehmen** (`done: false`, Sicherheitsabfrage im UI): `ordered` nur, solange nichts geliefert ist und kein Rechnungsschritt erledigt ist. Bleibt kein Schritt der Bestell-Spur übrig, öffnet sich der Warenkorb wieder – verweigert, wenn es für den Lieferanten bereits einen anderen offenen Korb gibt.
+* **Phase (`orders.status`)**, serverseitig nach jeder Schritt-, Lieferungs- und Positionsänderung abgeleitet, nie direkt geschrieben:
+
+  | `status` | Anzeige | Bedingung |
+  |---|---|---|
+  | `angefragt` | Warenkorb | kein Schritt der Bestell-Spur |
+  | `freigabe` | In Freigabe | Schritt der Bestell-Spur, aber nicht `ordered` |
+  | `bestellt` / `teilgeliefert` / `geliefert` | Bestellt / Teilgeliefert / Geliefert | `ordered`, Lieferstatus (s. u.) |
+  | `abgeschlossen` | Abgeschlossen | geliefert und (`invoice_submitted` oder `closed`) |
+
+* **Automatischer Lieferstatus** (ab `ordered`), neu berechnet nach jeder Lieferbuchung und jeder Änderung von `qty_ordered`/`qty_cancelled`:
   * Eine Position gilt als **erledigt**, wenn `qty_delivered + qty_cancelled ≥ qty_ordered`.
-  * Alle Positionen erledigt → `geliefert`.
+  * Alle Positionen erledigt → `geliefert` (`delivered_at` = Zeitpunkt der letzten Lieferbuchung, ohne Buchung jetzt; wird geleert, sobald wieder etwas offen ist).
   * Sonst: mindestens eine Position mit `qty_delivered > 0` → `teilgeliefert`.
   * Sonst → `bestellt`.
   * Folge: Eine komplett stornierte Bestellung ohne Lieferung wird automatisch `geliefert` (bewusst so festgelegt).
 * **Rückstand** je Position = `qty_ordered − qty_delivered − qty_cancelled` (min. 0).
-* **Änderungen ab `bestellt`:** `qty_ordered`, `part_number`/`name`/`url`/`price_unit` (Ersatzteil) und `qty_cancelled` bleiben änderbar (bis einschl. `geliefert`). Neue Positionen nur im offenen Korb.
+* **Änderungen nach dem Warenkorb:** `qty_ordered`, `part_number`/`name`/`url`/`price_unit` (Ersatzteil) und `qty_cancelled` bleiben bis einschl. `geliefert` änderbar; keine neuen Positionen, kein Löschen (für größere Änderungen „Formular geschrieben“ zurücknehmen). Ab `abgeschlossen` gesperrt.
+* **Altbestellungen** (`pb_migrations/1795000000_verwaltungsschritte.js`): ab „bestellt“ wird `ordered` und – mit interner Bestellnummer – die drei Formularschritte als erledigt **ohne Datum und Nutzer** angelegt; Freigabe nicht. `geprueft`/`abgerechnet` werden auf den Lieferstand zurückgesetzt, Rechnungsschritte von Hand nachgetragen. `delivered_at` aus der letzten Lieferbuchung.
+* **Word-Export** (Phase 5): Das Erzeugen des Beschaffungsformulars soll später „Formular geschrieben“ mit abhaken.
 
 ### 4.4 Lieferbuchungen (Route `POST /api/lab/orders/{id}/deliveries`)
 * Body: `lines: [{item, qty}]`, `note`, optional `receipt` (eine Datei, multipart; mehr als eine wird abgelehnt).
@@ -158,14 +186,14 @@ Projekt/
 * Schnellbuttons im UI („+1“, „Rest komplett“) erzeugen ebenfalls Buchungen; mehrere schnelle Klicks werden im UI kurz gesammelt, bevor gebucht wird.
 
 ### 4.5 Positionen nachtragen (Route `POST /api/lab/orders/{id}/items`)
-* Für Ware, die bestellt, aber beim Erfassen vergessen wurde (typisch: auf dem Lieferschein entdeckt). Erlaubt in `bestellt`, `teilgeliefert`, `geliefert`; im offenen Korb wird normal erfasst, ab `geprueft` ist die Bestellung gesperrt.
+* Für Ware, die bestellt, aber beim Erfassen vergessen wurde (typisch: auf dem Lieferschein entdeckt). Erlaubt in `bestellt`, `teilgeliefert`, `geliefert`; im offenen Korb wird normal erfasst, ab `abgeschlossen` ist die Bestellung gesperrt.
 * Neue Position mit bestellter Menge, Bezeichnung und Gruppe optional; eine schon vorhandene Bestellnummer wird abgelehnt (dort die Menge anpassen). Danach Auto-Lieferstatus (eine offene neue Position macht aus „geliefert“ wieder „teilgeliefert“).
 * **Kennzeichnung:** `order_items.added_later_by` / `added_later_at`, serverseitig gesetzt und per Rule nicht änderbar; die Detailansicht zeigt „nachgetragen am … von …“.
 * Die Lieferbuchung nimmt zusätzlich `newItems: [{part_number, name?, qty, group?}]` an: Positionen werden in derselben Transaktion nachgetragen und mit `qty` geliefert (Scanner, Option „gleich als geliefert buchen“ in der Detailansicht).
 
 ### 4.6 Lieferscheine ohne passende Bestellung
 Für Muster, Direktkäufe oder am System vorbei bestellte Ware. Im Scanner, wenn keine Bestellung passt:
-* **Bestellung aus Lieferschein anlegen** (Route `POST /api/lab/orders/from-delivery-note`, nur wenn ein Lieferanten-Profil erkannt wurde): Lieferant, interne Bestellnummer (falls auf dem Beleg) und Positionen sind vorbelegt und änderbar, Gruppe je Position optional. **Interne Bestellnummer angeben oder ausdrücklich „ohne interne Bestellnummer“ wählen** (gespeichert wie beim Statuswechsel; bei Würth vorausgewählt, wenn keine Nummer erkannt wurde). In einer Transaktion: Bestellung (`status = bestellt`, `origin = lieferschein`), Positionen (gleiche Nummern zusammengefasst, bestellt = geliefert) und Lieferung mit dem Beleg-PDF → „geliefert“. Der offene Warenkorb des Lieferanten bleibt unberührt. Die Bestellung zeigt „aus Lieferschein angelegt“.
+* **Bestellung aus Lieferschein anlegen** (Route `POST /api/lab/orders/from-delivery-note`, nur wenn ein Lieferanten-Profil erkannt wurde): Lieferant, interne Bestellnummer (falls auf dem Beleg) und Positionen sind vorbelegt und änderbar, Gruppe je Position optional. **Interne Bestellnummer angeben oder ausdrücklich „ohne interne Bestellnummer“ wählen** (gespeichert wie beim Schritt „bestellt“; bei Würth vorausgewählt, wenn keine Nummer erkannt wurde). In einer Transaktion: Bestellung (`origin = lieferschein`) mit dem Schritt `ordered` (jetzt, aktueller Nutzer) und – mit interner Bestellnummer – den drei Formularschritten als erledigt **ohne Datum** (außerhalb des Systems gelaufen; Freigabe nicht), Positionen (gleiche Nummern zusammengefasst, bestellt = geliefert) und Lieferung mit dem Beleg-PDF → „geliefert“. Der offene Warenkorb des Lieferanten bleibt unberührt. Die Bestellung zeigt „aus Lieferschein angelegt“.
 * **In Ablage legen** (ohne Profil nur diese Möglichkeit): Beleg-PDF mit Lieferant, ggf. Nummer und Notiz in `unmatched_receipts`. Das Dashboard zeigt den Abschnitt „Lieferscheine ohne Bestellung“, solange etwas abgelegt ist. **Zuordnen** (Route `POST /api/lab/unmatched-receipts/{id}/assign`) hängt den Beleg an die gewählte Bestellung (`attachments`) und entfernt den Ablage-Eintrag; Löschen mit Rückfrage.
 
 ### 4.7 Favoriten
@@ -196,7 +224,7 @@ registerPlugin({
 ```
 
 ## 6. Module (Überblick)
-* **shop-export:** **CSV-Download** für den CSV-Upload der Shops; für Lieferanten, die per Mail bestellt werden (Würth Elektronik), stattdessen eine **Liste zum Kopieren** in die Bestell-Mail; für Shops ohne Upload und ohne Mengeneingabe (Printus) eine **Abhakliste**. Sichtbar im Status „angefragt“ und nur für Lieferanten mit Format in `formats.js`; weitere Shops (CSV) erst nach einem Test-Upload eintragen. Menge = `qty_ordered − qty_cancelled`, komplett stornierte Positionen entfallen. Dateien UTF-8 ohne BOM, Zeilenende CRLF, Name `<shop>-<interne Bestellnummer>.csv`. Formate (verifiziert 11/2026 mit Vorlagen und Test-Uploads):
+* **shop-export:** **CSV-Download** für den CSV-Upload der Shops; für Lieferanten, die per Mail bestellt werden (Würth Elektronik), stattdessen eine **Liste zum Kopieren** in die Bestell-Mail; für Shops ohne Upload und ohne Mengeneingabe (Printus) eine **Abhakliste**. Sichtbar in der Phase „In Freigabe“ (Formular läuft bzw. ist durch) sowie – bei „ohne interne Bestellnummer“ (Würth, ohne Formular) – schon im Warenkorb; nur für Lieferanten mit Format in `formats.js`; weitere Shops (CSV) erst nach einem Test-Upload eintragen. Menge = `qty_ordered − qty_cancelled`, komplett stornierte Positionen entfallen. Dateien UTF-8 ohne BOM, Zeilenende CRLF, Name `<shop>-<interne Bestellnummer>.csv`. Formate (verifiziert 11/2026 mit Vorlagen und Test-Uploads):
 
   | Shop | Erkennung | Trennzeichen | Kopfzeile | Spalten |
   |---|---|---|---|---|
@@ -204,7 +232,7 @@ registerPlugin({
   | Reichelt | `supplier = reichelt` | Semikolon (Nummern enthalten Kommas/Leerzeichen) | keine | Nummer, Menge |
   | TME | `supplier = tme` | Semikolon | keine | Nummer (TME- oder Herstellernummer), Menge |
 
-  Felder mit Trennzeichen oder Anführungszeichen werden nach RFC 4180 maskiert. Ablauf: Vorschau → Download → im Shop hochladen und bestellen → **„Exportiert & auf ‚Bestellt‘ setzen“** (erst nach dem Download; interne Bestellnummer Pflicht, Shop-Auftragsnummer optional) über die Status-Route. Vorher werden die Positionen neu geladen: Hat sich der Warenkorb seit dem Download geändert (z. B. Position von anderen ergänzt), wird der Statuswechsel angehalten und ein neuer Download verlangt.
+  Felder mit Trennzeichen oder Anführungszeichen werden nach RFC 4180 maskiert. Ablauf: Vorschau → Download → im Shop hochladen und bestellen → **„Exportiert & auf ‚Bestellt‘ setzen“** (erst nach dem Download; interne Bestellnummer Pflicht, Shop-Auftragsnummer optional) über die Schritt-Route (Schritt `ordered`, Kap. 4.3; noch offene Formularschritte werden nach Rückfrage übersprungen). Vorher werden die Positionen neu geladen: Hat sich der Warenkorb seit dem Download geändert (z. B. Position von anderen ergänzt), wird der Statuswechsel angehalten und ein neuer Download verlangt.
   **Printus (Abhakliste):** Printus nimmt bei „Bestellen mit Artikelnummer“ je Eingabe nur eine Nummer ohne Menge an und hat keinen Datei-Upload. Der Export zeigt deshalb eine Abhakliste (sortiert wie die CSV) mit Link zu dieser Seite: je Position Artikelnummer mit Kopierknopf, Bezeichnung, Menge und **zwei Haken** – „Nr.“ (im Printus-Korb) und „Menge“ (dort eingestellt). Der Mengen-Haken gilt für die abgehakte Menge; ändert sie sich im Warenkorb, ist er wieder offen, der Nummern-Haken bleibt. Abgehakte Nummern, die nicht mehr im Warenkorb stehen, werden zum Entfernen im Printus-Korb gemeldet. Der Stand liegt **nur im Browser** (`localStorage` je Bestellung, bleibt beim Neuladen erhalten) und wird nach „Bestellt“ gelöscht. „Exportiert & auf ‚Bestellt‘ setzen“ erst, wenn alle Haken gesetzt sind; vor dem Statuswechsel werden die Positionen neu geladen und erneut geprüft.
   **Würth Elektronik (Mail):** eine Zeile je Position `Menge × Artikelnummer`, Mengen rechtsbündig, sortiert wie die CSV, ohne Kopfzeile und ohne interne Bestellnummer (Muster). „Liste kopieren“ schreibt in die Zwischenablage; geht das nicht, wird der Text markiert zum Kopieren von Hand angezeigt. Danach wie oben „Exportiert & auf ‚Bestellt‘ setzen“, „ohne interne Bestellnummer“ ist vorausgewählt; der Abgleich gilt ab dem Kopieren.
 * **moodle-import (Beta):** CSV-Export der Moodle-Datenbank „Bauteilbestellung“ (Spalten Lieferant, Anzahl, Bestellnummer, Kommentar, Gruppe, Tags; Bezeichnung und Link optional, falls das Formular später ergänzt wird), eingelesen mit Papa Parse. Ablauf:
