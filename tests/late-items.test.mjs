@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setup, resetData, createUser, createGroup, addItem, changeStatus, getRecord, listRecords, http, expectHttpError,
+  setup, resetData, createUser, createGroup, addItem, markOrdered, setStep, getRecord, listRecords, http, expectHttpError,
 } from './helpers.mjs';
 
 let u;
@@ -14,7 +14,7 @@ beforeEach(async () => {
 
 async function orderedCart() {
   const r = await addItem(u.token, { supplier: 'reichelt', part_number: 'A 1', name: 'A', qty: 2 });
-  await changeStatus(u.token, r.order.id, 'advance');
+  await markOrdered(u.token, r.order.id);
   return { orderId: r.order.id, itemId: r.item.id };
 }
 const addLate = (orderId, body, token = u.token) => http('POST', `/api/lab/orders/${orderId}/items`, { token, json: body });
@@ -48,7 +48,7 @@ test('Nachtragen nur ab „bestellt“, nicht doppelt, nicht nach „geprüft“
   await expectHttpError(addLate(orderId, { part_number: 'Z', qty: 1 }, null), 401);
 
   await http('POST', `/api/lab/orders/${orderId}/deliveries`, { token: u.token, json: { lines: [{ item: itemId, qty: 2 }] } });
-  await changeStatus(u.token, orderId, 'advance'); // geliefert → geprüft
+  await setStep(u.token, orderId, 'closed'); // geliefert → abgeschlossen
   await expectHttpError(addLate(orderId, { part_number: 'Z', qty: 1 }), 400);
 });
 

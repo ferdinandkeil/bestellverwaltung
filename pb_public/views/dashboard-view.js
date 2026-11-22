@@ -75,7 +75,9 @@ const template = /* html */ `
         <a :href="'#/orders/' + o.id" class="card block p-4 transition hover:border-blue-300 hover:shadow">
           <div class="flex items-start gap-2">
             <div class="min-w-0 flex-1">
-              <div class="truncate font-semibold" x-text="supplierLabel(o)"></div>
+              <div class="truncate font-semibold">
+                <span x-text="supplierLabel(o)"></span><span x-show="o.subject" class="font-normal text-slate-600" x-text="' · ' + o.subject"></span>
+              </div>
               <div class="text-xs text-slate-500">
                 <span x-text="orderNumbersLabel(o)"></span>
                 · <span x-text="fmt.date(o.created)"></span>

@@ -11,7 +11,7 @@ Optimiert für die Nutzung am Smartphone am Auspacktisch im Labor.
 |---|---|
 | **Login** passwortlos per E-Mail-Code, lange Sitzungen | ✔ |
 | **Sammel-Warenkorb** je Lieferant (Mouser, Farnell, Reichelt, Voelkner, sonstige je Shop): gleiche Bestellnummern werden zu einer Position zusammengeführt, mit Aufteilung auf Gruppen („Gruppe A: 5x \| Gruppe B: 3x“) | ✔ |
-| **Status-Workflow** angefragt → bestellt → teilgeliefert → geliefert → geprüft → abgerechnet; Lieferstatus automatisch aus den Buchungen | ✔ |
+| **Verwaltungsweg** in drei Spuren mit Datum und Nutzer: Bestellung (Formular geschrieben, unterschrieben, in Verwaltung, Freigabe, bestellt), Ware (teilgeliefert/geliefert automatisch aus den Buchungen), Rechnung (da, unterschrieben, in Verwaltung, abgeschlossen); Schritte überspringbar | ✔ |
 | **Lieferbuchungen** mit Historie und Beleg, Schnellbuttons „+1“ / „Rest komplett“, Korrektur per Gegenbuchung, Storno je Position | ✔ |
 | **Gruppen** je Veranstaltung und Semester, Projekt-Status je Gruppe | ✔ |
 | **Kosten** netto/brutto, Versand, Rechnungsbetrag | ✔ |

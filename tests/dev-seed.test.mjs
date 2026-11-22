@@ -9,7 +9,7 @@ import { setup, resetData, listRecords } from './helpers.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-test('Dev-Testdaten: alle Status, alle Exportwege, Favoriten, feste Nutzer', async () => {
+test('Dev-Testdaten: alle Phasen, alle Exportwege, Favoriten, feste Nutzer', async () => {
   await setup();
   await resetData();
   const out = execFileSync('node', [join(ROOT, 'scripts/dev-seed.mjs')], { env: process.env, encoding: 'utf8' });
@@ -18,8 +18,8 @@ test('Dev-Testdaten: alle Status, alle Exportwege, Favoriten, feste Nutzer', asy
   const orders = await listRecords('orders');
   const status = Object.fromEntries(orders.map((o) => [o.supplier, o.status]));
   assert.deepEqual(status, {
-    mouser: 'angefragt', wuerth: 'angefragt', printus: 'angefragt', reichelt: 'teilgeliefert',
-    tme: 'geliefert', farnell: 'abgerechnet', other: 'bestellt',
+    mouser: 'freigabe', wuerth: 'angefragt', printus: 'angefragt', reichelt: 'teilgeliefert',
+    tme: 'geliefert', farnell: 'abgeschlossen', other: 'bestellt',
   });
   const users = (await listRecords('users')).map((u) => u.email);
   assert.ok(users.includes('labor@example.com') && users.includes('kollegin@example.com'));

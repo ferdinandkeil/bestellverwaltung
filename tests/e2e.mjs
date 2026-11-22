@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  PB_URL, setup, resetData, createUser, createGroup, addItem, changeStatus, bookDelivery,
+  PB_URL, setup, resetData, createUser, createGroup, addItem, markOrdered, bookDelivery,
   enableRateLimits, disableRateLimits,
 } from './helpers.mjs';
 import { launchBrowser, otpFromMailpit, sleep } from './browser.mjs';
@@ -22,7 +22,7 @@ async function seed() {
   await addItem(owner.token, { supplier: 'mouser', part_number: '595-SN74HC595N', name: 'Schieberegister 8 Bit, DIP-16', qty: 5, group: a.id, price_unit: 0.62 });
   await addItem(owner.token, { supplier: 'mouser', part_number: '595-sn74hc595n', name: 'x', qty: 3, group: b.id });
   const r = await addItem(owner.token, { supplier: 'reichelt', part_number: 'NE 555 DIP', name: 'Timer NE555', qty: 10, group: b.id, price_unit: 0.25 });
-  await changeStatus(owner.token, r.order.id, 'advance', { supplier_order_no: 'R-4711' });
+  await markOrdered(owner.token, r.order.id, { supplier_order_no: 'R-4711' });
   await bookDelivery(owner.token, r.order.id, [{ item: r.item.id, qty: 4 }], 'Paket 1');
   return { groupA: a.id, login: await createUser('E2E Tester') };
 }
@@ -108,20 +108,35 @@ try {
   await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert', 6000);
   ok('„Rest komplett“ → automatisch Geliefert');
 
-  await b.clickText('button', 'Als geprüft markieren');
-  await b.waitFor(`${BADGE} === 'Geprüft'`, 'Geprüft');
-  // Sicherheitsabfrage abbrechen → nichts passiert
-  await b.clickText('button', 'Einen Schritt zurück');
+  // Verwaltungsschritte: nächster Schritt als Hauptknopf, überspringen mit Hinweis, Phase „Abgeschlossen“
+  const STEP = (v) => `document.querySelector('[data-step=${v}]')`;
+  const DIALOG_OPEN = `document.querySelector('[data-step-dialog]')?.offsetParent`;
+  await b.waitFor(`${STEP('invoice_received')}?.disabled === false`, 'Rechnungsschritte freigegeben');
+  await b.clickText('#view button[data-next-step]', '✓ Rechnung da');
+  await b.waitFor(DIALOG_OPEN, 'Schritt-Dialog');
+  await b.clickText('[data-step-dialog] button', 'Abhaken');
+  await b.waitFor(`${STEP('invoice_received')}.dataset.state === 'done' && ${STEP('invoice_received')}.innerText.includes('E2E Tester')`, 'Rechnung da erledigt');
+  await b.evaluate(`${STEP('invoice_submitted')}.click()`);
+  await b.waitFor(`document.querySelector('[data-step-skipping]')?.innerText.includes('Rechnung unterschrieben')`, 'Hinweis überspringen');
+  await b.screenshot('04a-schritt-dialog');
+  await b.clickText('[data-step-dialog] button', 'Abhaken');
+  await b.waitFor(`${BADGE} === 'Abgeschlossen' && ${STEP('invoice_signed')}.dataset.state === 'skipped' && ${STEP('closed')}.dataset.state === 'done'`, 'Abgeschlossen');
+  await b.screenshot('04b-ablauf');
+  ok('Rechnung da, Rechnung in Verwaltung (unterschrieben übersprungen) → Abgeschlossen');
+
+  // Zurücknehmen: Sicherheitsabfrage abbrechen → nichts passiert; bestätigen → wieder Geliefert
+  await b.evaluate(`${STEP('invoice_submitted')}.click()`);
+  await b.clickText('[data-step-dialog] button', 'Zurücknehmen');
   await b.waitFor(`document.querySelector('#confirm-dialog')?.open`, 'Sicherheitsabfrage');
-  await b.screenshot('04a-sicherheitsabfrage');
+  await b.screenshot('04c-sicherheitsabfrage');
   await b.evaluate(`document.querySelector('#confirm-dialog [value=cancel]').click()`);
   await b.waitFor(`!document.querySelector('#confirm-dialog').open`, 'Abfrage geschlossen');
   await sleep(300);
-  if ((await b.evaluate(BADGE)) !== 'Geprüft') throw new Error('Status trotz Abbruch geändert: ' + await b.evaluate(BADGE));
-  await b.clickText('button', 'Einen Schritt zurück');
-  await b.confirmDialog('Zurücksetzen');
-  await b.waitFor(`${BADGE} === 'Geliefert'`, 'zurück');
-  ok('Geprüft und einen Schritt zurück (Sicherheitsabfrage: Abbrechen wirkt, Bestätigen setzt zurück)');
+  if ((await b.evaluate(BADGE)) !== 'Abgeschlossen') throw new Error('Phase trotz Abbruch geändert: ' + await b.evaluate(BADGE));
+  await b.clickText('[data-step-dialog] button', 'Zurücknehmen');
+  await b.confirmDialog('Zurücknehmen');
+  await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('invoice_signed')}.dataset.state === 'open'`, 'zurückgenommen');
+  ok('Schritt zurücknehmen (Sicherheitsabfrage: Abbrechen wirkt, Bestätigen nimmt zurück)');
 
   // Vergessene Position nachtragen und gleich als geliefert buchen → bleibt „Geliefert“, gekennzeichnet
   await b.clickText('#view button', 'Position nachtragen');
@@ -136,22 +151,27 @@ try {
   if ((await b.evaluate(BADGE)) !== 'Geliefert') throw new Error('Status nach Nachtragen: ' + await b.evaluate(BADGE));
   ok('Position nachgetragen und geliefert gebucht – gekennzeichnet, Status bleibt Geliefert');
 
-  // Offenen Mouser-Korb bestellen: interne Bestellnummer ist Pflicht und wird normalisiert
+  // Offenen Mouser-Korb: Formular geschrieben (interne Bestellnummer Pflicht, normalisiert) → bestellt (Rest übersprungen)
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`${ORDER_LINKS}.length === 2`, 'Dashboard');
   await b.evaluate(`[...${ORDER_LINKS}].find((a) => a.innerText.includes('Mouser')).click()`);
-  await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Angefragt'`, 'Detail Mouser');
-  await b.clickText('button', 'Als bestellt markieren');
-  await b.waitFor(`document.body.innerText.includes('Bitte zuerst die interne Bestellnummer eintragen')`, 'Pflicht-Hinweis');
-  await b.fill('#internal-order-no', ' 2026iw04711 ');
-  await b.waitFor(`document.querySelector('#internal-order-no').value === '2026IW04711'`, 'normalisiert');
-  await b.clickText('button', 'Als bestellt markieren');
-  await b.confirmDialog('Als bestellt markieren');
-  await b.waitFor(`${BADGE} === 'Bestellt'`, 'Bestellt');
+  await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
+  await b.clickText('#view button[data-next-step]', '✓ Formular geschrieben');
+  await b.waitFor(`document.querySelector('#step-internal-no')?.offsetParent`, 'Nummer im Schritt-Dialog');
+  await b.fill('#step-internal-no', '2026-4711');
+  await b.clickText('[data-step-dialog] button', 'Abhaken');
+  await b.waitFor(`document.body.innerText.includes('hat das Format JJJJIW#####')`, 'Format-Hinweis');
+  await b.fill('#step-internal-no', ' 2026iw04711 ');
+  await b.clickText('[data-step-dialog] button', 'Abhaken');
+  await b.waitFor(`${BADGE} === 'In Freigabe' && document.querySelector('#internal-order-no').value === '2026IW04711'`, 'In Freigabe, normalisiert');
+  await b.evaluate(`document.querySelector('[data-step=ordered]').click()`);
+  await b.waitFor(`document.querySelector('[data-step-skipping]')?.innerText.includes('Formular unterschrieben, Formular in Verwaltung')`, 'Hinweis überspringen');
+  await b.clickText('[data-step-dialog] button', 'Abhaken');
+  await b.waitFor(`${BADGE} === 'Bestellt' && document.querySelector('[data-step=form_signed]').dataset.state === 'skipped'`, 'Bestellt');
   await b.screenshot('05-bestellt');
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('2026IW04711'))`, 'Nummer im Dashboard');
-  ok('Bestellen nur mit interner Bestellnummer (normalisiert, im Dashboard sichtbar)');
+  ok('Formular geschrieben nur mit interner Bestellnummer (normalisiert), bestellt mit übersprungenen Schritten');
 
   await b.navigate(PB_URL + '/#/groups');
   await b.waitFor(`document.querySelector('[x-data=groupsView]') && [...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('Gruppe B'))`, 'Gruppenliste');

@@ -1,12 +1,12 @@
-// Shop-Export: offener Warenkorb → CSV für den Upload im Shop, Liste für die Bestell-Mail bzw. Abhakliste
-// zum Übertragen von Hand → „Exportiert & auf ‚Bestellt‘ setzen“.
+// Shop-Export: Bestellung in Freigabe (bzw. Warenkorb ohne Formular, z. B. Würth-Muster) → CSV für den Upload im Shop,
+// Liste für die Bestell-Mail bzw. Abhakliste zum Übertragen von Hand → „Exportiert & auf ‚Bestellt‘ setzen“.
 // Der Stand der Abhakliste liegt nur in diesem Browser (localStorage je Bestellung).
-// Registriert sich im Slot 'order-detail-actions' (nur Status „angefragt“ und Lieferanten mit Format, formats.js).
-// Der Statuswechsel läuft über die Status-Route; die Detailansicht aktualisiert sich per Realtime.
+// Registriert sich im Slot 'order-detail-actions' (nur Lieferanten mit Format, formats.js; Sichtbarkeit: exportVisible).
+// „Bestellt“ läuft über die Schritt-Route (ARCHITECTURE Kap. 4.3); die Detailansicht aktualisiert sich per Realtime.
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
 import { INTERNAL_ORDER_NO_RE, defaultWithoutInternalOrderNo } from '../../core/config.js';
-import { changeOrderStatus, listOrderItems, errorMessage } from '../../core/api.js';
+import { setOrderStep, listOrderItems, errorMessage } from '../../core/api.js';
 import { toast, confirmAction } from '../../core/ui.js';
 import {
   formatForOrder, exportLines, buildCsv, buildText, csvFileName, sameLines,
@@ -275,12 +275,15 @@ function component() {
           this.exported = null;
           return;
         }
+        const cart = this.order.status === 'angefragt';
         if (!(await confirmAction(
-          (without ? 'Warenkorb ohne interne Bestellnummer als bestellt markieren?' : 'Warenkorb als bestellt markieren?') +
-          ' Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.',
+          (without ? 'Ohne interne Bestellnummer als bestellt markieren?' : 'Als bestellt markieren?') +
+          (cart
+            ? ' Der Warenkorb wird damit geschlossen; neue Positionen für diesen Lieferanten landen in einem neuen Warenkorb.'
+            : ' Noch offene Formularschritte gelten danach als übersprungen.'),
           { confirmLabel: 'Als bestellt markieren' }))) return;
         const supplierNo = this.supplierNo.trim();
-        await changeOrderStatus(this.order.id, 'advance', without
+        await setOrderStep(this.order.id, 'ordered', without
           ? { without_internal_order_no: true, supplier_order_no: supplierNo }
           : { internal_order_no: internal, supplier_order_no: supplierNo });
         toast.success('Status: Bestellt');
@@ -301,12 +304,21 @@ const host = document.createElement('div');
 host.innerHTML = template;
 document.body.appendChild(host.firstElementChild);
 
+/**
+ * Sichtbar, sobald die Freigabe läuft (Phase „freigabe“ – Bestellung kommt nach Formular und Freigabe), oder schon im
+ * Warenkorb, wenn ohne interne Bestellnummer und damit ohne Formular bestellt wird (Würth-Muster).
+ */
+export function exportVisible(order) {
+  if (!order || !formatForOrder(order)) return false;
+  return order.status === 'freigabe' || (order.status === 'angefragt' && defaultWithoutInternalOrderNo(order));
+}
+
 registerPlugin({
   id: 'shop-export',
   slot: 'order-detail-actions',
   label: 'Shop-Export',
   icon: 'download',
-  isVisible: (order) => order?.status === 'angefragt' && !!formatForOrder(order),
+  isVisible: exportVisible,
   // Kopien übergeben: die Werte der Detailansicht sind reaktive Proxies einer anderen Komponente.
   onClick: (order, items) => window.dispatchEvent(new CustomEvent('open-shop-export', {
     detail: { order: JSON.parse(JSON.stringify(order)), items: JSON.parse(JSON.stringify(items)) },

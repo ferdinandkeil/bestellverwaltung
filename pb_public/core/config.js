@@ -25,27 +25,68 @@ export function defaultWithoutInternalOrderNo(order) {
   return !!order.without_internal_order_no || !!SUPPLIERS.find((s) => s.value === order.supplier)?.withoutInternalOrderNo;
 }
 
+// Phasen einer Bestellung (`orders.status`, serverseitig aus den Verwaltungsschritten abgeleitet, ARCHITECTURE Kap. 4.3).
 // Klassen stehen hier vollständig ausgeschrieben, damit der Tailwind-Build sie findet.
 export const STATUSES = [
-  { value: 'angefragt', label: 'Angefragt', badge: 'bg-slate-100 text-slate-700 ring-slate-300' },
+  { value: 'angefragt', label: 'Warenkorb', badge: 'bg-sky-50 text-sky-800 ring-sky-300' },
+  { value: 'freigabe', label: 'In Freigabe', badge: 'bg-violet-50 text-violet-800 ring-violet-300' },
   { value: 'bestellt', label: 'Bestellt', badge: 'bg-blue-50 text-blue-700 ring-blue-300' },
   { value: 'teilgeliefert', label: 'Teilgeliefert', badge: 'bg-amber-50 text-amber-800 ring-amber-300' },
   { value: 'geliefert', label: 'Geliefert', badge: 'bg-emerald-50 text-emerald-700 ring-emerald-300' },
-  { value: 'geprueft', label: 'Geprüft', badge: 'bg-teal-50 text-teal-800 ring-teal-300' },
-  { value: 'abgerechnet', label: 'Abgerechnet', badge: 'bg-zinc-200 text-zinc-700 ring-zinc-400' },
+  { value: 'abgeschlossen', label: 'Abgeschlossen', badge: 'bg-zinc-200 text-zinc-700 ring-zinc-400' },
 ];
 
-/** Status, in denen Positionen bearbeitet und Lieferungen gebucht werden dürfen. */
-export const EDITABLE_STATUSES = ['angefragt', 'bestellt', 'teilgeliefert', 'geliefert'];
+/** Phasen, in denen Positionen bearbeitet werden dürfen (danach gesperrt). */
+export const EDITABLE_STATUSES = ['angefragt', 'freigabe', 'bestellt', 'teilgeliefert', 'geliefert'];
+/** Phasen, in denen Lieferungen gebucht und Positionen nachgetragen werden dürfen. */
 export const DELIVERY_STATUSES = ['bestellt', 'teilgeliefert', 'geliefert'];
 
-/** Manuelle Statusschritte (Beschriftung der Buttons). */
-export const ADVANCE_LABELS = {
-  angefragt: 'Als bestellt markieren',
-  geliefert: 'Als geprüft markieren',
-  geprueft: 'Als abgerechnet markieren',
-};
-export const BACK_ALLOWED = ['bestellt', 'geprueft', 'abgerechnet'];
+/**
+ * Verwaltungsschritte in zwei abhakbaren Spuren (Werte wie `order_steps.step`); die Spur „Ware“ dazwischen
+ * ergibt sich aus den Lieferbuchungen. Ein fehlender Schritt vor einem erledigten derselben Spur gilt als übersprungen.
+ * needsNumber: braucht die interne Bestellnummer (Formular); afterOrdered: erst ab „bestellt“.
+ */
+export const STEP_TRACKS = [
+  {
+    key: 'order', label: 'Bestellung', steps: [
+      { value: 'form_written', label: 'Formular geschrieben', needsNumber: true },
+      { value: 'form_signed', label: 'Formular unterschrieben', needsNumber: true },
+      { value: 'form_submitted', label: 'Formular in Verwaltung', needsNumber: true },
+      { value: 'approval', label: 'Freigabe erteilt', needsNumber: true, hint: 'meist nicht nötig' },
+      { value: 'ordered', label: 'Bestellt' },
+    ],
+  },
+  {
+    key: 'invoice', label: 'Rechnung', steps: [
+      { value: 'invoice_received', label: 'Rechnung da', afterOrdered: true },
+      { value: 'invoice_signed', label: 'Rechnung unterschrieben', afterOrdered: true },
+      { value: 'invoice_submitted', label: 'Rechnung in Verwaltung', afterOrdered: true },
+      { value: 'closed', label: 'Abgeschlossen', afterOrdered: true, hint: 'automatisch mit „Rechnung in Verwaltung“; von Hand für Bestellungen ohne Rechnung (Muster)' },
+    ],
+  },
+];
+
+export function stepMeta(value) {
+  for (const track of STEP_TRACKS) {
+    const step = track.steps.find((s) => s.value === value);
+    if (step) return { ...step, track };
+  }
+  return { value, label: value, track: null };
+}
+
+/**
+ * Zustand jedes Schritts einer Spur: 'done' (Datensatz vorhanden), 'skipped' (offen, aber ein späterer ist erledigt)
+ * oder 'open'. steps: { step: record }. „Abgeschlossen“ gilt bei Phase „abgeschlossen“ auch ohne Datensatz als erledigt.
+ */
+export function trackStates(track, steps, order) {
+  const done = track.steps.map((s) => !!steps[s.value] || (s.value === 'closed' && order?.status === 'abgeschlossen'));
+  const lastDone = done.lastIndexOf(true);
+  return track.steps.map((s, i) => ({
+    ...s,
+    record: steps[s.value] || null,
+    state: done[i] ? 'done' : i < lastDone ? 'skipped' : 'open',
+  }));
+}
 
 export function supplierLabel(order) {
   if (!order) return '';

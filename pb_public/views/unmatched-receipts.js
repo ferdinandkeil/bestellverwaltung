@@ -66,11 +66,11 @@ export function registerUnmatchedReceipts(Alpine) {
       }
     },
 
-    /** Bestellungen zur Auswahl (neueste zuerst; abgerechnete ausgenommen). */
+    /** Bestellungen zur Auswahl (neueste zuerst; abgeschlossene ausgenommen). */
     async loadOrders() {
       if (this.orders.length) return;
       try {
-        this.orders = await pb.collection('orders').getFullList({ filter: 'status != "abgerechnet"', sort: '-updated' });
+        this.orders = await pb.collection('orders').getFullList({ filter: 'status != "abgeschlossen"', sort: '-updated' });
       } catch (err) {
         toast.error(errorMessage(err));
       }

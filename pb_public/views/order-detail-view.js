@@ -1,16 +1,16 @@
-// Bestell-Detail: Positionen, Lieferbuchungen, Storno, Status, Kosten, Anhänge, Plugin-Slot.
+// Bestell-Detail: Verwaltungsschritte, Positionen, Lieferbuchungen, Storno, Kosten, Anhänge, Plugin-Slot.
 import {
-  supplierLabel, statusMeta, groupsByCourse, INTERNAL_ORDER_NO_RE, EDITABLE_STATUSES, DELIVERY_STATUSES, ADVANCE_LABELS, BACK_ALLOWED, VAT_RATE,
-  defaultWithoutInternalOrderNo,
+  supplierLabel, statusMeta, stepMeta, groupsByCourse, INTERNAL_ORDER_NO_RE, EDITABLE_STATUSES, DELIVERY_STATUSES, VAT_RATE,
 } from '../core/config.js';
 import {
-  getOrder, listOrderItems, listDeliveries, updateOrder, deleteOrder, updateItem, deleteItem,
-  changeOrderStatus, bookDelivery, uploadAttachments, removeAttachment, fileUrl, backlogOf, orderTotals,
+  getOrder, listOrderItems, listDeliveries, listOrderSteps, updateOrder, deleteOrder, updateItem, deleteItem,
+  bookDelivery, uploadAttachments, removeAttachment, fileUrl, backlogOf, orderTotals,
   subscribe, errorMessage, addLateItem, listGroups,
 } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast, confirmAction, numberOrNull } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
+import { orderStepsSection, orderStepDialog } from './order-steps.js';
 
 /** Schnellbuttons werden so lange gesammelt, bevor eine gemeinsame Lieferbuchung entsteht. */
 const QUICK_BOOK_DELAY_MS = 1500;
@@ -23,7 +23,7 @@ const template = /* html */ `
   <p x-show="!order && !error" class="py-8 text-center text-sm text-slate-500">Lade …</p>
 
   <template x-if="order">
-    <div class="space-y-4">
+    <div class="space-y-4" x-data="orderSteps" @steps-changed="reload()">
       <!-- Kopf -->
       <section class="card p-4">
         <div class="flex flex-wrap items-start gap-2">
@@ -44,18 +44,9 @@ const template = /* html */ `
           <div>
             <label class="label" for="internal-order-no">Interne Bestellnummer</label>
             <input id="internal-order-no" class="input font-mono" x-model="orderForm.internal_order_no" @change="saveOrder('internal_order_no')"
-                   maxlength="11" placeholder="z. B. 2026IW01047" autocapitalize="characters" spellcheck="false"
-                   :disabled="order.status === 'angefragt' && orderForm.without_internal_order_no">
-            <template x-if="order.status === 'angefragt'">
-              <div>
-                <label class="mt-2 flex items-center gap-2 text-sm" data-without-internal-no>
-                  <input type="checkbox" x-model="orderForm.without_internal_order_no" :disabled="!!order.internal_order_no">
-                  ohne interne Bestellnummer (z. B. Muster)
-                </label>
-                <p class="hint" x-text="orderForm.without_internal_order_no ? 'Wird ohne interne Bestellnummer bestellt.' : 'Pflicht für „Als bestellt markieren“.'"></p>
-              </div>
-            </template>
-            <p class="hint" x-show="order.status !== 'angefragt' && order.without_internal_order_no">Ohne interne Bestellnummer bestellt (z. B. Muster).</p>
+                   maxlength="11" placeholder="z. B. 2026IW01047" autocapitalize="characters" spellcheck="false">
+            <p class="hint" x-show="order.status === 'angefragt' && !order.internal_order_no">Spätestens beim Formular eintragen.</p>
+            <p class="hint" x-show="order.without_internal_order_no">Ohne interne Bestellnummer bestellt (z. B. Muster).</p>
           </div>
           <div>
             <label class="label" for="supplier-order-no">Auftragsnummer des Shops <span class="font-normal text-slate-500">(optional)</span></label>
@@ -63,18 +54,21 @@ const template = /* html */ `
                    placeholder="aus der Bestellbestätigung">
           </div>
           <div class="sm:col-span-2">
+            <label class="label" for="order-subject">Was <span class="font-normal text-slate-500">(Kurzbeschreibung, optional)</span></label>
+            <input id="order-subject" class="input" x-model="orderForm.subject" @change="saveOrder('subject')" maxlength="100"
+                   placeholder="z. B. Kleinteile, Messgerät">
+          </div>
+          <div class="sm:col-span-2">
             <label class="label">Notizen</label>
             <textarea class="input" rows="1" x-model="orderForm.notes" @change="saveOrder('notes')" maxlength="2000"></textarea>
           </div>
         </div>
 
-        <!-- Status-Aktionen -->
+        <!-- Aktionen: nächster Verwaltungsschritt, Module -->
         <div class="mt-4 flex flex-wrap gap-2">
-          <template x-if="advanceLabel()">
-            <button type="button" class="btn btn-primary" :disabled="busy" @click="advance()" x-text="advanceLabel()"></button>
-          </template>
-          <template x-if="canGoBack()">
-            <button type="button" class="btn btn-secondary" :disabled="busy" @click="back()">Einen Schritt zurück</button>
+          <template x-if="nextStep(order, steps)">
+            <button type="button" class="btn btn-primary" data-next-step @click="openStep(nextStep(order, steps), order, steps)"
+                    x-text="'✓ ' + stepMeta(nextStep(order, steps)).label"></button>
           </template>
           <template x-for="p in plugins()" :key="p.id">
             <button type="button" class="btn btn-secondary" @click="runPlugin(p)" x-text="p.label"></button>
@@ -83,10 +77,9 @@ const template = /* html */ `
             <button type="button" class="btn btn-danger ml-auto" :disabled="busy" @click="removeOrder()">Warenkorb löschen</button>
           </template>
         </div>
-        <p x-show="['bestellt','teilgeliefert'].includes(order.status)" class="hint mt-2">
-          Der Lieferstatus ergibt sich automatisch aus den Lieferbuchungen und Stornos.
-        </p>
       </section>
+
+      ${orderStepsSection}
 
       <!-- Positionen -->
       <section>
@@ -279,6 +272,8 @@ const template = /* html */ `
         <p x-show="!(order.attachments || []).length" class="text-sm text-slate-500">Noch keine Anhänge.</p>
       </section>
 
+      ${orderStepDialog}
+
       <!-- Modal: Position hinzufügen -->
       <div x-show="showItemForm" x-transition.opacity class="modal-backdrop" @click.self="showItemForm = false"
            @keydown.escape.window="showItemForm = false">
@@ -370,11 +365,12 @@ const template = /* html */ `
 
 function component() {
   return {
-    supplierLabel, statusMeta, backlogOf, fileUrl, fmt,
+    supplierLabel, statusMeta, stepMeta, backlogOf, fileUrl, fmt,
     vatRate: VAT_RATE,
     order: null,
     items: [],
     deliveries: [],
+    steps: {},
     error: '',
     busy: false,
     orderForm: {},
@@ -394,7 +390,7 @@ function component() {
     async init() {
       await this.reload();
       try {
-        this.unsubscribe = await subscribe(['orders', 'order_items', 'deliveries'], () => this.reload());
+        this.unsubscribe = await subscribe(['orders', 'order_items', 'deliveries', 'order_steps'], () => this.reload());
       } catch (err) {
         console.warn('Realtime nicht verfügbar', err);
       }
@@ -407,15 +403,16 @@ function component() {
 
     async reload() {
       try {
-        const [order, items, deliveries] = await Promise.all([
-          getOrder(this.orderId), listOrderItems(this.orderId), listDeliveries(this.orderId),
+        const [order, items, deliveries, steps] = await Promise.all([
+          getOrder(this.orderId), listOrderItems(this.orderId), listDeliveries(this.orderId), listOrderSteps(this.orderId),
         ]);
         this.order = order;
         this.items = items;
         this.deliveries = deliveries;
+        this.steps = steps;
         this.orderForm = {
           internal_order_no: order.internal_order_no || '',
-          without_internal_order_no: defaultWithoutInternalOrderNo(order),
+          subject: order.subject || '',
           supplier_order_no: order.supplier_order_no || '',
           notes: order.notes || '',
           shipping_cost: order.shipping_cost ? String(order.shipping_cost).replace('.', ',') : '',
@@ -444,8 +441,6 @@ function component() {
     // ---- Zustände ----------------------------------------------------------
     canEditItems() { return EDITABLE_STATUSES.includes(this.order?.status); },
     canDeliver() { return DELIVERY_STATUSES.includes(this.order?.status); },
-    advanceLabel() { return ADVANCE_LABELS[this.order?.status] || ''; },
-    canGoBack() { return BACK_ALLOWED.includes(this.order?.status); },
     totals() { return orderTotals(this.order, this.items); },
     allocationSum(it) { return (it.group_allocations || []).reduce((s, a) => s + (a.qty || 0), 0); },
     partNumberOf(itemId) { return this.items.find((i) => i.id === itemId)?.part_number || '(gelöscht)'; },
@@ -510,46 +505,6 @@ function component() {
         toast.success('Gespeichert.');
       } catch (err) {
         toast.error(errorMessage(err));
-      }
-    },
-
-    async advance() {
-      let numbers = {};
-      if (this.order.status === 'angefragt') {
-        const without = this.orderForm.without_internal_order_no;
-        const internal = this.orderForm.internal_order_no.trim().toUpperCase();
-        if (!without && !INTERNAL_ORDER_NO_RE.test(internal)) {
-          toast.error('Bitte zuerst die interne Bestellnummer eintragen (Format JJJJIW#####, z. B. 2026IW01047) oder „ohne interne Bestellnummer“ wählen.');
-          document.getElementById('internal-order-no')?.focus();
-          return;
-        }
-        if (!(await confirmAction(
-          (without ? 'Warenkorb ohne interne Bestellnummer als bestellt markieren?' : 'Warenkorb als bestellt markieren?') +
-          ' Neue Positionen für diesen Lieferanten landen danach in einem neuen Warenkorb.',
-          { confirmLabel: 'Als bestellt markieren' }))) return;
-        numbers = without
-          ? { without_internal_order_no: true, supplier_order_no: this.orderForm.supplier_order_no.trim() }
-          : { internal_order_no: internal, supplier_order_no: this.orderForm.supplier_order_no.trim() };
-      }
-      await this.runStatus('advance', numbers);
-    },
-
-    async back() {
-      if (!(await confirmAction(`Status „${statusMeta(this.order.status).label}“ wirklich einen Schritt zurücksetzen?`,
-        { confirmLabel: 'Zurücksetzen' }))) return;
-      await this.runStatus('back');
-    },
-
-    async runStatus(action, numbers) {
-      this.busy = true;
-      try {
-        await changeOrderStatus(this.order.id, action, numbers);
-        await this.reload();
-        toast.success(`Status: ${statusMeta(this.order.status).label}`);
-      } catch (err) {
-        toast.error(errorMessage(err));
-      } finally {
-        this.busy = false;
       }
     },
 

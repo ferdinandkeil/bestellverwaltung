@@ -396,11 +396,11 @@
         "maxSelect": 1,
         "values": [
           "angefragt",
+          "freigabe",
           "bestellt",
           "teilgeliefert",
           "geliefert",
-          "geprueft",
-          "abgerechnet"
+          "abgeschlossen"
         ]
       },
       {
@@ -476,6 +476,31 @@
         "primaryKey": false
       },
       {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "ord_subject",
+        "name": "subject",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 100,
+        "pattern": "",
+        "autogeneratePattern": "",
+        "primaryKey": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "ord_delivered_at",
+        "name": "delivered_at",
+        "type": "date",
+        "required": false,
+        "min": "",
+        "max": ""
+      },
+      {
         "id": "ord_shipping",
         "name": "shipping_cost",
         "type": "number",
@@ -527,7 +552,7 @@
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": null,
-    "updateRule": "@request.auth.id != \"\" && @request.body.status:isset = false && @request.body.created_by:isset = false && @request.body.origin:isset = false && @request.body.without_internal_order_no:isset = false",
+    "updateRule": "@request.auth.id != \"\" && @request.body.status:isset = false && @request.body.created_by:isset = false && @request.body.origin:isset = false && @request.body.without_internal_order_no:isset = false && @request.body.delivered_at:isset = false",
     "deleteRule": "@request.auth.id != \"\" && status = \"angefragt\""
   },
   {
@@ -736,8 +761,116 @@
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": null,
-    "updateRule": "@request.auth.id != \"\" && @request.body.qty_delivered:isset = false && @request.body.order:isset = false && @request.body.added_later_by:isset = false && @request.body.added_later_at:isset = false && (order.status = \"angefragt\" || order.status = \"bestellt\" || order.status = \"teilgeliefert\" || order.status = \"geliefert\")",
+    "updateRule": "@request.auth.id != \"\" && @request.body.qty_delivered:isset = false && @request.body.order:isset = false && @request.body.added_later_by:isset = false && @request.body.added_later_at:isset = false && (order.status = \"angefragt\" || order.status = \"freigabe\" || order.status = \"bestellt\" || order.status = \"teilgeliefert\" || order.status = \"geliefert\")",
     "deleteRule": "@request.auth.id != \"\" && order.status = \"angefragt\""
+  },
+  {
+    "id": "pb_order_steps_col",
+    "name": "order_steps",
+    "type": "base",
+    "system": false,
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_order_steps_unique` ON `order_steps` (`order`, `step`)"
+    ],
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "primaryKey": true,
+        "min": 15,
+        "max": 15,
+        "pattern": "^[a-z0-9]+$",
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "stp_order",
+        "name": "order",
+        "type": "relation",
+        "required": true,
+        "collectionId": "pb_orders_col",
+        "cascadeDelete": true,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "stp_step",
+        "name": "step",
+        "type": "select",
+        "required": true,
+        "maxSelect": 1,
+        "values": [
+          "form_written",
+          "form_signed",
+          "form_submitted",
+          "approval",
+          "ordered",
+          "invoice_received",
+          "invoice_signed",
+          "invoice_submitted",
+          "closed"
+        ]
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "stp_done_at",
+        "name": "done_at",
+        "type": "date",
+        "required": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "system": false,
+        "presentable": false,
+        "hidden": false,
+        "id": "stp_done_by",
+        "name": "done_by",
+        "type": "relation",
+        "required": false,
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": 0,
+        "maxSelect": 1
+      },
+      {
+        "id": "pb_order_steps_col_created",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false,
+        "system": false,
+        "presentable": false,
+        "hidden": false
+      },
+      {
+        "id": "pb_order_steps_col_updated",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true,
+        "system": false,
+        "presentable": false,
+        "hidden": false
+      }
+    ],
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null
   },
   {
     "id": "pb_deliveries_col",

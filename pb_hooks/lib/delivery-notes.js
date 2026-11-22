@@ -7,6 +7,7 @@ const { SUPPLIERS, normalizePartNumber, normalizeShopName, normalizeInternalOrde
   require(`${__hooks}/lib/util.js`);
 const { allocationNote, resolveGroup, NO_GROUP_LABEL } = require(`${__hooks}/lib/cart.js`);
 const { bookDelivery } = require(`${__hooks}/lib/deliveries.js`);
+const { createInitialSteps } = require(`${__hooks}/lib/status.js`);
 
 const MAX_ITEMS = 200;
 
@@ -70,6 +71,7 @@ function createOrderFromDeliveryNote(app, body, items, receipts, userId) {
   order.set("custom_fields", {});
   if (userId) order.set("created_by", userId);
   app.save(order); // Format und Eindeutigkeit der internen Nummer prüft der Validierungs-Hook
+  createInitialSteps(app, order, userId); // Formular/Bestellung liefen am System vorbei (Kap. 4.6)
 
   const itemCol = app.findCollectionByNameOrId("order_items");
   const lines = entries.map((entry) => {

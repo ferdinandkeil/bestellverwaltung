@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setup, resetData, createUser, addItem, changeStatus, bookDelivery, getRecord, listRecords,
+  setup, resetData, createUser, addItem, markOrdered, bookDelivery, getRecord, listRecords,
   http, expectHttpError,
 } from './helpers.mjs';
 
@@ -19,7 +19,7 @@ beforeEach(async () => {
 });
 
 test('Buchung legt Historie an und summiert qty_delivered', async () => {
-  await changeStatus(u.token, orderId, 'advance');
+  await markOrdered(u.token, orderId);
   const r = await bookDelivery(u.token, orderId, [{ item: ids.A, qty: 1 }, { item: ids.A, qty: 2 }], 'Paket 1');
   assert.equal(r.delivery.booked_by, u.user.id);
   assert.equal(r.delivery.note, 'Paket 1');
@@ -31,7 +31,7 @@ test('Buchung legt Historie an und summiert qty_delivered', async () => {
 });
 
 test('Überlieferung ist erlaubt, negative Summe nicht (und rollt komplett zurück)', async () => {
-  await changeStatus(u.token, orderId, 'advance');
+  await markOrdered(u.token, orderId);
   await bookDelivery(u.token, orderId, [{ item: ids.B, qty: 5 }]);
   assert.equal((await getRecord('order_items', ids.B)).qty_delivered, 5);
 
@@ -42,7 +42,7 @@ test('Überlieferung ist erlaubt, negative Summe nicht (und rollt komplett zurü
 
 test('keine Buchung im offenen Korb, für fremde Positionen oder ohne Mengen', async () => {
   await expectHttpError(bookDelivery(u.token, orderId, [{ item: ids.A, qty: 1 }]), 400);
-  await changeStatus(u.token, orderId, 'advance');
+  await markOrdered(u.token, orderId);
 
   const other = await addItem(u.token, { supplier: 'mouser', part_number: 'X', name: 'X', qty: 1 });
   await expectHttpError(bookDelivery(u.token, orderId, [{ item: other.item.id, qty: 1 }]), 400);
@@ -52,7 +52,7 @@ test('keine Buchung im offenen Korb, für fremde Positionen oder ohne Mengen', a
 });
 
 test('Buchung mit Beleg (multipart)', async () => {
-  await changeStatus(u.token, orderId, 'advance');
+  await markOrdered(u.token, orderId);
   const form = new FormData();
   form.append('lines', JSON.stringify([{ item: ids.A, qty: 4 }]));
   form.append('note', 'mit Beleg');
@@ -65,7 +65,7 @@ test('Buchung mit Beleg (multipart)', async () => {
 });
 
 test('Beleg als PDF; mehr als eine Datei wird abgelehnt', async () => {
-  await changeStatus(u.token, orderId, 'advance');
+  await markOrdered(u.token, orderId);
   const pdf = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
   const form = (files) => {
     const f = new FormData();

@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setup, resetData, createUser, createGroup, addItem, changeStatus, getRecord, listRecords, http, expectHttpError, PB_URL,
+  setup, resetData, createUser, createGroup, addItem, markOrdered, getRecord, listRecords, http, expectHttpError, PB_URL,
 } from './helpers.mjs';
 
 let u;
@@ -47,6 +47,13 @@ test('Bestellung aus Lieferschein: Herkunft, sofort geliefert, Positionen zusamm
   assert.equal(led.group_allocation_note, 'Thema 3: 2x | ohne Gruppe: 3x');
   assert.equal(items.find((i) => i.part_number === 'CLI-581 C').name, 'Tinte');
   assert.equal((await getRecord('orders', cart.order.id)).status, 'angefragt');
+
+  // Formular lief am System vorbei: erledigt ohne Datum; Freigabe nicht; „bestellt“ jetzt durch den Nutzer
+  const steps = Object.fromEntries((await listRecords('order_steps', `order = "${r.order.id}"`)).map((s) => [s.step, s]));
+  assert.deepEqual(Object.keys(steps).sort(), ['form_signed', 'form_submitted', 'form_written', 'ordered']);
+  assert.deepEqual([steps.form_written.done_at, steps.form_written.done_by], ['', '']);
+  assert.equal(steps.ordered.done_by, u.user.id);
+  assert.notEqual(steps.ordered.done_at, '');
 });
 
 test('interne Bestellnummer: angeben oder ausdrücklich darauf verzichten', async () => {
@@ -62,6 +69,8 @@ test('interne Bestellnummer: angeben oder ausdrücklich darauf verzichten', asyn
   assert.equal(r.order.internal_order_no, '');
   assert.equal(r.order.without_internal_order_no, true, 'Verzicht wird gespeichert');
   assert.equal(r.status, 'geliefert');
+  assert.deepEqual((await listRecords('order_steps', `order = "${r.order.id}"`)).map((s) => s.step), ['ordered'],
+    'ohne interne Nummer kein Formular');
   // bestehende Nummer wird als Dublette abgelehnt
   await fromNote({ supplier: 'reichelt', internal_order_no: '2026IW00002', items });
   const dup = await expectHttpError(fromNote({ supplier: 'farnell', internal_order_no: '2026IW00002', items }), 400);
@@ -99,7 +108,7 @@ test('Ablage: Lieferschein ohne Bestellung ablegen, für alle sichtbar, einer Be
   await expectHttpError(http('POST', '/api/collections/unmatched_receipts/records', { token: u.token, form: foreign }), 400);
 
   const cart = await addItem(u.token, { supplier: 'other', supplier_custom_name: 'Unbekannter Shop', part_number: 'Y', qty: 1 });
-  await changeStatus(u.token, cart.order.id, 'advance', { internal_order_no: '2026IW01087' });
+  await markOrdered(u.token, cart.order.id, { internal_order_no: '2026IW01087' });
   const order = await http('POST', `/api/lab/unmatched-receipts/${entry.id}/assign`, { token: other.token, json: { order: cart.order.id } });
   assert.equal(order.attachments.length, 1);
   const file = await fetch(`${PB_URL}/api/files/orders/${order.id}/${order.attachments[0]}`);
