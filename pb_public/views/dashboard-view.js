@@ -48,10 +48,11 @@ const template = /* html */ `
       </button>
     </template>
   </div>
-  <div class="mb-4 flex-wrap items-end gap-x-4 gap-y-3 lg:flex" :class="filtersOpen ? 'flex' : 'hidden'" data-overview-filters>
+  <div class="mb-4 flex-wrap items-start gap-x-4 gap-y-3 lg:flex" :class="filtersOpen ? 'flex' : 'hidden'" data-overview-filters>
     <div class="w-full sm:w-auto">
       <span class="label">Phase</span>
-      <div class="flex flex-wrap gap-1.5">
+      <!-- Höhe wie die Auswahlfelder daneben, Chips mittig dazu -->
+      <div class="flex min-h-[2.375rem] flex-wrap items-center gap-1.5">
         <template x-for="ph in tablePhases" :key="ph.value">
           <button type="button" class="rounded-full px-2.5 py-1 text-xs ring-1 ring-inset transition"
                   :class="filters.phases.includes(ph.value) ? 'bg-blue-600 text-white ring-blue-600' : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'"
