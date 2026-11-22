@@ -38,8 +38,10 @@ let failed = false;
 
 try {
   await loginViaUi(b, PB_URL, login.email);
-  await b.waitFor(`[...document.querySelectorAll('#view button')].some((e) => e.innerText.includes('Moodle-Import'))`, 'Import-Button');
-  await b.clickText('#view button', 'Moodle-Import');
+  // Moodle-Import: Symbol in der Kopfzeile links neben dem Warenkorb (ab sm)
+  await b.setViewport({ width: 1366, height: 900 }, false);
+  await b.waitFor(`document.querySelector('[data-header-action=moodle-import]')?.offsetParent`, 'Import-Symbol');
+  await b.evaluate(`document.querySelector('[data-header-action=moodle-import]').click()`);
   await b.waitFor(`${imp}.isOpen && window.Papa`, 'Import geöffnet, Papa Parse geladen');
   await b.screenshot('moodle-01-datei');
 

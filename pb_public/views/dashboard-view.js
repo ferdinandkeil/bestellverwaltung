@@ -1,11 +1,11 @@
-// Startseite „Bestellungen“ (ARCHITECTURE.md Kap. 7): Warenkörbe als Leiste, Bestellungen als Tabelle mit den
-// Verwaltungsschritten (PC) bzw. als Karten (Smartphone), Filter, Suche, Erfassung neuer Positionen, Plugin-Slot.
+// Startseite „Bestellungen“ (ARCHITECTURE.md Kap. 7): Bestellungen als Tabelle mit den
+// Verwaltungsschritten (PC) bzw. kompakt mit aufklappbaren Schritten (Smartphone/Tablet), Filter, Suche und
+// Plugin-Slot (Lieferschein-Scanner). Warenkörbe und „Position erfassen“: Warenkorb-Symbol (views/cart-menu.js).
 // Schritte werden direkt in der Tabelle abgehakt (views/order-steps.js, „Handeln statt fragen“).
 import { SUPPLIERS, STATUSES, supplierLabel, statusMeta, groupsByCourse, groupLabel } from '../core/config.js';
-import { listOverviewOrders, listOpenCarts, listGroups, subscribe, errorMessage } from '../core/api.js';
+import { listOverviewOrders, listGroups, subscribe, errorMessage } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast } from '../core/ui.js';
-import { itemFormFields } from './item-form.js';
 import { unmatchedReceiptsSection } from './unmatched-receipts.js';
 import { STEP_BOX, stepView, toggleStep } from './order-steps.js';
 
@@ -30,23 +30,9 @@ const template = /* html */ `
     <template x-for="p in plugins()" :key="p.id">
       <button type="button" class="btn btn-secondary" :class="p.prominent && 'hidden sm:inline-flex'" @click="runPlugin(p)" x-text="p.label"></button>
     </template>
-    <button type="button" class="btn btn-primary" @click="showForm = true">+ Position erfassen</button>
   </div>
 
   ${unmatchedReceiptsSection}
-
-  <!-- Offene Warenkörbe -->
-  <section x-show="carts.length" class="mb-4" data-carts>
-    <h2 class="mb-2 text-sm font-semibold text-slate-700">Warenkörbe</h2>
-    <div class="flex flex-wrap gap-2">
-      <template x-for="c in carts" :key="c.id">
-        <a :href="'#/orders/' + c.id" class="card px-3 py-2 text-sm transition hover:border-blue-300 hover:shadow" data-cart>
-          <span class="font-medium" x-text="supplierLabel(c)"></span>
-          <span class="text-slate-500" x-text="' · ' + positionsLabel(c)"></span>
-        </a>
-      </template>
-    </div>
-  </section>
 
   <!-- Filter: auf Smartphone/Tablet eingeklappt, aktive Filter als Chips -->
   <div class="mb-3 flex flex-wrap items-center gap-2 lg:hidden">
@@ -62,10 +48,11 @@ const template = /* html */ `
       </button>
     </template>
   </div>
-  <div class="mb-4 flex-wrap items-end gap-x-4 gap-y-3 lg:flex" :class="filtersOpen ? 'flex' : 'hidden'" data-overview-filters>
+  <div class="mb-4 flex-wrap items-start gap-x-4 gap-y-3 lg:flex" :class="filtersOpen ? 'flex' : 'hidden'" data-overview-filters>
     <div class="w-full sm:w-auto">
       <span class="label">Phase</span>
-      <div class="flex flex-wrap gap-1.5">
+      <!-- Höhe wie die Auswahlfelder daneben, Chips mittig dazu -->
+      <div class="flex min-h-[2.375rem] flex-wrap items-center gap-1.5">
         <template x-for="ph in tablePhases" :key="ph.value">
           <button type="button" class="rounded-full px-2.5 py-1 text-xs ring-1 ring-inset transition"
                   :class="filters.phases.includes(ph.value) ? 'bg-blue-600 text-white ring-blue-600' : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'"
@@ -198,16 +185,6 @@ const template = /* html */ `
     </table>
   </div>
 
-  <!-- Modal: Position erfassen -->
-  <div x-show="showForm" x-transition.opacity class="modal-backdrop" @keydown.escape.window="showForm = false"
-       @click.self="showForm = false">
-    <div class="modal-panel" @item-form-cancel="showForm = false" @item-added="reload()">
-      <h2 class="mb-4 text-lg font-semibold">Position erfassen</h2>
-      <template x-if="showForm">
-        <div x-data="itemForm({})">${itemFormFields}</div>
-      </template>
-    </div>
-  </div>
 </div>`;
 
 function defaultFilters() {
@@ -246,13 +223,11 @@ function component() {
     search: '',
     searchTimer: null,
     groups: [],
-    carts: [],
     rows: [],
     /** Spaltengruppen der Tabelle (Bestellung, Ware, Rechnung) – aus der Schrittdefinition. */
     columnGroups: stepView({ status: 'angefragt' }, {}).map((t) => ({ label: t.label, steps: t.steps })),
     loading: false,
     error: '',
-    showForm: false,
     filtersOpen: false,
     /** Aufgeklappte Zeilen (Smartphone/Tablet): { orderId: true } */
     open: {},
@@ -344,12 +319,8 @@ function component() {
       const seq = ++this.reloadSeq; // späte Antworten älterer Anfragen verwerfen (schnelles Tippen, Realtime)
       this.loading = true;
       try {
-        const [orders, carts] = await Promise.all([
-          listOverviewOrders({ ...this.filters, search: this.search }),
-          listOpenCarts(),
-        ]);
+        const orders = await listOverviewOrders({ ...this.filters, search: this.search });
         if (seq !== this.reloadSeq) return;
-        this.carts = carts;
         this.rows = orders.map((order) => {
           const steps = stepsOf(order);
           return {

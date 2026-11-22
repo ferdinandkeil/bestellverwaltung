@@ -31,7 +31,7 @@ async function seed() {
 // Ablauf
 // ---------------------------------------------------------------------------
 const ORDER_LINKS = `document.querySelectorAll('[data-overview-table] tr[data-order]')`; // Zeilen der Übersicht
-const CART_LINKS = `document.querySelectorAll('#view [data-cart]')`;
+const CART_LINKS = `document.querySelectorAll('[data-cart-panel] [data-cart]')`; // Warenkörbe im Warenkorb-Symbol
 /** Letzte (neueste) Toast-Aktion mit dieser Beschriftung anklicken. */
 const TOAST_ACTION = (label) => `[...document.querySelectorAll('[data-toast-action]')].filter((e) => e.innerText.trim() === ${JSON.stringify(label)}).pop()`;
 const TOASTS = `[...document.querySelectorAll('[data-toast-action]')].map((e) => e.closest('[data-toast]').innerText).join(' | ')`;
@@ -66,11 +66,11 @@ try {
   await sleep(3500); // PocketBase-Ratenbegrenzung für Auth-Anfragen
   await b.fill('#login-code', code);
   await b.clickText('button', 'Anmelden');
-  await b.waitFor(`location.hash === '#/' && ${ORDER_LINKS}.length === 1 && ${CART_LINKS}.length === 1`, 'Startseite: 1 Bestellung, 1 Warenkorb');
+  await b.waitFor(`location.hash === '#/' && ${ORDER_LINKS}.length === 1 && ${CART_LINKS}.length === 1 && Number(document.querySelector('[data-cart-count]').innerText) === Alpine.store('carts').count && Alpine.store('carts').count > 0`, 'Startseite: 1 Bestellung, 1 Warenkorb mit Zahl am Symbol');
   if (!(await b.evaluate(`document.querySelector('[data-prominent-action]')?.offsetParent && document.querySelector('[data-prominent-action]').innerText.includes('Lieferschein scannen')`))) {
     throw new Error('Smartphone: „Lieferschein scannen“ nicht als Hauptknopf oben');
   }
-  ok('Login → Startseite: Warenkorb in der Leiste, 1 Bestellung in der kompakten Tabelle, „Lieferschein scannen“ groß oben');
+  ok('Login → Startseite: Warenkorb-Symbol mit Zahl, 1 Bestellung in der kompakten Tabelle, „Lieferschein scannen“ groß oben');
   await b.screenshot('02-dashboard');
 
   if (await b.evaluate(`!!document.querySelector('#view select')?.offsetParent`)) throw new Error('Filter sollten mobil eingeklappt sein');
@@ -85,7 +85,28 @@ try {
   await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Filter zurücksetzen');
   ok('Filter mobil eingeklappt, Gruppenfilter mit Chip');
 
-  await b.clickText('button', '+ Position erfassen');
+  // Smartphone: Hamburger-Menü mit Navigation und Logout; Warenkorb als fester Knopf unten rechts
+  if (await b.evaluate(`!!document.querySelector('[data-cart-button]').offsetParent || !document.querySelector('[data-cart-fab]').getClientRects().length`)) {
+    throw new Error('Smartphone: Warenkorb gehört als Knopf unten rechts, nicht in die Kopfzeile');
+  }
+  await b.evaluate(`document.querySelector('[data-menu-button]').click()`);
+  await b.waitFor(`document.querySelector('[data-mobile-menu]')?.offsetParent && document.querySelector('[data-mobile-menu]').innerText.includes('Logout')`, 'Menü offen');
+  await b.screenshot('02c-menu');
+  await b.evaluate(`[...document.querySelectorAll('[data-mobile-menu] a')].find((a) => a.innerText.includes('Gruppen')).click()`);
+  await b.waitFor(`location.hash === '#/groups' && !document.querySelector('[data-mobile-menu]').offsetParent`, 'Gruppen über das Menü, Menü geschlossen');
+  // ✕ auf der Seite Warenkörbe führt zur vorigen Ansicht zurück
+  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
+  await b.waitFor(`location.hash === '#/carts' && !document.querySelector('[data-cart-fab]').getClientRects().length`, 'Seite Warenkörbe (ohne Knopf)');
+  await b.evaluate(`document.querySelector('[data-carts-close]').click()`);
+  await b.waitFor(`location.hash === '#/groups'`, '✕ zurück zu Gruppen');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Startseite');
+  ok('Smartphone: Hamburger-Menü, Warenkorb-Knopf unten rechts, ✕ zurück zur vorigen Ansicht');
+
+  // Smartphone: Warenkorb-Knopf öffnet die eigene Seite, dort „+ Position erfassen“
+  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
+  await b.waitFor(`location.hash === '#/carts' && document.querySelector('#view [data-cart]')?.offsetParent`, 'Seite Warenkörbe');
+  await b.clickText('#view button', '+ Position erfassen');
   await b.waitFor(`document.querySelector('.modal-panel input[placeholder^="z. B. 595"]')?.offsetParent`, 'Formular');
   await b.screenshot('03-formular');
   await b.fill('.modal-panel input[placeholder^="z. B. 595"]', '595-SN74HC595N');
@@ -94,7 +115,10 @@ try {
   await b.clickText('.modal-panel button', 'In Warenkorb');
   await b.waitFor(`document.body.innerText.includes('zusammengeführt (jetzt 10 Stück)')`, 'Merge-Meldung');
   await b.clickText('.modal-panel button', 'Schließen');
-  ok('Akzeptanzkriterium: Merge auf 10 Stück');
+  await b.waitFor(`[...document.querySelectorAll('#view [data-cart] li')].some((l) => l.innerText.includes('10 ×') && l.innerText.includes('595-SN74HC595N'))`, 'Warenkorb-Seite zeigt 10 Stück');
+  ok('Akzeptanzkriterium: Merge auf 10 Stück, sichtbar auf der Seite Warenkörbe');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`${ORDER_LINKS}.length === 1`, 'zurück zur Startseite');
 
   // Smartphone: Antippen klappt die Schritte auf, „Positionen & Details“ öffnet die Bestellung
   await b.evaluate(`[...${ORDER_LINKS}].find((r) => r.innerText.includes('Reichelt')).click()`);
@@ -166,7 +190,9 @@ try {
   // Offenen Mouser-Korb: Formular geschrieben (fehlende interne Bestellnummer → Dialog) → bestellt (Rest übersprungen)
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`${CART_LINKS}.length === 1`, 'Startseite');
-  await b.evaluate(`[...${CART_LINKS}].find((a) => a.innerText.includes('Mouser')).click()`);
+  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
+  await b.waitFor(`location.hash === '#/carts'`, 'Seite Warenkörbe');
+  await b.evaluate(`[...document.querySelectorAll('#view [data-cart] a')].find((a) => a.innerText.includes('Mouser')).click()`);
   await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
   await b.clickText('#view button[data-next-step]', '✓ Formular geschrieben');
   await b.waitFor(`document.querySelector('#step-internal-no')?.offsetParent`, 'Dialog: nur die fehlende Nummer');
@@ -189,6 +215,13 @@ try {
   await b.setViewport({ width: 1366, height: 900 }, false);
   const ROW = (text) => `[...document.querySelectorAll('[data-overview-table] tbody tr')].find((r) => r.innerText.includes(${JSON.stringify(text)}))`;
   await b.waitFor(`document.querySelector('[data-overview-table]')?.offsetParent && ${ROW('2026IW04711')}`, 'Tabelle');
+  // PC: Warenkorb-Symbol klappt das Feld auf (kein Seitenwechsel), Escape schließt es
+  await b.evaluate(`document.querySelector('[data-cart-button]').click()`);
+  await b.waitFor(`document.querySelector('[data-cart-panel]')?.offsetParent && location.hash === '#/' && [...document.querySelectorAll('[data-cart-panel] button')].some((e) => e.innerText.includes('+ Position erfassen'))`, 'Warenkorb-Feld aufgeklappt');
+  await b.screenshot('05-warenkorb-feld');
+  await b.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await b.waitFor(`!document.querySelector('[data-cart-panel]').offsetParent`, 'Warenkorb-Feld geschlossen');
+  ok('PC: Warenkorb-Symbol klappt die Warenkörbe mit Aktionen auf, Escape schließt');
   const cell = (step) => `${ROW('2026IW04711')}.querySelector('[data-step=${step}]')`;
   if ((await b.evaluate(`[${cell('form_written')}, ${cell('form_signed')}, ${cell('ordered')}].map((e) => e.dataset.state).join()`)) !== 'done,skipped,done') {
     throw new Error('Tabelle: Zustände der Schritte falsch');

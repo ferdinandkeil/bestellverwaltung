@@ -11,24 +11,53 @@
   <div x-data x-cloak>
     <!-- Kopfzeile (nur eingeloggt) -->
     <header x-show="$store.auth.user" class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-6xl items-center gap-1 px-4 py-2">
-        <!-- Schriftzug erst ab sm: auf dem Smartphone reicht der Platz sonst nicht für alle Menüpunkte -->
-        <a href="#/" class="mr-4 hidden text-base font-semibold text-blue-700 sm:inline">Labor-Bestellungen</a>
-        <nav class="flex flex-1 items-center gap-1 text-sm">
+      <div class="relative mx-auto flex max-w-6xl items-center gap-1 px-4 py-2" x-data="{ menu: false }"
+           @keydown.escape.window="menu = false" @click.outside="menu = false" @hashchange.window="menu = false">
+        <a href="#/" class="mr-auto text-base font-semibold text-blue-700 sm:mr-4">Labor-Bestellungen</a>
+        <!-- ab sm: Navigation in der Kopfzeile -->
+        <nav class="hidden flex-1 items-center gap-1 text-sm sm:flex">
           <a href="#/" class="rounded-lg px-2.5 py-1.5"
              :class="['dashboard','order'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Bestellungen</a>
           <a href="#/groups" class="rounded-lg px-2.5 py-1.5"
-             :class="$store.route.name === 'groups' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Gruppen<span class="hidden sm:inline">/Projekte</span></a>
+             :class="$store.route.name === 'groups' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Gruppen/Projekte</a>
           <a href="#/favorites" class="rounded-lg px-2.5 py-1.5"
              :class="['favorites','favorite'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Favoriten</a>
         </nav>
+        <!-- Modul-Symbole (Slot header-actions) und Warenkorb-Symbol mit Ausklappfeld (views/cart-menu.js, beim Start eingesetzt) -->
+        <div id="header-actions"></div>
+        <div id="cart-menu" class="mr-1 hidden sm:block"></div>
         <span class="hidden text-xs text-slate-500 md:inline" x-text="$store.auth.user?.name || $store.auth.user?.email"></span>
-        <button type="button" class="btn btn-ghost btn-sm" @click="$store.auth.logout()">Logout</button>
+        <button type="button" class="btn btn-ghost btn-sm hidden sm:inline-flex" @click="$store.auth.logout()">Logout</button>
+
+        <!-- Smartphone: Hamburger-Menü mit Navigation und Logout -->
+        <button type="button" class="-mr-2 rounded-lg p-2 text-slate-700 hover:bg-slate-100 sm:hidden" @click="menu = !menu"
+                :aria-expanded="menu" aria-controls="mobile-menu" :aria-label="menu ? 'Menü schließen' : 'Menü öffnen'" data-menu-button>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-6" aria-hidden="true">
+            <path x-show="!menu" d="M4 7h16M4 12h16M4 17h16"/><path x-show="menu" d="M6 6l12 12M18 6 6 18"/>
+          </svg>
+        </button>
+        <nav id="mobile-menu" x-show="menu" x-transition.origin.top data-mobile-menu
+             class="absolute inset-x-0 top-full border-b border-slate-200 bg-white px-4 py-2 shadow-lg sm:hidden">
+          <a href="#/" class="block rounded-lg px-3 py-3"
+             :class="['dashboard','order'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'">Bestellungen</a>
+          <a href="#/groups" class="block rounded-lg px-3 py-3"
+             :class="$store.route.name === 'groups' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'">Gruppen/Projekte</a>
+          <a href="#/favorites" class="block rounded-lg px-3 py-3"
+             :class="['favorites','favorite'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'">Favoriten</a>
+          <div class="mt-2 flex items-center gap-2 border-t border-slate-100 px-3 pt-3 pb-1">
+            <span class="mr-auto truncate text-sm text-slate-500" x-text="$store.auth.user?.name || $store.auth.user?.email"></span>
+            <button type="button" class="btn btn-secondary btn-sm" @click="menu = false; $store.auth.logout()">Logout</button>
+          </div>
+        </nav>
       </div>
     </header>
 
     <!-- Aktuelle Ansicht (wird vom Router ein-/ausgehängt) -->
     <main id="view" class="mx-auto max-w-6xl px-4 py-4 pb-24"></main>
+
+    <!-- Formular „Position erfassen“ (views/cart-menu.js, Ereignis open-item-form) und Warenkorb-Knopf (Smartphone) -->
+    <div id="item-form-modal"></div>
+    <div id="cart-fab"></div>
 
     <!-- Tooltip (core/ui.js: x-tip) – Sprechblase mit Pfeil zum Element -->
     <div x-data x-show="$store.tooltip.text" x-cloak role="tooltip" data-tooltip
@@ -40,9 +69,9 @@
             :class="$store.tooltip.below ? '-top-1' : '-bottom-1'" aria-hidden="true"></span>
     </div>
 
-    <!-- Toasts (core/ui.js): Symbol + Meldung; Aktionen ab sm übereinander rechts daneben, auf dem Smartphone
+    <!-- Toasts (core/ui.js), auf dem Smartphone oberhalb des Warenkorb-Knopfs: Symbol + Meldung; Aktionen ab sm übereinander rechts daneben, auf dem Smartphone
          nebeneinander unter dem Text. Der Balken zeigt die Standzeit. -->
-    <div class="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-3 p-4">
+    <div class="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-3 p-4 pb-24 sm:pb-4">
       <template x-for="t in $store.toasts.items" :key="t.id">
         <div class="pointer-events-auto relative flex w-full max-w-xl flex-wrap items-stretch overflow-hidden rounded-xl text-base text-white shadow-xl sm:flex-nowrap" data-toast
              :class="{ 'bg-slate-800': t.type === 'info', 'bg-emerald-700': t.type === 'success', 'bg-red-700': t.type === 'error' }">
@@ -99,6 +128,7 @@
     import { registerItemForm } from './views/item-form.js';
     import { registerUnmatchedReceipts } from './views/unmatched-receipts.js';
     import { registerOrderSteps } from './views/order-steps.js';
+    import cartsView, { registerCartMenu, cartMenuTemplate, cartFabTemplate, headerActionsTemplate, itemFormModalTemplate } from './views/cart-menu.js';
 
     // Erweiterungsmodule (registrieren sich selbst über core/plugin-registry.js):
     const MODULES = [
@@ -113,6 +143,7 @@
       { name: 'login', pattern: /^\/login$/, view: loginView, public: true },
       { name: 'dashboard', pattern: /^\/?$/, view: dashboardView },
       { name: 'order', pattern: /^\/orders\/([a-z0-9]{15})$/, view: orderDetailView, params: ['id'] },
+      { name: 'carts', pattern: /^\/carts$/, view: cartsView },
       { name: 'groups', pattern: /^\/groups$/, view: groupsView },
       { name: 'favorites', pattern: /^\/favorites$/, view: favoritesView },
       { name: 'favorite', pattern: /^\/favorites\/([a-z0-9]{15})$/, view: favoriteListView, params: ['id'] },
@@ -135,6 +166,11 @@
     registerItemForm(Alpine);
     registerUnmatchedReceipts(Alpine);
     registerOrderSteps(Alpine);
+    registerCartMenu();
+    document.getElementById('header-actions').innerHTML = headerActionsTemplate;
+    document.getElementById('cart-menu').innerHTML = cartMenuTemplate;
+    document.getElementById('item-form-modal').innerHTML = itemFormModalTemplate;
+    document.getElementById('cart-fab').innerHTML = cartFabTemplate;
 
     const main = document.getElementById('view');
     let mounted = null;

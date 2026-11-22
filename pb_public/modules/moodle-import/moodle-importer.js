@@ -1,6 +1,6 @@
 // Moodle-Import (Beta): CSV-Export der Moodle-Datenbank → Zuordnung (Veranstaltung, Lieferanten, Gruppen)
 // → Vorschau → Buchung aller Zeilen in einer Transaktion (POST /api/lab/cart-items/batch).
-// Registriert sich im Slot 'dashboard-actions'. Es wird kein Bezug zu Moodle gespeichert.
+// Registriert sich im Slot 'header-actions' (Symbol links neben dem Warenkorb). Es wird kein Bezug zu Moodle gespeichert.
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
 import { SUPPLIERS, formatSemester, currentSemester, semesterYears, supplierLabel } from '../../core/config.js';
@@ -401,7 +401,7 @@ document.body.appendChild(host.firstElementChild);
 
 registerPlugin({
   id: 'moodle-import',
-  slot: 'dashboard-actions',
+  slot: 'header-actions',
   label: 'Moodle-Import (Beta)',
   icon: 'upload',
   onClick: () => window.dispatchEvent(new CustomEvent('open-moodle-import')),

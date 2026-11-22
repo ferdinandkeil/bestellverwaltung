@@ -2,9 +2,11 @@
 //
 // registerPlugin({ id, slot, label, icon?, prominent?, isVisible?(ctx...), onClick(ctx...) })
 //   Slot 'dashboard-actions':    onClick(); prominent: auf dem Smartphone als großer Hauptknopf oben (z. B. Scanner)
+//   Slot 'header-actions':       onClick(); Symbol (icon, label als Tooltip) in der Kopfzeile links neben dem
+//                                Warenkorb, ab sm (z. B. Moodle-Import)
 //   Slot 'order-detail-actions': onClick(order, items)
 
-export const SLOTS = ['dashboard-actions', 'order-detail-actions'];
+export const SLOTS = ['dashboard-actions', 'header-actions', 'order-detail-actions'];
 
 const plugins = [];
 const listeners = new Set();
