@@ -65,7 +65,7 @@
 
 **Status:** als **Beta** umgesetzt (in der App gekennzeichnet); Abnahme nach dem ersten echten Import.
 1. ✔ Beispiel-CSV ausgewertet (11/2026): keine Bezeichnung → **Bezeichnung überall optional**; Gruppe steht in der Spalte „Gruppe“ (bei von Dozenten angelegten Einträgen fehlerhaft → von Hand zuweisen).
-2. ✔ `modules/moodle-import/` (Papa Parse 5.7.0 aus `vendor/`) im Slot `dashboard-actions` (seit `ui-warenkorb`: `cart-actions`): Datei, Zuordnung (Veranstaltung/Semester, Spalten, Lieferanten, Gruppen), Vorschau.
+2. ✔ `modules/moodle-import/` (Papa Parse 5.7.0 aus `vendor/`) im Slot `dashboard-actions` (seit `ui-warenkorb`: Symbol im Slot `header-actions`): Datei, Zuordnung (Veranstaltung/Semester, Spalten, Lieferanten, Gruppen), Vorschau.
 3. ✔ **Interaktive Gruppenzuweisung** mit markiertem Vorschlag bei gleichnamiger Gruppe; Zuweisung je Zeile möglich.
 4. ✔ Hinweise auf offenen Korb und Dubletten; Buchen über `POST /api/lab/cart-items/batch` (alles oder nichts, inkl. neuer Gruppen).
 5. ✔ Tests: Route (Rollback, Zeilennummern), CSV-Auswertung, Browser-Durchlauf mit synthetischer CSV.
@@ -119,9 +119,9 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 5. Browser-Tests angepasst.
 
 ### Warenkorb-Symbol (Branch `ui-warenkorb`, auf `ui-startseite`)
-**Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidung in ARCHITECTURE Kap. 7 (Warenkorb-Symbol) und Kap. 5 (Slot `cart-actions`).
+**Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidung in ARCHITECTURE Kap. 7 (Warenkorb-Symbol) und Kap. 5 (Slot `header-actions`).
 1. Symbol mit Zahl der offenen Positionen in der Kopfzeile; Ausklappfeld (höchstens 5 Positionen je Korb), auf dem Smartphone Seite `#/carts`.
-2. „+ Position erfassen“ und Moodle-Import (Slot `cart-actions`) unter den Warenkörben; Warenkorb-Leiste und Erfassen-Knöpfe der Startseite entfallen.
+2. „+ Position erfassen“ rechtsbündig unter den Warenkörben, Moodle-Import als Symbol links neben dem Warenkorb (Slot `header-actions`); Warenkorb-Leiste und Erfassen-Knöpfe der Startseite entfallen.
 3. Browser-Tests angepasst (Startseite, Merge, Moodle-Import, Ausklappfeld am PC).
 
 ### Folgende Branches (Reihenfolge vorläufig)

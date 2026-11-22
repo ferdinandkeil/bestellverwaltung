@@ -1,7 +1,7 @@
 // Warenkorb in der Kopfzeile (ARCHITECTURE.md Kap. 7): Symbol mit Zahl der offenen Positionen, ein Klick klappt
-// die Warenkörbe auf (ab sm) bzw. öffnet die eigene Seite #/carts (Smartphone). Darunter „+ Position erfassen“ und
-// die Module im Slot 'cart-actions' (z. B. Moodle-Import). Das Formular „Position erfassen“ ist seitenweit
-// verfügbar (Ereignis `open-item-form`).
+// die Warenkörbe auf (ab sm) bzw. öffnet die eigene Seite #/carts (Smartphone), darunter rechts „+ Position erfassen“.
+// Das Formular „Position erfassen“ ist seitenweit verfügbar (Ereignis `open-item-form`).
+// Links neben dem Warenkorb: Module im Slot 'header-actions' als Symbol (z. B. Moodle-Import).
 import Alpine from '../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { supplierLabel } from '../core/config.js';
 import { listOpenCarts, subscribe, errorMessage } from '../core/api.js';
@@ -50,10 +50,24 @@ const CART_LIST = /* html */ `
 </ul>`;
 
 const CART_ACTIONS = /* html */ `
-<button type="button" class="btn btn-primary" @click="addItem()" data-add-item>+ Position erfassen</button>
-<template x-for="p in plugins()" :key="p.id">
-  <button type="button" class="btn btn-secondary" @click="runPlugin(p)" x-text="p.label"></button>
-</template>`;
+<button type="button" class="btn btn-primary ml-auto" @click="addItem()" data-add-item>+ Position erfassen</button>`;
+
+/** Symbole der Module im Slot 'header-actions' (Schlüssel = plugin.icon). */
+const HEADER_ICONS = {
+  upload: '<path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
+};
+
+/** Module als Symbol links neben dem Warenkorb (ab sm; auf dem Smartphone wird nur gescannt). */
+export const headerActionsTemplate = /* html */ `
+<div x-data="headerActions" class="hidden items-center sm:flex">
+  <template x-for="p in plugins()" :key="p.id">
+    <button type="button" class="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100" @click="run(p)"
+            x-tip="p.label" :aria-label="p.label" :data-header-action="p.id">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+           class="size-6" aria-hidden="true" x-html="icon(p)"></svg>
+    </button>
+  </template>
+</div>`;
 
 /** Symbol + Ausklappfeld in der Kopfzeile (index.html). */
 export const cartMenuTemplate = /* html */ `
@@ -69,7 +83,7 @@ export const cartMenuTemplate = /* html */ `
        class="absolute top-full right-0 z-40 mt-2 flex max-h-[calc(100dvh-5rem)] w-[26rem] flex-col rounded-xl border border-slate-200 bg-white text-slate-900 shadow-xl">
     <h2 class="border-b border-slate-100 px-4 py-3 text-sm font-semibold">Warenkörbe</h2>
     <div class="min-h-0 flex-1 overflow-y-auto px-4">${CART_LIST}</div>
-    <div class="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-3">${CART_ACTIONS}</div>
+    <div class="flex border-t border-slate-100 px-4 py-3">${CART_ACTIONS}</div>
   </div>
 </div>`;
 
@@ -89,7 +103,7 @@ export const itemFormModalTemplate = /* html */ `
 const pageTemplate = /* html */ `
 <div x-data="cartsView">
   <h1 class="mb-3 text-xl font-semibold">Warenkörbe</h1>
-  <div class="mb-2 flex flex-wrap gap-2">${CART_ACTIONS}</div>
+  <div class="mb-2 flex">${CART_ACTIONS}</div>
   <div class="card px-4">${CART_LIST}</div>
 </div>`;
 
@@ -109,19 +123,8 @@ function cartHelpers(limit) {
       const n = c.expand?.order_items_via_order?.length ?? 0;
       return limit ? Math.max(0, n - limit) : 0;
     },
-    plugins() {
-      void this.$store.plugins.version; // reaktiv bei nachgeladenen Modulen
-      return getPlugins('cart-actions');
-    },
     addItem() {
       window.dispatchEvent(new CustomEvent('open-item-form'));
-    },
-    runPlugin(p) {
-      try {
-        p.onClick();
-      } catch (err) {
-        toast.error(errorMessage(err));
-      }
     },
   };
 }
@@ -201,9 +204,21 @@ export function registerCartMenu() {
       this.open = false;
       window.dispatchEvent(new CustomEvent('open-item-form'));
     },
-    runPlugin(p) {
-      this.open = false;
-      cartHelpers().runPlugin(p);
+  }));
+  Alpine.data('headerActions', () => ({
+    plugins() {
+      void this.$store.plugins.version; // reaktiv bei nachgeladenen Modulen
+      return getPlugins('header-actions');
+    },
+    icon(p) {
+      return HEADER_ICONS[p.icon] ?? HEADER_ICONS.upload;
+    },
+    run(p) {
+      try {
+        p.onClick();
+      } catch (err) {
+        toast.error(errorMessage(err));
+      }
     },
   }));
 }

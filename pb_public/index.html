@@ -22,7 +22,8 @@
           <a href="#/favorites" class="rounded-lg px-2.5 py-1.5"
              :class="['favorites','favorite'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Favoriten</a>
         </nav>
-        <!-- Warenkorb-Symbol mit Ausklappfeld (views/cart-menu.js, wird beim Start eingesetzt) -->
+        <!-- Modul-Symbole (Slot header-actions) und Warenkorb-Symbol mit Ausklappfeld (views/cart-menu.js, beim Start eingesetzt) -->
+        <div id="header-actions"></div>
         <div id="cart-menu" class="mr-1"></div>
         <span class="hidden text-xs text-slate-500 md:inline" x-text="$store.auth.user?.name || $store.auth.user?.email"></span>
         <button type="button" class="btn btn-ghost btn-sm" @click="$store.auth.logout()">Logout</button>
@@ -104,7 +105,7 @@
     import { registerItemForm } from './views/item-form.js';
     import { registerUnmatchedReceipts } from './views/unmatched-receipts.js';
     import { registerOrderSteps } from './views/order-steps.js';
-    import cartsView, { registerCartMenu, cartMenuTemplate, itemFormModalTemplate } from './views/cart-menu.js';
+    import cartsView, { registerCartMenu, cartMenuTemplate, headerActionsTemplate, itemFormModalTemplate } from './views/cart-menu.js';
 
     // Erweiterungsmodule (registrieren sich selbst über core/plugin-registry.js):
     const MODULES = [
@@ -143,6 +144,7 @@
     registerUnmatchedReceipts(Alpine);
     registerOrderSteps(Alpine);
     registerCartMenu();
+    document.getElementById('header-actions').innerHTML = headerActionsTemplate;
     document.getElementById('cart-menu').innerHTML = cartMenuTemplate;
     document.getElementById('item-form-modal').innerHTML = itemFormModalTemplate;
 
