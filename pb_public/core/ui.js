@@ -52,16 +52,29 @@ export function initUiStore() {
   });
 }
 
+/** Tooltip: Verzögerung bis zum ersten Tooltip; wer innerhalb von TOOLTIP_WARM_MS zum nächsten wechselt, sieht ihn sofort. */
+const TOOLTIP_DELAY_MS = 700;
+const TOOLTIP_WARM_MS = 1000;
+
 /**
  * Tooltip `x-tip="ausdruck"`: dunkle Sprechblase mit Pfeil direkt über dem Element (darunter, wenn oben kein Platz
- * ist), sofort bei Hover oder Tastaturfokus. Leerer Text = kein Tooltip. Eine einzige Blase für die ganze Seite
- * (`[data-tooltip]` in index.html), fest positioniert – so schneiden scrollende Tabellen sie nicht ab.
+ * ist), bei Hover oder Tastaturfokus. Der erste erscheint nach TOOLTIP_DELAY_MS; solange der Nutzer innerhalb von
+ * TOOLTIP_WARM_MS nach dem Ausblenden das nächste Element ansteuert, erscheint dessen Tooltip sofort.
+ * Leerer Text = kein Tooltip. Eine einzige Blase für die ganze Seite (`[data-tooltip]` in index.html), fest
+ * positioniert – so schneiden scrollende Tabellen sie nicht ab.
  */
 function registerTooltip() {
   Alpine.store('tooltip', { text: '', x: 0, y: 0, below: false });
   const tip = Alpine.store('tooltip');
-  let anchor = null; // bewusst nicht reaktiv: sonst hinge jeder x-tip-Effekt vom Hover-Zustand ab
-  const show = (el, text) => {
+  // Bewusst nicht reaktiv: sonst hinge jeder x-tip-Effekt vom Hover-Zustand ab.
+  let anchor = null;      // Element, dessen Tooltip gerade sichtbar ist
+  let hiddenAt = 0;       // Zeitpunkt, zu dem der letzte Tooltip ausgeblendet wurde
+  let timer = null;       // wartender erster Tooltip
+  let pending = null;     // Element, für das der Timer läuft
+  const texts = new WeakMap(); // aktueller Text je Element
+
+  const place = (el) => {
+    const text = texts.get(el) || '';
     if (!text) { hide(el); return; }
     const r = el.getBoundingClientRect();
     anchor = el;
@@ -70,28 +83,45 @@ function registerTooltip() {
     tip.below = r.top < 48;
     tip.y = tip.below ? r.bottom + 8 : r.top - 8;
   };
-  const hide = (el) => {
-    if (!el || anchor === el) { anchor = null; tip.text = ''; }
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+    pending = null;
   };
-  window.addEventListener('scroll', () => hide(), { capture: true, passive: true });
+  const hide = (el) => {
+    if (el && pending === el) cancel();
+    if (anchor && (!el || anchor === el)) {
+      anchor = null;
+      tip.text = '';
+      hiddenAt = Date.now();
+    }
+  };
+  const enter = (el) => {
+    cancel();
+    if (!texts.get(el)) return;
+    if (anchor || Date.now() - hiddenAt < TOOLTIP_WARM_MS) { place(el); return; }
+    pending = el;
+    timer = setTimeout(() => { pending = null; timer = null; place(el); }, TOOLTIP_DELAY_MS);
+  };
+
+  window.addEventListener('scroll', () => { cancel(); hide(); }, { capture: true, passive: true });
   Alpine.directive('tip', (el, { expression }, { evaluateLater, effect, cleanup }) => {
     const get = evaluateLater(expression);
-    let text = '';
     effect(() => get((v) => {
-      text = v || '';
-      if (anchor === el) show(el, text); // Text nach dem Abhaken aktualisieren
+      texts.set(el, v || '');
+      if (anchor === el) place(el); // Text nach dem Abhaken aktualisieren
     }));
-    const enter = () => show(el, text);
-    const leave = () => hide(el);
-    el.addEventListener('mouseenter', enter);
-    el.addEventListener('focus', enter);
-    el.addEventListener('mouseleave', leave);
-    el.addEventListener('blur', leave);
+    const onEnter = () => enter(el);
+    const onLeave = () => hide(el);
+    el.addEventListener('mouseenter', onEnter);
+    el.addEventListener('focus', onEnter);
+    el.addEventListener('mouseleave', onLeave);
+    el.addEventListener('blur', onLeave);
     cleanup(() => {
-      el.removeEventListener('mouseenter', enter);
-      el.removeEventListener('focus', enter);
-      el.removeEventListener('mouseleave', leave);
-      el.removeEventListener('blur', leave);
+      el.removeEventListener('mouseenter', onEnter);
+      el.removeEventListener('focus', onEnter);
+      el.removeEventListener('mouseleave', onLeave);
+      el.removeEventListener('blur', onLeave);
       hide(el);
     });
   });

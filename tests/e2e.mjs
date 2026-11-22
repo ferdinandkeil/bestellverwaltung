@@ -196,12 +196,17 @@ try {
   // Tooltip: nur das Datum, als Sprechblase am Kästchen; offene Kästchen ohne Tooltip
   const TIP = `(getComputedStyle(document.querySelector('[data-tooltip]')).display !== 'none' ? document.querySelector('[data-tooltip]').innerText.trim() : '')`;
   await b.evaluate(`${cell('form_written')}.dispatchEvent(new MouseEvent('mouseenter'))`);
+  await sleep(300);
+  if (await b.evaluate(TIP)) throw new Error('Tooltip erscheint vor Ablauf der Verzögerung');
   await b.waitFor(`/^\\d{1,2}\\.\\d{1,2}\\.\\d{4}$/.test(${TIP})`, 'Tooltip mit Datum');
+  // innerhalb von 1 s zum nächsten Kästchen: sofort
+  await b.evaluate(`${cell('form_written')}.dispatchEvent(new MouseEvent('mouseleave')); ${cell('ordered')}.dispatchEvent(new MouseEvent('mouseenter'))`);
+  if (!(await b.evaluate(TIP))) throw new Error('Folgetooltip nicht sofort');
   await b.screenshot('05a-tooltip');
-  await b.evaluate(`${cell('form_written')}.dispatchEvent(new MouseEvent('mouseleave')); ${cell('invoice_signed')}.dispatchEvent(new MouseEvent('mouseenter'))`);
+  await b.evaluate(`${cell('ordered')}.dispatchEvent(new MouseEvent('mouseleave')); ${cell('invoice_signed')}.dispatchEvent(new MouseEvent('mouseenter'))`);
   await b.waitFor(`${TIP} === ''`, 'kein Tooltip am offenen Kästchen');
   await b.evaluate(`${cell('invoice_signed')}.dispatchEvent(new MouseEvent('mouseleave'))`);
-  ok('Tooltip am Kästchen zeigt nur das Datum');
+  ok('Tooltip am Kästchen zeigt nur das Datum, erst nach Verzögerung, Folgetooltip sofort');
   await b.evaluate(`${cell('invoice_received')}.click()`);
   await b.waitFor(`${cell('invoice_received')}.dataset.state === 'done'`, 'in der Tabelle abgehakt');
   await b.screenshot('05a-tabelle');
