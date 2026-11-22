@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizePart, similarity, parseQty, extractRows, matchRows, orderNumberTokens, rankOrders,
-  parseInternalOrderNo, findInternalOrderNumbers, boxKey,
+  parseInternalOrderNo, findInternalOrderNumbers, findKnownInternalOrderNumbers, levenshtein, boxKey,
 } from '../pb_public/modules/delivery-scanner/matcher.js';
 import { detectProfile, profileById, profileForOrder, profileMatchesOrder } from '../pb_public/modules/delivery-scanner/profiles/index.js';
 
@@ -60,6 +60,11 @@ test('Normalisierung, Ähnlichkeit, Mengen mit OCR-Verwechslungen', () => {
   assert.equal(parseQty('0'), null);
   assert.equal(parseQty('Volksbank'), null, 'Wörter mit l/I/O sind keine Mengen');
   assert.equal(parseQty('IO'), null, 'ohne echte Ziffer keine Menge');
+  assert.equal(parseQty('2S'), 25, 'S statt 5');
+  assert.equal(parseQty('1B0'), 180, 'B statt 8');
+  assert.equal(parseQty('Z0'), 20, 'Z statt 2');
+  assert.equal(parseQty('G0'), 60, 'G statt 6');
+  for (const t of ['ST', 'SB', 'BGZ', 'Stk', '10ST']) assert.equal(parseQty(t), null, t);
 });
 
 test('Profil wird über den Kopfbereich erkannt', () => {
@@ -111,6 +116,8 @@ test('interne Bestellnummer trotz OCR-Verwechslungen lesen', () => {
   assert.equal(parseInternalOrderNo('2026|VV01047'), '2026IW01047', 'W als VV gelesen');
   assert.equal(parseInternalOrderNo('2026/W01202'), '2026IW01202', 'I als / gelesen (kleine Schrift)');
   assert.equal(parseInternalOrderNo('2026I1W01204'), '2026IW01204', 'I verdoppelt gelesen');
+  assert.equal(parseInternalOrderNo('2026IW0S876'), '2026IW05876', 'S in Ziffern als 5');
+  assert.equal(parseInternalOrderNo('2O2GIWB1Z03'), '2026IW81203', 'G/B/Z in Ziffern');
   for (const t of ['40538175', '2026IW0104', 'IIIIIWlllll', 'L26DE440078', 'B26DE363696', '2026/11/W01202', '2026III1W01204', '']) {
     assert.equal(parseInternalOrderNo(t), null, t);
   }
@@ -331,4 +338,24 @@ test('Abgleich: weniger als der Rückstand ohne Bestätigung durch den Liefersch
   // Rest einer früheren Teillieferung: offen 5, geliefert 5
   const rest = [{ ...items[0], qty_delivered: 5 }];
   assert.equal(matchRows([{ part: '595-SN74HC595N', qty: 5, box: {} }], rest).perItem.a.status, 'sure');
+});
+
+test('Verwechslungen Buchstabe/Ziffer zählen beim Vergleich von Bestellnummern nur halb', () => {
+  assert.equal(levenshtein('LD1117S33TR', 'LD1117533TR'), 0.5);
+  assert.equal(levenshtein('ABC', 'ABX'), 1);
+  assert.ok(similarity('511-LD1117533TR', '511-LD1117S33TR') > similarity('511-LD1117X33TR', '511-LD1117S33TR'));
+  // ähnliche Nummern bleiben unterscheidbar: echte Abweichung kostet voll
+  assert.ok(similarity('XIAO ESP32C6', 'XIAO ESP32C3') < 0.95);
+});
+
+test('bekannte interne Nummern offener Bestellungen auch stark verlesen finden', () => {
+  const known = ['2026IW09876', '2026IW01047', '2026IW01048', ''];
+  const page = (...texts) => ({ words: texts.map((t, i) => word(t, 0.1 + i * 0.12, 0.2)) });
+  assert.deepEqual(findKnownInternalOrderNumbers([page('Bestellnummer', '2026IW0S876')], known), ['2026IW09876'], 'S statt 9: eine Abweichung');
+  assert.deepEqual(findKnownInternalOrderNumbers([page('2026IW', '09B76')], known), ['2026IW09876'], 'getrennt gelesen');
+  assert.deepEqual(findKnownInternalOrderNumbers([page('2026|VV09876')], known), ['2026IW09876']);
+  assert.deepEqual(findKnownInternalOrderNumbers([page('2026IW0104X')], known), [], 'passt zu zwei Bestellungen → keine Zuordnung');
+  assert.deepEqual(findKnownInternalOrderNumbers([page('20280W0%75')], known), [], 'zu stark verlesen');
+  assert.deepEqual(findKnownInternalOrderNumbers([page('2026IW05278')], known), [], 'andere Nummer');
+  assert.deepEqual(findKnownInternalOrderNumbers([page('2026IW0S876')], []), []);
 });

@@ -6,13 +6,26 @@ export function normalizePart(value) {
   return String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+/**
+ * Typische OCR-Verwechslungen zwischen Buchstaben und Ziffern (nach normalizePart, also Großbuchstaben).
+ * In Feldern, die nur Ziffern enthalten (Mengen, Ziffernteile der internen Bestellnummer), wird fest
+ * umgewandelt; bei Bestellnummern, die Buchstaben und Ziffern mischen, zählt die Verwechslung im Vergleich
+ * nur halb (CONFUSION_COST).
+ */
+const CONFUSABLE = ['O0', 'D0', 'Q0', 'I1', 'L1', 'S5', 'B8', 'Z2', 'G6'];
+const CONFUSION_COST = 0.5;
+const confusable = (x, y) => CONFUSABLE.includes(x + y) || CONFUSABLE.includes(y + x);
+
+/** Editierdistanz; Vertauschungen typischer OCR-Verwechslungen (O/0, I/1, S/5 …) kosten nur CONFUSION_COST. */
 export function levenshtein(a, b) {
   if (a === b) return 0;
   let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i = 1; i <= a.length; i++) {
     const cur = [i];
     for (let j = 1; j <= b.length; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      const x = a[i - 1], y = b[j - 1];
+      const sub = x === y ? 0 : confusable(x, y) ? CONFUSION_COST : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + sub);
     }
     prev = cur;
   }
@@ -27,15 +40,20 @@ export function similarity(a, b) {
   return 1 - levenshtein(x, y) / Math.max(x.length, y.length);
 }
 
+/** Buchstabe → Ziffer für Felder, die nur Ziffern enthalten können. */
+const DIGIT_FIX = { O: '0', o: '0', D: '0', Q: '0', I: '1', l: '1', i: '1', '|': '1', '!': '1', S: '5', s: '5', B: '8', Z: '2', z: '2', G: '6' };
+const fixDigits = (s) => [...s].map((c) => DIGIT_FIX[c] ?? c).join('');
+
 /**
- * Mengen-Text → Zahl. Typische OCR-Verwechslungen (O→0, I/l/|→1) werden nur korrigiert,
- * wenn der Text ansonsten aus Ziffern besteht (sonst würde z. B. „Volksbank“ zu 1).
+ * Mengen-Text → Zahl. Typische OCR-Verwechslungen (O→0, I/l/|→1, S→5, B→8, Z→2, G→6) werden nur
+ * korrigiert, wenn der Text mindestens eine echte Ziffer hat und sonst nur aus solchen Zeichen besteht
+ * (sonst würde z. B. „Volksbank“ zu 1 oder die Einheit „ST“ zu einer Menge).
  * allowZero: 0 ist eine gültige Angabe (z. B. ausstehende Menge); Liefermengen sind mindestens 1.
  */
 export function parseQty(text, allowZero = false) {
   const raw = String(text).trim().replace(/[.,]$/, '');
-  if (!/^[0-9OoIl|]+$/.test(raw) || !/[0-9]/.test(raw)) return null;
-  const cleaned = raw.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1');
+  if (!/^[0-9OoIl|SsBZzG]+$/.test(raw) || !/[0-9]/.test(raw)) return null;
+  const cleaned = fixDigits(raw);
   const n = Number(cleaned);
   return cleaned && Number.isInteger(n) && (n > 0 || (allowZero && n === 0)) ? n : null;
 }
@@ -427,22 +445,20 @@ export function matchRows(rows, items) {
 // Interne Bestellnummer der Hochschule (JJJJIW#####) – steht bei allen Lieferanten auf dem Lieferschein
 // ---------------------------------------------------------------------------
 
-/** OCR-Verwechslungen in Ziffernfeldern. */
-const DIGIT_FIX = { O: '0', o: '0', D: '0', Q: '0', I: '1', l: '1', i: '1', '|': '1', '!': '1' };
 /**
  * 4 Ziffern, „I“ (oft als 1/l/|// gelesen, bei kleiner Schrift auch verdoppelt wie „I1“), „W“ (auch „VV“),
- * 5 Ziffern – Satzzeichen am Rand werden ignoriert.
+ * 5 Ziffern – in den Ziffernteilen auch Buchstaben-Verwechslungen (DIGIT_FIX); Satzzeichen am Rand werden ignoriert.
  */
-const INTERNAL_NO_FUZZY = /^([0-9OoDQIli|!]{4})[I1li|!/]{1,2}(W|VV)([0-9OoDQIli|!]{5})$/;
+const D = '[0-9OoDQIli|!SsBZzG]';
+const INTERNAL_NO_FUZZY = new RegExp(`^(${D}{4})[I1li|!/]{1,2}(W|VV)(${D}{5})$`);
 
 /** Wort → normierte interne Bestellnummer oder null. */
 export function parseInternalOrderNo(text) {
   const t = String(text).replace(/^[^0-9A-Za-z|!]+|[^0-9A-Za-z|!]+$/g, '');
   const m = INTERNAL_NO_FUZZY.exec(t);
   if (!m) return null;
-  const fix = (s) => [...s].map((c) => DIGIT_FIX[c] ?? c).join('');
-  const year = fix(m[1]);
-  const num = fix(m[3]);
+  const year = fixDigits(m[1]);
+  const num = fixDigits(m[3]);
   if (!/^\d{4}$/.test(year) || !/^\d{5}$/.test(num)) return null;
   // Ganz ohne echte Ziffern (z. B. „IIIIIWlllll“) ist es keine Nummer.
   if ((m[1] + m[3]).replace(/[^0-9]/g, '').length < 5) return null;
@@ -467,6 +483,34 @@ export function findInternalOrderNumbers(pages) {
     }
   }
   return found;
+}
+
+/**
+ * Bekannte interne Bestellnummern (z. B. der offenen Bestellungen) auf den Seiten suchen – auch wenn die OCR
+ * sie so verlesen hat, dass parseInternalOrderNo sie nicht mehr erkennt („2026IW0S876“, „2026IWO0SE76“).
+ * Ein Wort (oder zwei aufeinanderfolgende) gilt als Treffer, wenn es nach Abzug typischer Verwechslungen
+ * höchstens KNOWN_NO_MAX_DIST von genau einer bekannten Nummer abweicht.
+ * → gefundene Nummern (Schreibweise wie in `known`), ohne Dubletten
+ */
+const KNOWN_NO_MAX_DIST = 1;
+export function findKnownInternalOrderNumbers(pages, known) {
+  const targets = [...new Set(known.filter(Boolean))].map((no) => ({ no, norm: normalizePart(no) }));
+  if (!targets.length) return [];
+  const found = new Set();
+  for (const page of pages) {
+    const words = page?.words ?? [];
+    for (let i = 0; i < words.length; i++) {
+      const candidates = [words[i].text];
+      if (i + 1 < words.length) candidates.push(words[i].text + words[i + 1].text);
+      for (const c of candidates) {
+        const t = normalizePart(c).replace(/VV/g, 'W');
+        if (t.length < 9 || t.length > 13) continue;
+        const near = targets.filter((x) => levenshtein(t, x.norm) <= KNOWN_NO_MAX_DIST);
+        if (near.length === 1) found.add(near[0].no);
+      }
+    }
+  }
+  return [...found];
 }
 
 /** Kandidaten für die Auftragsnummer: längere Wörter mit Ziffern im oberen Teil der ersten Seite. */
