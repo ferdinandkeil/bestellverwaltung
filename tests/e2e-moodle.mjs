@@ -38,8 +38,10 @@ let failed = false;
 
 try {
   await loginViaUi(b, PB_URL, login.email);
-  await b.waitFor(`[...document.querySelectorAll('#view button')].some((e) => e.innerText.includes('Moodle-Import'))`, 'Import-Button');
-  await b.clickText('#view button', 'Moodle-Import');
+  // Moodle-Import liegt unter den Warenkörben (Warenkorb-Symbol)
+  await b.evaluate(`document.querySelector('[data-cart-button]').click()`);
+  await b.waitFor(`[...document.querySelectorAll('[data-cart-panel] button, #view button')].some((e) => e.offsetParent && e.innerText.includes('Moodle-Import'))`, 'Import-Button');
+  await b.evaluate(`[...document.querySelectorAll('[data-cart-panel] button, #view button')].find((e) => e.offsetParent && e.innerText.includes('Moodle-Import')).click()`);
   await b.waitFor(`${imp}.isOpen && window.Papa`, 'Import geöffnet, Papa Parse geladen');
   await b.screenshot('moodle-01-datei');
 

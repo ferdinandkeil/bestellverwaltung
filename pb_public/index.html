@@ -22,6 +22,8 @@
           <a href="#/favorites" class="rounded-lg px-2.5 py-1.5"
              :class="['favorites','favorite'].includes($store.route.name) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'">Favoriten</a>
         </nav>
+        <!-- Warenkorb-Symbol mit Ausklappfeld (views/cart-menu.js, wird beim Start eingesetzt) -->
+        <div id="cart-menu" class="mr-1"></div>
         <span class="hidden text-xs text-slate-500 md:inline" x-text="$store.auth.user?.name || $store.auth.user?.email"></span>
         <button type="button" class="btn btn-ghost btn-sm" @click="$store.auth.logout()">Logout</button>
       </div>
@@ -29,6 +31,9 @@
 
     <!-- Aktuelle Ansicht (wird vom Router ein-/ausgehängt) -->
     <main id="view" class="mx-auto max-w-6xl px-4 py-4 pb-24"></main>
+
+    <!-- Formular „Position erfassen“ (views/cart-menu.js, Ereignis open-item-form) -->
+    <div id="item-form-modal"></div>
 
     <!-- Tooltip (core/ui.js: x-tip) – Sprechblase mit Pfeil zum Element -->
     <div x-data x-show="$store.tooltip.text" x-cloak role="tooltip" data-tooltip
@@ -99,6 +104,7 @@
     import { registerItemForm } from './views/item-form.js';
     import { registerUnmatchedReceipts } from './views/unmatched-receipts.js';
     import { registerOrderSteps } from './views/order-steps.js';
+    import cartsView, { registerCartMenu, cartMenuTemplate, itemFormModalTemplate } from './views/cart-menu.js';
 
     // Erweiterungsmodule (registrieren sich selbst über core/plugin-registry.js):
     const MODULES = [
@@ -113,6 +119,7 @@
       { name: 'login', pattern: /^\/login$/, view: loginView, public: true },
       { name: 'dashboard', pattern: /^\/?$/, view: dashboardView },
       { name: 'order', pattern: /^\/orders\/([a-z0-9]{15})$/, view: orderDetailView, params: ['id'] },
+      { name: 'carts', pattern: /^\/carts$/, view: cartsView },
       { name: 'groups', pattern: /^\/groups$/, view: groupsView },
       { name: 'favorites', pattern: /^\/favorites$/, view: favoritesView },
       { name: 'favorite', pattern: /^\/favorites\/([a-z0-9]{15})$/, view: favoriteListView, params: ['id'] },
@@ -135,6 +142,9 @@
     registerItemForm(Alpine);
     registerUnmatchedReceipts(Alpine);
     registerOrderSteps(Alpine);
+    registerCartMenu();
+    document.getElementById('cart-menu').innerHTML = cartMenuTemplate;
+    document.getElementById('item-form-modal').innerHTML = itemFormModalTemplate;
 
     const main = document.getElementById('view');
     let mounted = null;
