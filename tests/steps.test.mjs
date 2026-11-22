@@ -147,6 +147,10 @@ test('Datum: gewählter Tag (12:00 UTC), Zukunft und Unsinn abgelehnt, nachträg
   await expectHttpError(setStep(u.token, r.order.id, 'form_signed', { date: '21.11.2026' }), 400);
   await setStep(u.token, r.order.id, 'form_signed', { date: today() });
 
+  // null = Datum unbekannt (z. B. „Rückgängig“ nach Entfernen eines übernommenen Schritts)
+  await setStep(u.token, r.order.id, 'form_submitted', { date: null });
+  assert.equal((await stepsOf(r.order.id)).form_submitted.done_at, '');
+
   const other = await createUser('Kollegin');
   await setStep(other.token, r.order.id, 'form_written', { date: daysAgo(5) });
   const s = (await stepsOf(r.order.id)).form_written;
@@ -170,11 +174,12 @@ test('Rechnung erst ab „bestellt“; abgeschlossen = geliefert + Rechnung in V
   o = await getRecord('orders', r.order.id);
   assert.equal(o.status, 'abgeschlossen');
   assert.equal(o.delivered_at, d.delivery.created, 'geliefert am = letzte Lieferbuchung');
+  assert.ok(Date.now() - Date.parse(o.closed_at.replace(' ', 'T')) < 60000, 'abgeschlossen am = jetzt');
 
   // ab abgeschlossen keine Lieferbuchung; Rechnungsschritt zurück → wieder geliefert
   await expectHttpError(bookDelivery(u.token, r.order.id, [{ item: r.item.id, qty: -1 }]), 400);
   o = await setStep(u.token, r.order.id, 'invoice_submitted', { done: false });
-  assert.equal(o.status, 'geliefert');
+  assert.deepEqual([o.status, o.closed_at], ['geliefert', ''], 'abgeschlossen am wird geleert');
   await bookDelivery(u.token, r.order.id, [{ item: r.item.id, qty: -1 }]);
   o = await getRecord('orders', r.order.id);
   assert.deepEqual([o.status, o.delivered_at], ['teilgeliefert', ''], 'geliefert am wird geleert');

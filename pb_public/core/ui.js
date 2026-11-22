@@ -1,17 +1,40 @@
-// Gemeinsame UI-Helfer: Toasts, Bestätigungen, Formatierung.
+// Gemeinsame UI-Helfer: Toasts (mit Aktionen wie „Rückgängig“), verzögerte Aktionen, Bestätigungen, Formatierung.
+// Grundsatz „Handeln statt fragen“ (ARCHITECTURE Kap. 7): sofort ausführen, im Toast „Rückgängig“ anbieten.
 import Alpine from '../vendor/alpinejs@3.17.5/dist/module.esm.js';
 
+// Symbole (Heroicons-Stil, 24×24, Strich) für Toast-Typen und -Aktionen. Feste Zeichenketten aus dem Code (x-html).
+const svg = (d) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-full" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  success: svg('<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>'),
+  info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+  error: svg('<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4M12 17h.01"/>'),
+  undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
+  calendar: svg('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+  close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
+};
+
 export function initUiStore() {
+  registerTooltip();
   Alpine.store('toasts', {
     items: [],
-    push(message, type = 'info', timeoutMs = 4000) {
+    /** actions: [{ label, icon, run }] – Knöpfe im Toast (icon: Schlüssel aus ICONS, z. B. 'undo', 'calendar');
+     *  ein Klick führt run() aus und schließt den Toast. */
+    push(message, type = 'info', timeoutMs = 4000, actions = []) {
       const id = Math.random().toString(36).slice(2);
       // Höchstens drei Meldungen gleichzeitig, damit der Inhalt sichtbar bleibt.
-      this.items = [...this.items.slice(-2), { id, message, type }];
+      this.items = [...this.items.slice(-2), { id, message, type, actions, timeoutMs }];
       if (timeoutMs) setTimeout(() => this.dismiss(id), timeoutMs);
+      return id;
     },
     dismiss(id) {
       this.items = this.items.filter((t) => t.id !== id);
+    },
+    icon(name) {
+      return ICONS[name] || '';
+    },
+    act(t, action) {
+      this.dismiss(t.id);
+      action.run();
     },
   });
   Alpine.store('confirm', {
@@ -29,11 +52,118 @@ export function initUiStore() {
   });
 }
 
+/** Tooltip: Verzögerung bis zum ersten Tooltip; wer innerhalb von TOOLTIP_WARM_MS zum nächsten wechselt, sieht ihn sofort. */
+const TOOLTIP_DELAY_MS = 500;
+const TOOLTIP_WARM_MS = 1000;
+
+/**
+ * Tooltip `x-tip="ausdruck"`: dunkle Sprechblase mit Pfeil direkt über dem Element (darunter, wenn oben kein Platz
+ * ist), bei Hover oder Tastaturfokus. Der erste erscheint nach TOOLTIP_DELAY_MS; solange der Nutzer innerhalb von
+ * TOOLTIP_WARM_MS nach dem Ausblenden das nächste Element ansteuert, erscheint dessen Tooltip sofort.
+ * Leerer Text = kein Tooltip. Eine einzige Blase für die ganze Seite (`[data-tooltip]` in index.html), fest
+ * positioniert – so schneiden scrollende Tabellen sie nicht ab.
+ */
+function registerTooltip() {
+  Alpine.store('tooltip', { text: '', x: 0, y: 0, below: false });
+  const tip = Alpine.store('tooltip');
+  // Bewusst nicht reaktiv: sonst hinge jeder x-tip-Effekt vom Hover-Zustand ab.
+  let anchor = null;      // Element, dessen Tooltip gerade sichtbar ist
+  let hiddenAt = 0;       // Zeitpunkt, zu dem der letzte Tooltip ausgeblendet wurde
+  let timer = null;       // wartender erster Tooltip
+  let pending = null;     // Element, für das der Timer läuft
+  const texts = new WeakMap(); // aktueller Text je Element
+
+  const place = (el) => {
+    const text = texts.get(el) || '';
+    if (!text) { hide(el); return; }
+    const r = el.getBoundingClientRect();
+    anchor = el;
+    tip.text = text;
+    tip.x = r.left + r.width / 2;
+    tip.below = r.top < 48;
+    tip.y = tip.below ? r.bottom + 8 : r.top - 8;
+  };
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+    pending = null;
+  };
+  const hide = (el) => {
+    if (el && pending === el) cancel();
+    if (anchor && (!el || anchor === el)) {
+      anchor = null;
+      tip.text = '';
+      hiddenAt = Date.now();
+    }
+  };
+  const enter = (el) => {
+    cancel();
+    if (!texts.get(el)) return;
+    if (anchor || Date.now() - hiddenAt < TOOLTIP_WARM_MS) { place(el); return; }
+    pending = el;
+    timer = setTimeout(() => { pending = null; timer = null; place(el); }, TOOLTIP_DELAY_MS);
+  };
+
+  window.addEventListener('scroll', () => { cancel(); hide(); }, { capture: true, passive: true });
+  Alpine.directive('tip', (el, { expression }, { evaluateLater, effect, cleanup }) => {
+    const get = evaluateLater(expression);
+    effect(() => get((v) => {
+      texts.set(el, v || '');
+      if (anchor === el) place(el); // Text nach dem Abhaken aktualisieren
+    }));
+    const onEnter = () => enter(el);
+    const onLeave = () => hide(el);
+    el.addEventListener('mouseenter', onEnter);
+    el.addEventListener('focus', onEnter);
+    el.addEventListener('mouseleave', onLeave);
+    el.addEventListener('blur', onLeave);
+    cleanup(() => {
+      el.removeEventListener('mouseenter', onEnter);
+      el.removeEventListener('focus', onEnter);
+      el.removeEventListener('mouseleave', onLeave);
+      el.removeEventListener('blur', onLeave);
+      hide(el);
+    });
+  });
+}
+
+/** Standzeit eines Toasts mit Aktionen (Zeit für „Rückgängig“) – auch die Verzögerung von deferredAction(). */
+export const ACTION_TOAST_MS = 8000;
+
 export const toast = {
   info: (msg) => Alpine.store('toasts').push(msg, 'info'),
   success: (msg) => Alpine.store('toasts').push(msg, 'success'),
   error: (msg) => Alpine.store('toasts').push(msg, 'error', 8000),
+  /** Erfolgsmeldung mit Knöpfen, z. B. [{ label: 'Rückgängig', icon: 'undo', run }]. */
+  done: (msg, actions) => Alpine.store('toasts').push(msg, 'success', ACTION_TOAST_MS, actions),
 };
+
+/**
+ * Aktion verzögert ausführen (z. B. Löschen): sofort Toast mit „Rückgängig“, ausgeführt wird erst nach
+ * ACTION_TOAST_MS. Der Aufrufer blendet das Element vorher aus und stellt es in undo() wieder her.
+ * Wird der Browser-Tab vorher geschlossen, unterbleibt die Aktion (sichere Seite).
+ * @returns {Promise<boolean>} true = ausgeführt, false = rückgängig gemacht; Fehler von run() werden weitergereicht
+ */
+export function deferredAction({ message, run, undo }) {
+  return new Promise((resolve, reject) => {
+    let cancelled = false;
+    Alpine.store('toasts').push(message, 'info', ACTION_TOAST_MS, [{
+      label: 'Rückgängig',
+      icon: 'undo',
+      run: () => { cancelled = true; undo?.(); resolve(false); },
+    }]);
+    setTimeout(async () => {
+      if (cancelled) return;
+      try {
+        await run();
+        resolve(true);
+      } catch (err) {
+        undo?.();
+        reject(err);
+      }
+    }, ACTION_TOAST_MS);
+  });
+}
 
 /**
  * Sicherheitsabfrage im eigenen Dialog (`#confirm-dialog` in index.html, natives <dialog> mit showModal:
@@ -62,11 +192,14 @@ export async function confirmAction(message, { confirmLabel = 'Bestätigen', can
 const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 const dateTime = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' });
+const shortDate = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
 export const fmt = {
   eur: (n) => eur.format(n || 0),
   dateTime: (s) => (s ? dateTime.format(new Date(s.replace(' ', 'T'))) : ''),
   date: (s) => (s ? date.format(new Date(s.replace(' ', 'T'))) : ''),
+  /** 22.11.26 – für schmale Spalten */
+  shortDate: (s) => (s ? shortDate.format(new Date(s.replace(' ', 'T'))) : ''),
 };
 
 /** Leere Zeichenkette → null, sonst Zahl (für optionale Zahlenfelder). */

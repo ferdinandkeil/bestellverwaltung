@@ -27,13 +27,14 @@ export function defaultWithoutInternalOrderNo(order) {
 
 // Phasen einer Bestellung (`orders.status`, serverseitig aus den Verwaltungsschritten abgeleitet, ARCHITECTURE Kap. 4.3).
 // Klassen stehen hier vollständig ausgeschrieben, damit der Tailwind-Build sie findet.
+/** Phasen; short = Kurzform für schmale Spalten (Startseite auf dem Smartphone). */
 export const STATUSES = [
   { value: 'angefragt', label: 'Warenkorb', badge: 'bg-sky-50 text-sky-800 ring-sky-300' },
-  { value: 'freigabe', label: 'In Freigabe', badge: 'bg-violet-50 text-violet-800 ring-violet-300' },
+  { value: 'freigabe', label: 'In Freigabe', short: 'Freigabe', badge: 'bg-violet-50 text-violet-800 ring-violet-300' },
   { value: 'bestellt', label: 'Bestellt', badge: 'bg-blue-50 text-blue-700 ring-blue-300' },
-  { value: 'teilgeliefert', label: 'Teilgeliefert', badge: 'bg-amber-50 text-amber-800 ring-amber-300' },
+  { value: 'teilgeliefert', label: 'Teilgeliefert', short: 'Teilgel.', badge: 'bg-amber-50 text-amber-800 ring-amber-300' },
   { value: 'geliefert', label: 'Geliefert', badge: 'bg-emerald-50 text-emerald-700 ring-emerald-300' },
-  { value: 'abgeschlossen', label: 'Abgeschlossen', badge: 'bg-zinc-200 text-zinc-700 ring-zinc-400' },
+  { value: 'abgeschlossen', label: 'Abgeschlossen', short: 'Abgeschl.', badge: 'bg-zinc-200 text-zinc-700 ring-zinc-400' },
 ];
 
 /** Phasen, in denen Positionen bearbeitet werden dürfen (danach gesperrt). */
@@ -49,21 +50,27 @@ export const DELIVERY_STATUSES = ['bestellt', 'teilgeliefert', 'geliefert'];
 export const STEP_TRACKS = [
   {
     key: 'order', label: 'Bestellung', steps: [
-      { value: 'form_written', label: 'Formular geschrieben', needsNumber: true },
-      { value: 'form_signed', label: 'Formular unterschrieben', needsNumber: true },
-      { value: 'form_submitted', label: 'Formular in Verwaltung', needsNumber: true },
-      { value: 'approval', label: 'Freigabe erteilt', needsNumber: true, hint: 'meist nicht nötig' },
-      { value: 'ordered', label: 'Bestellt' },
+      { value: 'form_written', label: 'Formular geschrieben', short: 'geschr.', needsNumber: true },
+      { value: 'form_signed', label: 'Formular unterschrieben', short: 'unterschr.', needsNumber: true },
+      { value: 'form_submitted', label: 'Formular in Verwaltung', short: 'in Verw.', needsNumber: true },
+      { value: 'approval', label: 'Freigabe erteilt', short: 'Freigabe', needsNumber: true, hint: 'meist nicht nötig' },
+      { value: 'ordered', label: 'Bestellt', short: 'bestellt' },
     ],
   },
   {
     key: 'invoice', label: 'Rechnung', steps: [
-      { value: 'invoice_received', label: 'Rechnung da', afterOrdered: true },
-      { value: 'invoice_signed', label: 'Rechnung unterschrieben', afterOrdered: true },
-      { value: 'invoice_submitted', label: 'Rechnung in Verwaltung', afterOrdered: true },
-      { value: 'closed', label: 'Abgeschlossen', afterOrdered: true, hint: 'automatisch mit „Rechnung in Verwaltung“; von Hand für Bestellungen ohne Rechnung (Muster)' },
+      { value: 'invoice_received', label: 'Rechnung da', short: 'da', afterOrdered: true },
+      { value: 'invoice_signed', label: 'Rechnung unterschrieben', short: 'unterschr.', afterOrdered: true },
+      { value: 'invoice_submitted', label: 'Rechnung in Verwaltung', short: 'in Verw.', afterOrdered: true },
+      { value: 'closed', label: 'Abgeschlossen', short: 'abgeschl.', afterOrdered: true, hint: 'automatisch mit „Rechnung in Verwaltung“; von Hand für Bestellungen ohne Rechnung (Muster)' },
     ],
   },
+];
+
+/** Spur „Ware“ (nur Anzeige, aus den Lieferbuchungen). */
+export const WARE_STEPS = [
+  { value: 'partial', label: 'Teilgeliefert', short: 'teilgel.' },
+  { value: 'delivered', label: 'Geliefert', short: 'geliefert' },
 ];
 
 export function stepMeta(value) {

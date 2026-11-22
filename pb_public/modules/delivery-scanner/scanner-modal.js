@@ -1375,5 +1375,6 @@ registerPlugin({
   slot: 'dashboard-actions',
   label: 'Lieferschein scannen (Beta)',
   icon: 'scan',
+  prominent: true, // Smartphone: Hauptaufgabe am Auspacktisch
   onClick: () => openScanner({}),
 });

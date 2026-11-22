@@ -10,20 +10,20 @@ import {
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast, confirmAction, numberOrNull } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
-import { orderStepsSection, orderStepDialog } from './order-steps.js';
+import { orderStepsSection } from './order-steps.js';
 
 /** Schnellbuttons werden so lange gesammelt, bevor eine gemeinsame Lieferbuchung entsteht. */
 const QUICK_BOOK_DELAY_MS = 1500;
 
 const template = /* html */ `
-<div x-data="orderDetailView">
+<div x-data="orderDetailView" @order-steps-changed.window="$event.detail.orderId === orderId && reload()">
   <a href="#/" class="mb-3 inline-block text-sm text-blue-700 hover:underline">← Alle Bestellungen</a>
 
   <p x-show="error" x-text="error" class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700"></p>
   <p x-show="!order && !error" class="py-8 text-center text-sm text-slate-500">Lade …</p>
 
   <template x-if="order">
-    <div class="space-y-4" x-data="orderSteps" @steps-changed="reload()">
+    <div class="space-y-4" x-data="orderSteps">
       <!-- Kopf -->
       <section class="card p-4">
         <div class="flex flex-wrap items-start gap-2">
@@ -66,9 +66,9 @@ const template = /* html */ `
 
         <!-- Aktionen: nächster Verwaltungsschritt, Module -->
         <div class="mt-4 flex flex-wrap gap-2">
-          <template x-if="nextStep(order, steps)">
-            <button type="button" class="btn btn-primary" data-next-step @click="openStep(nextStep(order, steps), order, steps)"
-                    x-text="'✓ ' + stepMeta(nextStep(order, steps)).label"></button>
+          <template x-if="nextStepOf(order, steps)">
+            <button type="button" class="btn btn-primary" data-next-step @click="toggleStep(order, steps, nextStepOf(order, steps))"
+                    x-text="'✓ ' + stepMeta(nextStepOf(order, steps)).label"></button>
           </template>
           <template x-for="p in plugins()" :key="p.id">
             <button type="button" class="btn btn-secondary" @click="runPlugin(p)" x-text="p.label"></button>
@@ -271,8 +271,6 @@ const template = /* html */ `
         </ul>
         <p x-show="!(order.attachments || []).length" class="text-sm text-slate-500">Noch keine Anhänge.</p>
       </section>
-
-      ${orderStepDialog}
 
       <!-- Modal: Position hinzufügen -->
       <div x-show="showItemForm" x-transition.opacity class="modal-backdrop" @click.self="showItemForm = false"

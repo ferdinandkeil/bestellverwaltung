@@ -1,7 +1,7 @@
 // Dünner Client für die serverseitige Geschäftslogik (/api/lab/*, siehe pb_hooks/)
 // und Lese-/Schreibzugriffe auf die freigegebenen Felder.
 import { pb } from './pb.js';
-import { VAT_RATE } from './config.js';
+import { VAT_RATE, SUPPLIERS } from './config.js';
 
 // ---------------------------------------------------------------------------
 // Fehlertexte
@@ -42,12 +42,12 @@ export function addItemToSupplierCart(data) {
 
 /**
  * Verwaltungsschritt abhaken, Datum ändern (done: true bei erledigtem Schritt) oder zurücknehmen (done: false).
- * options: { done = true, date?: 'JJJJ-MM-TT' (leer = jetzt), internal_order_no? | without_internal_order_no: true, supplier_order_no? }
+ * options: { done = true, date?: 'JJJJ-MM-TT' (leer = jetzt, null = unbekannt), internal_order_no? | without_internal_order_no: true, supplier_order_no? }
  * → Bestellung mit neu abgeleiteter Phase
  */
 export function setOrderStep(orderId, step, { done = true, date = '', internal_order_no = '', without_internal_order_no = false, supplier_order_no = '' } = {}) {
   const body = { step, done };
-  if (date) body.date = date;
+  if (date || date === null) body.date = date; // null = Datum unbekannt
   if (internal_order_no) body.internal_order_no = internal_order_no;
   if (without_internal_order_no) body.without_internal_order_no = true;
   if (supplier_order_no) body.supplier_order_no = supplier_order_no;
@@ -87,17 +87,62 @@ export function bookDelivery(orderId, lines, { note = '', receipt = null, newIte
 // Bestellungen
 // ---------------------------------------------------------------------------
 
-/** Bestellungen inkl. Positionen (für Fortschritt) mit optionalen Filtern. */
-export async function listOrders({ status = '', supplier = '', group = '' } = {}) {
+/** Beginn des Zeitraums für abgeschlossene Bestellungen: '3m', '12m', 'year:JJJJ' oder 'all'. → { from, to } | null */
+export function periodRange(period, now = new Date()) {
+  if (period === '3m' || period === '12m') {
+    const from = new Date(now);
+    from.setMonth(from.getMonth() - (period === '3m' ? 3 : 12));
+    return { from, to: null };
+  }
+  const year = /^year:(\d{4})$/.exec(period || '')?.[1];
+  if (year) return { from: new Date(Number(year), 0, 1), to: new Date(Number(year) + 1, 0, 1) };
+  return null;
+}
+
+/**
+ * Bestellungen für die Startseite (ohne offene Warenkörbe) mit Schritten, Lieferungen und Positionen.
+ * Ohne Suche: Phasen (leer = alle), Zeitraum gilt nur für abgeschlossene (nach closed_at), offene immer.
+ * Mit Suche: alle Bestellungen inkl. Warenkörbe, unabhängig von Phase und Zeitraum (interne/Shop-Auftragsnummer,
+ * Lieferant, Was, Artikelnummer). Lieferant und Gruppe gelten immer.
+ */
+export async function listOverviewOrders({ phases = [], period = '3m', supplier = '', group = '', search = '' } = {}) {
   const parts = [];
   const params = {};
-  if (status) { parts.push('status = {:status}'); params.status = status; }
+  const q = search.trim();
+  if (q) {
+    params.q = q;
+    const or = ['internal_order_no ~ {:q}', 'supplier_order_no ~ {:q}', 'subject ~ {:q}', 'supplier_custom_name ~ {:q}',
+      'order_items_via_order.part_number ?~ {:q}'];
+    SUPPLIERS.filter((s) => s.value !== 'other' && s.label.toLowerCase().includes(q.toLowerCase()))
+      .forEach((s, i) => { or.push(`supplier = {:s${i}}`); params['s' + i] = s.value; });
+    parts.push('(' + or.join(' || ') + ')');
+  } else {
+    parts.push("status != 'angefragt'");
+    if (phases.length) {
+      parts.push('(' + phases.map((p, i) => `status = {:p${i}}`).join(' || ') + ')');
+      phases.forEach((p, i) => { params['p' + i] = p; });
+    }
+    const range = periodRange(period);
+    if (range) {
+      params.from = range.from;
+      let closed = 'closed_at >= {:from}';
+      if (range.to) { closed += ' && closed_at < {:to}'; params.to = range.to; }
+      parts.push(`(status != 'abgeschlossen' || (${closed}))`);
+    }
+  }
   if (supplier) { parts.push('supplier = {:supplier}'); params.supplier = supplier; }
   if (group) { parts.push('order_items_via_order.groups.id ?= {:group}'); params.group = group; }
   return pb.collection('orders').getFullList({
-    filter: parts.length ? pb.filter(parts.join(' && '), params) : '',
-    sort: '-updated',
-    expand: 'order_items_via_order,created_by',
+    filter: pb.filter(parts.join(' && '), params),
+    sort: 'created',
+    expand: 'order_steps_via_order.done_by,deliveries_via_order,order_items_via_order',
+  });
+}
+
+/** Offene Warenkörbe (Phase „angefragt“) mit Positionen, älteste zuerst. */
+export function listOpenCarts() {
+  return pb.collection('orders').getFullList({
+    filter: "status = 'angefragt'", sort: 'created', expand: 'order_items_via_order',
   });
 }
 

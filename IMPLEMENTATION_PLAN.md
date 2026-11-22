@@ -110,14 +110,22 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 4. Oberfläche: Schritte in der Bestellung (abhaken mit Datum, zurücknehmen, übersprungen grau), Shop-Export setzt „bestellt“, Phasen in Filtern und Ablage.
 5. Tests: Schritte, Phase, Rechte, Migration, Lieferschein, Browser-Durchläufe.
 
+### Startseite (Branch `ui-startseite`)
+**Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidungen in ARCHITECTURE Kap. 7 (Startseite, „Handeln statt fragen“, keine Beträge) und 4.1/4.3 (`closed_at`).
+1. Toasts mit Aktionen („Rückgängig“, „Datum ändern“), verzögertes Löschen (`deferredAction`).
+2. `orders.closed_at` (Hook), `date: null` = Datum unbekannt in der Schritt-Route; Tests.
+3. Startseite: Warenkorb-Leiste, Tabelle mit Schritt-Checkboxen (PC), kompakte aufklappbare Tabelle und „Lieferschein scannen“ (Smartphone/Tablet), Filter (Phase, Zeitraum, Lieferant, Gruppe), Suche; abgeschlossene ausgegraut.
+4. Verwaltungsschritte in der Bestellung ebenfalls ohne Rückfrage (gemeinsame Logik); Ablage „Lieferscheine ohne Bestellung“: Löschen mit „Rückgängig“; Preisfeld im Formular „Position erfassen“ entfällt.
+5. Browser-Tests angepasst.
+
 ### Folgende Branches (Reihenfolge vorläufig)
-1. `ui-startseite`: Übersicht wie die bisherige Tabelle (Zeile je Bestellung, Spuren mit Datum, Filter nach offenem Schritt); auf dem Handy Scanner im Vordergrund.
-2. `ui-bestellung`: Positionen kompakt (Tabelle am PC), Inhalte je Phase.
-3. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten, Gruppen.
+1. `ui-bestellung`: Positionen kompakt (Tabelle am PC), Inhalte je Phase, Beträge entfernen, „Handeln statt fragen“.
+2. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.
-2. `modules/word-export/docx-generator.js` (PizZip + docxtemplater aus `vendor/`) im Slot `order-detail-actions`; Zusatzfelder in `orders.custom_fields`; erzeugtes Formular hakt „Formular geschrieben“ ab (ARCHITECTURE 4.3); Platzhalter u. a. `{supplier}`, `{total_net}`, `{total_gross}`, `{shipping_cost}`, Loop `{#items}…{/items}`.
+2. Hinweis: Beträge werden in der Oberfläche nicht mehr erfasst (ARCHITECTURE 4.1) – Summen-Platzhalter entfallen bzw. bleiben leer; vor Umsetzung mit dem Nutzer klären.
+3. `modules/word-export/docx-generator.js` (PizZip + docxtemplater aus `vendor/`) im Slot `order-detail-actions`; Zusatzfelder in `orders.custom_fields`; erzeugtes Formular hakt „Formular geschrieben“ ab (ARCHITECTURE 4.3); Platzhalter u. a. `{supplier}`, `{total_net}`, `{total_gross}`, `{shipping_cost}`, Loop `{#items}…{/items}`.
 
 ## Phase 6: Prüfung der Bestellnummern (Branch `phase-6-part-number-check`)
 1. Vorab: Formatregeln der Shop-Bestellnummern zusammentragen und mit dem Nutzer abstimmen (z. B. Mouser `NNN-…`); klären, ob Online-Abfragen bei den Shops gewünscht/zulässig sind.

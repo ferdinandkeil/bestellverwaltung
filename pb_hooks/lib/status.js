@@ -78,7 +78,7 @@ function lastDeliveryAt(app, orderId) {
 }
 
 /**
- * Phase und `delivered_at` einer Bestellung neu berechnen und speichern (nur bei Änderung).
+ * Phase, `delivered_at` und `closed_at` einer Bestellung neu berechnen und speichern (nur bei Änderung).
  * Gibt die (ggf. neue) Phase zurück.
  */
 function recalculateOrderStatus(app, orderId) {
@@ -101,6 +101,15 @@ function recalculateOrderStatus(app, orderId) {
     order.set("delivered_at", "");
     changed = true;
   }
+  // Abschlusszeitpunkt (Zeitraum-Filter der Startseite): Zeitpunkt des Übergangs, geleert beim Verlassen
+  const closedAt = order.getDateTime("closed_at");
+  if (next === "abgeschlossen" && closedAt.isZero()) {
+    order.set("closed_at", new DateTime());
+    changed = true;
+  } else if (next !== "abgeschlossen" && !closedAt.isZero()) {
+    order.set("closed_at", "");
+    changed = true;
+  }
   if (changed) app.save(order);
   return next;
 }
@@ -119,11 +128,13 @@ function otherOpenCartExists(app, order) {
 }
 
 /**
- * Datum eines Schritts: leer → jetzt; „JJJJ-MM-TT“ → dieser Tag 12:00 UTC (bleibt in jeder
- * europäischen Zeitzone derselbe Kalendertag). Ein Tag in der Zukunft wird abgelehnt.
+ * Datum eines Schritts: fehlt oder leer → jetzt; null → „Datum unbekannt“ (leeres Feld);
+ * „JJJJ-MM-TT“ → dieser Tag 12:00 UTC (bleibt in jeder europäischen Zeitzone derselbe Kalendertag).
+ * Ein Tag in der Zukunft wird abgelehnt.
  */
 function parseStepDate(value) {
-  if (value === undefined || value === null || value === "") return new DateTime();
+  if (value === null) return "";
+  if (value === undefined || value === "") return new DateTime();
   const s = String(value).trim();
   const ms = /^\d{4}-\d{2}-\d{2}$/.test(s) ? Date.parse(s + "T00:00:00Z") : NaN;
   if (isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== s) {
@@ -161,7 +172,7 @@ function applyInternalNo(order, input, requireNumber) {
 
 /**
  * Schritt abhaken, Datum ändern oder zurücknehmen. Muss innerhalb einer Transaktion aufgerufen werden.
- * input: { step, done (Standard true), date?: "JJJJ-MM-TT", internal_order_no?, without_internal_order_no?, supplier_order_no? }
+ * input: { step, done (Standard true), date?: "JJJJ-MM-TT" | null (unbekannt), internal_order_no?, without_internal_order_no?, supplier_order_no? }
  * → Bestellung (mit neu berechneter Phase)
  */
 function setStep(app, orderId, input, userId) {

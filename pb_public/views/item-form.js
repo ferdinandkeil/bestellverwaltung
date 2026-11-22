@@ -3,7 +3,7 @@
 // Nach erfolgreicher Buchung wird das Event `item-added` mit { order, item, merged } ausgelöst.
 import { SUPPLIERS, groupsByCourse } from '../core/config.js';
 import { addItemToSupplierCart, listGroups, errorMessage } from '../core/api.js';
-import { toast, numberOrNull } from '../core/ui.js';
+import { toast } from '../core/ui.js';
 
 export const itemFormFields = /* html */ `
 <form @submit.prevent="submit" class="space-y-3">
@@ -35,15 +35,9 @@ export const itemFormFields = /* html */ `
     <input class="input" x-model="form.name" maxlength="300" placeholder="z. B. Schieberegister 8 Bit, DIP-16">
   </div>
 
-  <div class="grid grid-cols-2 gap-3">
-    <div>
-      <label class="label">Menge</label>
-      <input class="input" type="number" min="1" step="1" inputmode="numeric" x-model.number="form.qty" required>
-    </div>
-    <div>
-      <label class="label">Stückpreis netto (optional)</label>
-      <input class="input" type="text" inputmode="decimal" x-model="form.price_unit" placeholder="0,00">
-    </div>
+  <div class="w-1/2 pr-1.5">
+    <label class="label">Menge</label>
+    <input class="input" type="number" min="1" step="1" inputmode="numeric" x-model.number="form.qty" required>
   </div>
 
   <div>
@@ -88,7 +82,6 @@ export function registerItemForm(Alpine) {
       part_number: '',
       name: '',
       qty: 1,
-      price_unit: '',
       group: '',
       url: '',
     },
@@ -103,16 +96,10 @@ export function registerItemForm(Alpine) {
 
     async submit() {
       this.error = '';
-      const price = numberOrNull(this.form.price_unit);
-      if (this.form.price_unit !== '' && price === null) {
-        this.error = 'Der Stückpreis ist keine gültige Zahl.';
-        return;
-      }
       this.busy = true;
       try {
         const res = await addItemToSupplierCart({
-          ...this.form,
-          price_unit: price,
+          ...this.form, // ohne Preis: Beträge werden in der Oberfläche nicht erfasst (ARCHITECTURE 4.1)
           supplier_custom_name: this.form.supplier === 'other' ? this.form.supplier_custom_name : '',
         });
         toast.success(res.merged
@@ -120,7 +107,7 @@ export function registerItemForm(Alpine) {
           : 'Neue Position im Sammel-Warenkorb angelegt.');
         this.$dispatch('item-added', res);
         // Lieferant und Gruppe für die nächste Eingabe behalten.
-        Object.assign(this.form, { part_number: '', name: '', qty: 1, price_unit: '', url: '' });
+        Object.assign(this.form, { part_number: '', name: '', qty: 1, url: '' });
         this.$nextTick(() => this.$refs.partNumber?.focus());
       } catch (err) {
         this.error = errorMessage(err);
