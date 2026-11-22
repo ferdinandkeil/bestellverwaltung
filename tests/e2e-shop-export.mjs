@@ -69,10 +69,10 @@ try {
   await loginViaUi(b, PB_URL, s.login.email);
 
   await openOrder(s.farnell);
-  await b.waitFor(`document.querySelector('[data-next-step]')`, 'Farnell-Detail');
+  await b.waitFor(`document.querySelector('[data-order-steps] [data-step]')`, 'Farnell-Detail');
   if (await b.evaluate(hasExportButton)) throw new Error('Export für Farnell sichtbar (kein verifiziertes Format)');
   await openOrder(s.reichelt);
-  await b.waitFor(`${BADGE} === 'Warenkorb' && document.querySelector('[data-next-step]')`, 'Reichelt-Detail');
+  await b.waitFor(`${BADGE} === 'Warenkorb' && document.querySelector('[data-order-steps] [data-step]')`, 'Reichelt-Detail');
   if (await b.evaluate(hasExportButton)) throw new Error('Export im Warenkorb mit Formular sichtbar (erst ab „In Freigabe“)');
   await openOrder(s.tme);
   await b.waitFor(hasExportButton, 'Export-Button TME');
@@ -125,7 +125,8 @@ try {
   // ---- Würth Elektronik: Liste für die Bestell-Mail, Muster ohne interne Bestellnummer ----
   await openOrder(s.wuerth);
   await b.waitFor(hasExportButton, 'Export-Button Würth');
-  if ((await b.evaluate(`document.querySelector('[data-next-step]').innerText.trim()`)) !== '✓ Bestellt') {
+  const nextSteps = `[...document.querySelectorAll('[data-order-steps] [data-step-label]')].filter((e) => e.classList.contains('font-semibold')).map((e) => e.dataset.stepLabel).join()`;
+  if ((await b.evaluate(nextSteps)) !== 'ordered') {
     throw new Error('Würth: nächster Schritt sollte direkt „Bestellt“ sein (Muster ohne Formular)');
   }
   await b.clickText('#view button', 'Shop-Export');

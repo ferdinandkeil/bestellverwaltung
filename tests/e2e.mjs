@@ -197,7 +197,7 @@ try {
   await b.waitFor(`location.hash === '#/carts'`, 'Seite Warenkörbe');
   await b.evaluate(`[...document.querySelectorAll('#view [data-cart] a')].find((a) => a.innerText.includes('Mouser')).click()`);
   await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
-  await b.clickText('#view button[data-next-step]', '✓ Formular geschrieben');
+  await b.evaluate(`document.querySelector('#view [data-step=form_written]').click()`);
   await b.waitFor(`document.querySelector('#step-internal-no')?.offsetParent`, 'Dialog: nur die fehlende Nummer');
   await b.fill('#step-internal-no', '2026-4711');
   await b.clickText('[data-step-dialog] button', 'Abhaken');
@@ -212,12 +212,12 @@ try {
   await b.screenshot('05-bestellt');
   // Nach „bestellt“: Geliefert und Rechnung da gleichzeitig als nächste Schritte; „Geliefert“ bucht den Rest
   const NEXT = `[...document.querySelectorAll('#view [data-step-label]')].filter((e) => e.classList.contains('font-semibold')).map((e) => e.dataset.stepLabel).join()`;
-  await b.waitFor(`${NEXT} === 'delivered,invoice_received' && !document.querySelector('#view [data-next-step]')`, 'zwei nächste Schritte, keine Knöpfe nach „bestellt“');
+  await b.waitFor(`${NEXT} === 'delivered,invoice_received'`, 'zwei nächste Schritte');
   await b.evaluate(`${STEP('delivered')}.click()`);
   await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('delivered')}.dataset.state === 'done' && document.body.innerText.includes('Rest vollständig geliefert')`, 'Rest geliefert gebucht');
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
   await b.waitFor(`${BADGE} === 'Bestellt' && ${STEP('delivered')}.dataset.state === 'open' && !document.body.innerText.includes('Rest vollständig geliefert')`, 'Buchung zurückgenommen');
-  ok('Nach „bestellt“ zwei nächste Schritte (ohne Hauptknöpfe); „Geliefert“ bucht den Rest, „Rückgängig“ nimmt die Buchung zurück');
+  ok('Nach „bestellt“ zwei nächste Schritte; „Geliefert“ bucht den Rest, „Rückgängig“ nimmt die Buchung zurück');
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('04711') && !a.innerText.includes('2026IW')) && document.querySelector('[data-overview-table] th').parentElement.innerText.includes('Best.-Nr.')`, 'Kurznummer auf der Startseite (Smartphone)');
   ok('Formular geschrieben (Nummer per Dialog, normalisiert), bestellt mit übersprungenen Schritten im Toast');
