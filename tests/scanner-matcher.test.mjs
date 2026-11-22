@@ -109,7 +109,9 @@ test('interne Bestellnummer trotz OCR-Verwechslungen lesen', () => {
   assert.equal(parseInternalOrderNo('20261W01049'), '2026IW01049', 'I als 1 gelesen (TME, Reichelt)');
   assert.equal(parseInternalOrderNo('2026lW0lO47,'), '2026IW01047', 'l/O in Ziffern, Satzzeichen am Rand');
   assert.equal(parseInternalOrderNo('2026|VV01047'), '2026IW01047', 'W als VV gelesen');
-  for (const t of ['40538175', '2026IW0104', 'IIIIIWlllll', 'L26DE440078', 'B26DE363696', '']) {
+  assert.equal(parseInternalOrderNo('2026/W01202'), '2026IW01202', 'I als / gelesen (kleine Schrift)');
+  assert.equal(parseInternalOrderNo('2026I1W01204'), '2026IW01204', 'I verdoppelt gelesen');
+  for (const t of ['40538175', '2026IW0104', 'IIIIIWlllll', 'L26DE440078', 'B26DE363696', '2026/11/W01202', '2026III1W01204', '']) {
     assert.equal(parseInternalOrderNo(t), null, t);
   }
 });
@@ -314,4 +316,19 @@ test('Abgleich: Teillieferung nur sicher, wenn geliefert + ausstehend = bestellt
   const misread = run({ qty: 2, qtyOrdered: 25, qtyPending: 5 }); // „20“ als „2“ gelesen
   assert.deepEqual([misread.status, misread.reasons], ['check', ['Teillieferung – Menge bitte prüfen']]);
   assert.equal(run({ qty: 2, qtyOrdered: 25, qtyPending: null }).status, 'check');
+});
+
+test('Abgleich: weniger als der Rückstand ohne Bestätigung durch den Lieferschein → prüfen', () => {
+  const items = [{ id: 'a', part_number: '595-SN74HC595N', qty_ordered: 10, qty_delivered: 0, qty_cancelled: 0 }];
+  const run = (row) => matchRows([{ part: '595-SN74HC595N', box: {}, ...row }], items).perItem.a;
+  // „10“ als „3“ gelesen, bestellte Menge nicht lesbar (Mouser-Testbeleg 6,5 pt)
+  const misread = run({ qty: 3, qtyOrdered: null, qtyPending: 0 });
+  assert.deepEqual([misread.status, misread.reasons], ['check', ['Teillieferung – Menge bitte prüfen']]);
+  assert.equal(run({ qty: 3 }).status, 'check', 'Profil ohne Spalten bestellt/ausstehend');
+  assert.equal(run({ qty: 3, qtyOrdered: 10, qtyPending: 7 }).status, 'sure', 'vom Lieferschein bestätigt');
+  assert.equal(run({ qty: 10 }).status, 'sure', 'volle offene Menge');
+  assert.equal(run({ qty: 10, qtyOrdered: null, qtyPending: 0 }).status, 'sure');
+  // Rest einer früheren Teillieferung: offen 5, geliefert 5
+  const rest = [{ ...items[0], qty_delivered: 5 }];
+  assert.equal(matchRows([{ part: '595-SN74HC595N', qty: 5, box: {} }], rest).perItem.a.status, 'sure');
 });

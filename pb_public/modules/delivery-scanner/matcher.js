@@ -382,7 +382,7 @@ export function matchRows(rows, items) {
   };
   for (const a of assignments) {
     if (!a.itemId) continue;
-    const entry = (perItem[a.itemId] ??= { qty: 0, status: 'sure', reasons: [], rows: 0, unreadable: false });
+    const entry = (perItem[a.itemId] ??= { qty: 0, status: 'sure', reasons: [], rows: 0, unreadable: false, confirmed: true });
     const it = items.find((x) => x.id === a.itemId);
     entry.rows += 1;
     if (a.row.qty == null) entry.unreadable = true;
@@ -399,6 +399,8 @@ export function matchRows(rows, items) {
     if (qty != null && qtyOrdered != null && qty !== qtyOrdered && !(qtyPending != null && qty + qtyPending === qtyOrdered)) {
       check(entry, 'Teillieferung – Menge bitte prüfen');
     }
+    // Vom Lieferschein bestätigt ist eine Menge nur, wenn geliefert + ausstehend = bestellt aufgeht
+    if (!(qty != null && qtyOrdered != null && qtyPending != null && qty + qtyPending === qtyOrdered)) entry.confirmed = false;
   }
   for (const it of items) {
     const entry = perItem[it.id];
@@ -411,7 +413,12 @@ export function matchRows(rows, items) {
       check(entry, 'Menge nicht lesbar – offene Menge vorgeschlagen');
     } else if (entry.qty > backlog) {
       check(entry, `mehr als der Rückstand (${backlog})`);
+    } else if (entry.qty < backlog && !entry.confirmed) {
+      // Weniger als offen: echte Teillieferung oder verlesene Ziffer („10“ als „3“) – ohne Bestätigung
+      // durch den Lieferschein (bestellt/ausstehend) nicht als sicher übernehmen
+      check(entry, 'Teillieferung – Menge bitte prüfen');
     }
+    delete entry.confirmed;
   }
   return { assignments, perItem };
 }
@@ -422,8 +429,11 @@ export function matchRows(rows, items) {
 
 /** OCR-Verwechslungen in Ziffernfeldern. */
 const DIGIT_FIX = { O: '0', o: '0', D: '0', Q: '0', I: '1', l: '1', i: '1', '|': '1', '!': '1' };
-/** 4 Ziffern, „I“ (oft als 1/l/| gelesen), „W“ (auch „VV“), 5 Ziffern – Satzzeichen am Rand werden ignoriert. */
-const INTERNAL_NO_FUZZY = /^([0-9OoDQIli|!]{4})[I1li|!](W|VV)([0-9OoDQIli|!]{5})$/;
+/**
+ * 4 Ziffern, „I“ (oft als 1/l/|// gelesen, bei kleiner Schrift auch verdoppelt wie „I1“), „W“ (auch „VV“),
+ * 5 Ziffern – Satzzeichen am Rand werden ignoriert.
+ */
+const INTERNAL_NO_FUZZY = /^([0-9OoDQIli|!]{4})[I1li|!/]{1,2}(W|VV)([0-9OoDQIli|!]{5})$/;
 
 /** Wort → normierte interne Bestellnummer oder null. */
 export function parseInternalOrderNo(text) {
