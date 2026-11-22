@@ -29,9 +29,9 @@ export const STEP_BOX = /* html */ `
       }">
   <template x-if="s.state === 'done'"><span>${CHECK}</span></template>
   <template x-if="s.state === 'skipped'"><span class="text-sm font-bold leading-none">–</span></template>
-  <!-- Vorschau: leeres, klickbares Kästchen zeigt beim Überfahren des Knopfs (group/step) nach 80 ms ein graues Häkchen -->
+  <!-- Vorschau: leeres, klickbares Kästchen zeigt beim Überfahren des Knopfs (group/step) sofort ein graues Häkchen -->
   <template x-if="s.state === 'open' && s.clickable">
-    <span class="text-slate-400 opacity-0 transition-opacity delay-0 duration-100 group-hover/step:opacity-100 group-hover/step:delay-80">${CHECK}</span>
+    <span class="text-slate-400 opacity-0 group-hover/step:opacity-100">${CHECK}</span>
   </template>
 </span>`;
 

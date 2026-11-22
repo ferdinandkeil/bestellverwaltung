@@ -146,7 +146,7 @@ try {
   // Verwaltungsschritte ohne Rückfrage: Klick hakt sofort ab, Toast mit „Datum ändern“/„Rückgängig“
   const STEP = (v) => `document.querySelector('#view [data-step=${v}]')`;
   await b.waitFor(`${STEP('invoice_received')} && ${STEP('invoice_received')}.getAttribute('aria-disabled') !== 'true'`, 'Rechnungsschritte freigegeben');
-  await b.clickText('#view button[data-next-step]', '✓ Rechnung da');
+  await b.evaluate(`${STEP('invoice_received')}.click()`);
   await b.waitFor(`${STEP('invoice_received')}.dataset.state === 'done'`, 'Rechnung da erledigt');
   await b.evaluate(`${STEP('invoice_submitted')}.click()`);
   await b.waitFor(`${BADGE} === 'Abgeschlossen' && ${STEP('invoice_signed')}.dataset.state === 'skipped' && ${STEP('closed')}.dataset.state === 'done'`, 'Abgeschlossen');
@@ -211,13 +211,13 @@ try {
   if (!(await b.evaluate(`${TOASTS}.includes('Übersprungen: Formular unterschrieben, Formular in Verwaltung')`))) throw new Error('Toast: ' + await b.evaluate(TOASTS));
   await b.screenshot('05-bestellt');
   // Nach „bestellt“: Geliefert und Rechnung da gleichzeitig als nächste Schritte; „Geliefert“ bucht den Rest
-  const NEXT = `[...document.querySelectorAll('#view [data-next-step]')].map((e) => e.innerText.trim()).join()`;
-  await b.waitFor(`${NEXT} === '✓ Geliefert,✓ Rechnung da'`, 'zwei nächste Schritte');
-  await b.clickText('#view button[data-next-step]', '✓ Geliefert');
+  const NEXT = `[...document.querySelectorAll('#view [data-step-label]')].filter((e) => e.classList.contains('font-semibold')).map((e) => e.dataset.stepLabel).join()`;
+  await b.waitFor(`${NEXT} === 'delivered,invoice_received' && !document.querySelector('#view [data-next-step]')`, 'zwei nächste Schritte, keine Knöpfe nach „bestellt“');
+  await b.evaluate(`${STEP('delivered')}.click()`);
   await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('delivered')}.dataset.state === 'done' && document.body.innerText.includes('Rest vollständig geliefert')`, 'Rest geliefert gebucht');
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
   await b.waitFor(`${BADGE} === 'Bestellt' && ${STEP('delivered')}.dataset.state === 'open' && !document.body.innerText.includes('Rest vollständig geliefert')`, 'Buchung zurückgenommen');
-  ok('Nach „bestellt“ zwei nächste Schritte; „Geliefert“ bucht den Rest, „Rückgängig“ nimmt die Buchung zurück');
+  ok('Nach „bestellt“ zwei nächste Schritte (ohne Hauptknöpfe); „Geliefert“ bucht den Rest, „Rückgängig“ nimmt die Buchung zurück');
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('04711') && !a.innerText.includes('2026IW')) && document.querySelector('[data-overview-table] th').parentElement.innerText.includes('Best.-Nr.')`, 'Kurznummer auf der Startseite (Smartphone)');
   ok('Formular geschrieben (Nummer per Dialog, normalisiert), bestellt mit übersprungenen Schritten im Toast');

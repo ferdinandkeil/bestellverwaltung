@@ -66,8 +66,8 @@ const template = /* html */ `
 
         <!-- Aktionen: nächste Verwaltungsschritte, Module -->
         <div class="mt-4 flex flex-wrap gap-2">
-          <!-- nächste Schritte (nach „bestellt“ zwei: Geliefert und der nächste Rechnungsschritt) -->
-          <template x-for="next in nextStepsOf(order, steps)" :key="next">
+          <!-- nächster Schritt bis „bestellt“ als Hauptknopf; danach (Geliefert, Rechnung) über die Kästchen im Ablauf -->
+          <template x-for="next in (steps.ordered ? [] : nextStepsOf(order, steps))" :key="next">
             <button type="button" class="btn btn-primary" data-next-step @click="toggleStep(order, steps, next)"
                     x-text="'✓ ' + stepMeta(next).label"></button>
           </template>
