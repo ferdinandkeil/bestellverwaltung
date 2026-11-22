@@ -341,8 +341,10 @@ try {
   await b.waitFor(`document.querySelectorAll('[data-unmatched-receipts] option').length > 1`, 'Bestellungen zur Auswahl');
   await b.fill('[data-unmatched-receipts] select', direct.id);
   await b.clickText('[data-unmatched-receipts] button', 'Zuordnen');
-  await b.confirmDialog('Anhängen');
+  // ohne Rückfrage: Eintrag sofort ausgeblendet, angehängt nach Ablauf des Toasts („Rückgängig“ möglich)
   await b.waitFor(`!document.querySelector('[data-unmatched-receipts]')?.offsetParent`, 'Ablage leer');
+  await b.waitFor(`[...document.querySelectorAll('[data-toast-action]')].some((e) => e.innerText.trim() === 'Rückgängig')`, 'Toast mit Rückgängig');
+  await b.waitFor(`document.body.innerText.includes('Lieferschein an die Bestellung angehängt')`, 'verzögert angehängt', 15000);
   const assigned = (await listRecords('orders', `id = "${direct.id}"`))[0];
   if (assigned.attachments.length !== 1 || (await listRecords('unmatched_receipts')).length !== 0) throw new Error('Zuordnung: ' + JSON.stringify(assigned.attachments));
   ok('Lieferschein ohne Profil abgelegt und im Dashboard einer Bestellung zugeordnet (Anhang)');

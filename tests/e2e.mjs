@@ -30,7 +30,11 @@ async function seed() {
 // ---------------------------------------------------------------------------
 // Ablauf
 // ---------------------------------------------------------------------------
-const ORDER_LINKS = `document.querySelectorAll('#view ul a[href^="#/orders/"]')`;
+const ORDER_LINKS = `document.querySelectorAll('#view ul a[href^="#/orders/"]')`; // Karten (Smartphone)
+const CART_LINKS = `document.querySelectorAll('#view [data-cart]')`;
+/** Letzte (neueste) Toast-Aktion mit dieser Beschriftung anklicken. */
+const TOAST_ACTION = (label) => `[...document.querySelectorAll('[data-toast-action]')].filter((e) => e.innerText.trim() === ${JSON.stringify(label)}).pop()`;
+const TOASTS = `[...document.querySelectorAll('[data-toast-action]')].map((e) => e.closest('div').innerText).join(' | ')`;
 const BADGE = `document.querySelector('#view [data-status-badge]').innerText.trim()`;
 
 const { groupA, login } = await seed();
@@ -62,8 +66,11 @@ try {
   await sleep(3500); // PocketBase-Ratenbegrenzung für Auth-Anfragen
   await b.fill('#login-code', code);
   await b.clickText('button', 'Anmelden');
-  await b.waitFor(`location.hash === '#/' && ${ORDER_LINKS}.length === 2`, 'Dashboard mit 2 Bestellungen');
-  ok('Login → Dashboard mit 2 Bestellungen');
+  await b.waitFor(`location.hash === '#/' && ${ORDER_LINKS}.length === 1 && ${CART_LINKS}.length === 1`, 'Startseite: 1 Bestellung, 1 Warenkorb');
+  if (!(await b.evaluate(`document.querySelector('[data-prominent-action]')?.offsetParent && document.querySelector('[data-prominent-action]').innerText.includes('Lieferschein scannen')`))) {
+    throw new Error('Smartphone: „Lieferschein scannen“ nicht als Hauptknopf oben');
+  }
+  ok('Login → Startseite: Warenkorb in der Leiste, 1 Bestellung als Karte, „Lieferschein scannen“ groß oben');
   await b.screenshot('02-dashboard');
 
   if (await b.evaluate(`!!document.querySelector('#view select')?.offsetParent`)) throw new Error('Filter sollten mobil eingeklappt sein');
@@ -71,11 +78,11 @@ try {
   await b.waitFor(`document.querySelector('#view select')?.offsetParent`, 'Filter aufgeklappt');
   const groupSelect = `[...document.querySelectorAll('#view select')][2]`;
   await b.evaluate(`(() => { const s = ${groupSelect}; s.value = ${JSON.stringify(groupA)}; s.dispatchEvent(new Event('change')); })()`);
-  await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Gruppenfilter');
+  await b.waitFor(`${ORDER_LINKS}.length === 0 && document.body.innerText.includes('Keine Bestellungen gefunden')`, 'Gruppenfilter');
   await b.waitFor(`[...document.querySelectorAll('#view button')].some((e) => e.innerText.includes('Gruppe A') && e.innerText.includes('✕'))`, 'Filter-Chip');
   await b.screenshot('02b-filter');
   await b.evaluate(`(() => { const s = ${groupSelect}; s.value = ''; s.dispatchEvent(new Event('change')); })()`);
-  await b.waitFor(`${ORDER_LINKS}.length === 2`, 'Filter zurücksetzen');
+  await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Filter zurücksetzen');
   ok('Filter mobil eingeklappt, Gruppenfilter mit Chip');
 
   await b.clickText('button', '+ Position erfassen');
@@ -108,35 +115,36 @@ try {
   await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert', 6000);
   ok('„Rest komplett“ → automatisch Geliefert');
 
-  // Verwaltungsschritte: nächster Schritt als Hauptknopf, überspringen mit Hinweis, Phase „Abgeschlossen“
-  const STEP = (v) => `document.querySelector('[data-step=${v}]')`;
-  const DIALOG_OPEN = `document.querySelector('[data-step-dialog]')?.offsetParent`;
+  // Verwaltungsschritte ohne Rückfrage: Klick hakt sofort ab, Toast mit „Datum ändern“/„Rückgängig“
+  const STEP = (v) => `document.querySelector('#view [data-step=${v}]')`;
   await b.waitFor(`${STEP('invoice_received')}?.disabled === false`, 'Rechnungsschritte freigegeben');
   await b.clickText('#view button[data-next-step]', '✓ Rechnung da');
-  await b.waitFor(DIALOG_OPEN, 'Schritt-Dialog');
-  await b.clickText('[data-step-dialog] button', 'Abhaken');
-  await b.waitFor(`${STEP('invoice_received')}.dataset.state === 'done' && ${STEP('invoice_received')}.innerText.includes('E2E Tester')`, 'Rechnung da erledigt');
+  await b.waitFor(`${STEP('invoice_received')}.dataset.state === 'done' && document.querySelector('[data-order-steps]').innerText.includes('E2E Tester')`, 'Rechnung da erledigt');
   await b.evaluate(`${STEP('invoice_submitted')}.click()`);
-  await b.waitFor(`document.querySelector('[data-step-skipping]')?.innerText.includes('Rechnung unterschrieben')`, 'Hinweis überspringen');
-  await b.screenshot('04a-schritt-dialog');
-  await b.clickText('[data-step-dialog] button', 'Abhaken');
   await b.waitFor(`${BADGE} === 'Abgeschlossen' && ${STEP('invoice_signed')}.dataset.state === 'skipped' && ${STEP('closed')}.dataset.state === 'done'`, 'Abgeschlossen');
-  await b.screenshot('04b-ablauf');
-  ok('Rechnung da, Rechnung in Verwaltung (unterschrieben übersprungen) → Abgeschlossen');
+  if (!(await b.evaluate(`${TOASTS}.includes('Übersprungen: Rechnung unterschrieben')`))) throw new Error('Toast ohne Hinweis auf übersprungene Schritte: ' + await b.evaluate(TOASTS));
+  await b.screenshot('04a-ablauf');
+  ok('Rechnung da, Rechnung in Verwaltung (unterschrieben übersprungen, im Toast genannt) → Abgeschlossen');
 
-  // Zurücknehmen: Sicherheitsabfrage abbrechen → nichts passiert; bestätigen → wieder Geliefert
+  // Haken entfernen ohne Rückfrage, „Rückgängig“ stellt ihn wieder her
   await b.evaluate(`${STEP('invoice_submitted')}.click()`);
-  await b.clickText('[data-step-dialog] button', 'Zurücknehmen');
-  await b.waitFor(`document.querySelector('#confirm-dialog')?.open`, 'Sicherheitsabfrage');
-  await b.screenshot('04c-sicherheitsabfrage');
-  await b.evaluate(`document.querySelector('#confirm-dialog [value=cancel]').click()`);
-  await b.waitFor(`!document.querySelector('#confirm-dialog').open`, 'Abfrage geschlossen');
-  await sleep(300);
-  if ((await b.evaluate(BADGE)) !== 'Abgeschlossen') throw new Error('Phase trotz Abbruch geändert: ' + await b.evaluate(BADGE));
-  await b.clickText('[data-step-dialog] button', 'Zurücknehmen');
-  await b.confirmDialog('Zurücknehmen');
-  await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('invoice_signed')}.dataset.state === 'open'`, 'zurückgenommen');
-  ok('Schritt zurücknehmen (Sicherheitsabfrage: Abbrechen wirkt, Bestätigen nimmt zurück)');
+  await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('invoice_signed')}.dataset.state === 'open'`, 'Haken entfernt');
+  if (await b.evaluate(`document.querySelector('#confirm-dialog')?.open`)) throw new Error('Sicherheitsabfrage beim Entfernen');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`${BADGE} === 'Abgeschlossen' && ${STEP('invoice_submitted')}.dataset.state === 'done'`, 'Rückgängig');
+  await b.evaluate(`${STEP('invoice_submitted')}.click()`);
+  await b.waitFor(`${BADGE} === 'Geliefert'`, 'wieder entfernt');
+  ok('Haken entfernen ohne Rückfrage; „Rückgängig“ im Toast stellt ihn wieder her');
+
+  // Datum eines erledigten Schritts ändern
+  const yesterday = new Date(Date.now() - 86400000);
+  await b.evaluate(`document.querySelector('[data-step-date=invoice_received]').click()`);
+  await b.waitFor(`document.querySelector('#step-date')?.offsetParent`, 'Datumsdialog');
+  await b.fill('#step-date', yesterday.toLocaleDateString('sv-SE'));
+  await b.clickText('[data-step-dialog] button', 'Speichern');
+  const shownDate = yesterday.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  await b.waitFor(`document.querySelector('[data-step-date=invoice_received]').innerText.includes(${JSON.stringify(shownDate)})`, 'Datum geändert');
+  ok('Datum eines erledigten Schritts geändert');
 
   // Vergessene Position nachtragen und gleich als geliefert buchen → bleibt „Geliefert“, gekennzeichnet
   await b.clickText('#view button', 'Position nachtragen');
@@ -151,27 +159,43 @@ try {
   if ((await b.evaluate(BADGE)) !== 'Geliefert') throw new Error('Status nach Nachtragen: ' + await b.evaluate(BADGE));
   ok('Position nachgetragen und geliefert gebucht – gekennzeichnet, Status bleibt Geliefert');
 
-  // Offenen Mouser-Korb: Formular geschrieben (interne Bestellnummer Pflicht, normalisiert) → bestellt (Rest übersprungen)
+  // Offenen Mouser-Korb: Formular geschrieben (fehlende interne Bestellnummer → Dialog) → bestellt (Rest übersprungen)
   await b.navigate(PB_URL + '/#/');
-  await b.waitFor(`${ORDER_LINKS}.length === 2`, 'Dashboard');
-  await b.evaluate(`[...${ORDER_LINKS}].find((a) => a.innerText.includes('Mouser')).click()`);
+  await b.waitFor(`${CART_LINKS}.length === 1`, 'Startseite');
+  await b.evaluate(`[...${CART_LINKS}].find((a) => a.innerText.includes('Mouser')).click()`);
   await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
   await b.clickText('#view button[data-next-step]', '✓ Formular geschrieben');
-  await b.waitFor(`document.querySelector('#step-internal-no')?.offsetParent`, 'Nummer im Schritt-Dialog');
+  await b.waitFor(`document.querySelector('#step-internal-no')?.offsetParent`, 'Dialog: nur die fehlende Nummer');
   await b.fill('#step-internal-no', '2026-4711');
   await b.clickText('[data-step-dialog] button', 'Abhaken');
   await b.waitFor(`document.body.innerText.includes('hat das Format JJJJIW#####')`, 'Format-Hinweis');
   await b.fill('#step-internal-no', ' 2026iw04711 ');
   await b.clickText('[data-step-dialog] button', 'Abhaken');
   await b.waitFor(`${BADGE} === 'In Freigabe' && document.querySelector('#internal-order-no').value === '2026IW04711'`, 'In Freigabe, normalisiert');
-  await b.evaluate(`document.querySelector('[data-step=ordered]').click()`);
-  await b.waitFor(`document.querySelector('[data-step-skipping]')?.innerText.includes('Formular unterschrieben, Formular in Verwaltung')`, 'Hinweis überspringen');
-  await b.clickText('[data-step-dialog] button', 'Abhaken');
-  await b.waitFor(`${BADGE} === 'Bestellt' && document.querySelector('[data-step=form_signed]').dataset.state === 'skipped'`, 'Bestellt');
+  if (!(await b.evaluate(`${TOASTS}.includes('Warenkorb geschlossen')`))) throw new Error('Toast ohne Hinweis auf geschlossenen Warenkorb');
+  await b.evaluate(`document.querySelector('#view [data-step=ordered]').click()`);
+  await b.waitFor(`${BADGE} === 'Bestellt' && document.querySelector('#view [data-step=form_signed]').dataset.state === 'skipped'`, 'Bestellt');
+  if (!(await b.evaluate(`${TOASTS}.includes('Übersprungen: Formular unterschrieben, Formular in Verwaltung')`))) throw new Error('Toast: ' + await b.evaluate(TOASTS));
   await b.screenshot('05-bestellt');
   await b.navigate(PB_URL + '/#/');
-  await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('2026IW04711'))`, 'Nummer im Dashboard');
-  ok('Formular geschrieben nur mit interner Bestellnummer (normalisiert), bestellt mit übersprungenen Schritten');
+  await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('2026IW04711'))`, 'Nummer auf der Startseite');
+  ok('Formular geschrieben (Nummer per Dialog, normalisiert), bestellt mit übersprungenen Schritten im Toast');
+
+  // PC: Tabelle mit Schritt-Checkboxen, Abhaken direkt in der Zeile
+  await b.setViewport({ width: 1366, height: 900 }, false);
+  const ROW = (text) => `[...document.querySelectorAll('[data-overview-table] tbody tr')].find((r) => r.innerText.includes(${JSON.stringify(text)}))`;
+  await b.waitFor(`document.querySelector('[data-overview-table]')?.offsetParent && ${ROW('2026IW04711')}`, 'Tabelle');
+  const cell = (step) => `${ROW('2026IW04711')}.querySelector('[data-step=${step}]')`;
+  if ((await b.evaluate(`[${cell('form_written')}, ${cell('form_signed')}, ${cell('ordered')}].map((e) => e.dataset.state).join()`)) !== 'done,skipped,done') {
+    throw new Error('Tabelle: Zustände der Schritte falsch');
+  }
+  await b.evaluate(`${cell('invoice_received')}.click()`);
+  await b.waitFor(`${cell('invoice_received')}.dataset.state === 'done'`, 'in der Tabelle abgehakt');
+  await b.screenshot('05a-tabelle');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`${cell('invoice_received')}.dataset.state === 'open'`, 'Rückgängig in der Tabelle');
+  await b.setViewport();
+  ok('PC: Tabelle mit Schritt-Checkboxen (Haken, Strich, leer), Abhaken in der Zeile, Rückgängig');
 
   await b.navigate(PB_URL + '/#/groups');
   await b.waitFor(`document.querySelector('[x-data=groupsView]') && [...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('Gruppe B'))`, 'Gruppenliste');

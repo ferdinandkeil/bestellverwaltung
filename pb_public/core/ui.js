@@ -1,17 +1,24 @@
-// Gemeinsame UI-Helfer: Toasts, Bestätigungen, Formatierung.
+// Gemeinsame UI-Helfer: Toasts (mit Aktionen wie „Rückgängig“), verzögerte Aktionen, Bestätigungen, Formatierung.
+// Grundsatz „Handeln statt fragen“ (ARCHITECTURE Kap. 7): sofort ausführen, im Toast „Rückgängig“ anbieten.
 import Alpine from '../vendor/alpinejs@3.17.5/dist/module.esm.js';
 
 export function initUiStore() {
   Alpine.store('toasts', {
     items: [],
-    push(message, type = 'info', timeoutMs = 4000) {
+    /** actions: [{ label, run }] – Knöpfe im Toast; ein Klick führt run() aus und schließt den Toast. */
+    push(message, type = 'info', timeoutMs = 4000, actions = []) {
       const id = Math.random().toString(36).slice(2);
       // Höchstens drei Meldungen gleichzeitig, damit der Inhalt sichtbar bleibt.
-      this.items = [...this.items.slice(-2), { id, message, type }];
+      this.items = [...this.items.slice(-2), { id, message, type, actions }];
       if (timeoutMs) setTimeout(() => this.dismiss(id), timeoutMs);
+      return id;
     },
     dismiss(id) {
       this.items = this.items.filter((t) => t.id !== id);
+    },
+    act(t, action) {
+      this.dismiss(t.id);
+      action.run();
     },
   });
   Alpine.store('confirm', {
@@ -29,11 +36,42 @@ export function initUiStore() {
   });
 }
 
+/** Standzeit eines Toasts mit Aktionen (Zeit für „Rückgängig“) – auch die Verzögerung von deferredAction(). */
+export const ACTION_TOAST_MS = 8000;
+
 export const toast = {
   info: (msg) => Alpine.store('toasts').push(msg, 'info'),
   success: (msg) => Alpine.store('toasts').push(msg, 'success'),
   error: (msg) => Alpine.store('toasts').push(msg, 'error', 8000),
+  /** Erfolgsmeldung mit Knöpfen, z. B. [{ label: 'Rückgängig', run }]. */
+  done: (msg, actions) => Alpine.store('toasts').push(msg, 'success', ACTION_TOAST_MS, actions),
 };
+
+/**
+ * Aktion verzögert ausführen (z. B. Löschen): sofort Toast mit „Rückgängig“, ausgeführt wird erst nach
+ * ACTION_TOAST_MS. Der Aufrufer blendet das Element vorher aus und stellt es in undo() wieder her.
+ * Wird der Browser-Tab vorher geschlossen, unterbleibt die Aktion (sichere Seite).
+ * @returns {Promise<boolean>} true = ausgeführt, false = rückgängig gemacht; Fehler von run() werden weitergereicht
+ */
+export function deferredAction({ message, run, undo }) {
+  return new Promise((resolve, reject) => {
+    let cancelled = false;
+    Alpine.store('toasts').push(message, 'info', ACTION_TOAST_MS, [{
+      label: 'Rückgängig',
+      run: () => { cancelled = true; undo?.(); resolve(false); },
+    }]);
+    setTimeout(async () => {
+      if (cancelled) return;
+      try {
+        await run();
+        resolve(true);
+      } catch (err) {
+        undo?.();
+        reject(err);
+      }
+    }, ACTION_TOAST_MS);
+  });
+}
 
 /**
  * Sicherheitsabfrage im eigenen Dialog (`#confirm-dialog` in index.html, natives <dialog> mit showModal:

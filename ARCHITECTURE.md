@@ -209,7 +209,7 @@ Merklisten für Artikel, die wieder bestellt werden sollen (z. B. Standardsortim
 
 ## 5. Modul-Schnittstelle (`core/plugin-registry.js`)
 Module registrieren sich beim App-Start an festen Slots:
-* **`dashboard-actions`:** Buttons oben im Dashboard (z. B. „Moodle-CSV importieren“).
+* **`dashboard-actions`:** Buttons oben auf der Startseite (z. B. „Moodle-CSV importieren“). Optional `prominent: true`: auf dem Smartphone als großer Hauptknopf ganz oben (Lieferschein-Scanner).
 * **`order-detail-actions`:** Buttons in einer geöffneten Bestellung; `onClick(order, items)`.
 
 ```javascript
@@ -271,7 +271,7 @@ registerPlugin({
   * **PC: Tabelle** wie die bisher geführte Verwaltungstabelle, eine Zeile je Bestellung ab „In Freigabe“: Bestell-Nr. (intern), Wo (Lieferant), Was, dann je Schritt eine **quadratische Checkbox** in den Gruppen Bestellung (geschr., unterschr., in Verw., Freigabe, bestellt), Ware (teilgeliefert, geliefert – nur Anzeige) und Rechnung (da, unterschr., in Verw., abgeschlossen). Zustände: **Haken** (erledigt), **Strich –** (übersprungen), **leer** (offen); Tooltip mit Datum und Nutzer. **Klick setzt bzw. entfernt den Haken sofort** (heutiges Datum) mit Toast „Datum ändern“/„Rückgängig“; fehlt die interne Bestellnummer, fragt ein Dialog nur danach. Klick auf Nummer/Lieferant/Was öffnet die Bestellung. **Abgeschlossene Zeilen ausgegraut.**
   * **Smartphone:** oben groß „Lieferschein scannen“, darunter Karten (Lieferant · Was, Nummer, Phase, nächster Schritt).
   * **Standardansicht:** alle nicht abgeschlossenen Bestellungen (unabhängig vom Alter) und die in den **letzten 3 Monaten abgeschlossenen** (nach `closed_at`). Filter: Phase (Mehrfachauswahl), Zeitraum der abgeschlossenen (3 Monate, 12 Monate, Kalenderjahr, alle), Lieferant, Gruppe; auf dem Smartphone einklappbar, aktive Filter als entfernbare Chips, pro Browser gemerkt. **Suche** (interne/Shop-Auftragsnummer, Lieferant, Was, Artikelnummer) durchsucht alle Bestellungen unabhängig von Phase und Zeitraum.
-  * Sortierung: nach Phase (In Freigabe zuerst), darin älteste zuerst.
+  * Sortierung: nach Phase (In Freigabe zuerst), darin älteste zuerst; abgeschlossene am Ende, zuletzt abgeschlossene zuerst.
 * **Hauptnavigation:** *Bestellungen*, *Gruppen/Projekte*, *Favoriten*. Der Schriftzug „Labor-Bestellungen“ erscheint erst ab Tablet-Breite, damit die Kopfzeile auf dem Smartphone nicht überläuft.
 * **Verwaltungsschritte in der Bestellung** (`views/order-steps.js`): Abschnitt „Ablauf“ mit den drei Spuren nebeneinander (Smartphone untereinander); je Schritt Symbol (grüner Haken erledigt, grauer Haken übersprungen, offener Kreis, blau umrandet der nächste Schritt), darunter Datum · Nutzer bzw. „Datum unbekannt“/„übersprungen“. Der **nächste Schritt** steht zusätzlich als Hauptknopf („✓ Formular geschrieben“) im Kopf der Bestellung; ist als Nächstes die Freigabe dran, wird „Bestellt“ angeboten (Freigabe meist nicht nötig, bleibt in der Liste abhakbar). Ein Klick auf einen Schritt (oder den Hauptknopf) hakt ihn **sofort** ab bzw. entfernt den Haken – wie in der Tabelle der Startseite, mit Toast „Datum ändern“/„Rückgängig“ und Hinweis auf übersprungene Schritte bzw. den geschlossenen Warenkorb; ein Dialog erscheint nur, wenn die interne Bestellnummer fehlt, oder für „Datum ändern“. Nicht mögliche Schritte sind ausgegraut mit Begründung als Tooltip. Die Spur „Ware“ ist nur Anzeige.
 * **Gruppenauswahl:** immer nach Veranstaltung/Semester gegliedert (neuestes Semester zuerst).

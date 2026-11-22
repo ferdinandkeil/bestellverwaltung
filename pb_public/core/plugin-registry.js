@@ -1,7 +1,7 @@
 // Registry für Erweiterungsmodule (ARCHITECTURE.md Kap. 5).
 //
-// registerPlugin({ id, slot, label, icon?, isVisible?(ctx...), onClick(ctx...) })
-//   Slot 'dashboard-actions':    onClick()
+// registerPlugin({ id, slot, label, icon?, prominent?, isVisible?(ctx...), onClick(ctx...) })
+//   Slot 'dashboard-actions':    onClick(); prominent: auf dem Smartphone als großer Hauptknopf oben (z. B. Scanner)
 //   Slot 'order-detail-actions': onClick(order, items)
 
 export const SLOTS = ['dashboard-actions', 'order-detail-actions'];

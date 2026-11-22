@@ -49,21 +49,27 @@ export const DELIVERY_STATUSES = ['bestellt', 'teilgeliefert', 'geliefert'];
 export const STEP_TRACKS = [
   {
     key: 'order', label: 'Bestellung', steps: [
-      { value: 'form_written', label: 'Formular geschrieben', needsNumber: true },
-      { value: 'form_signed', label: 'Formular unterschrieben', needsNumber: true },
-      { value: 'form_submitted', label: 'Formular in Verwaltung', needsNumber: true },
-      { value: 'approval', label: 'Freigabe erteilt', needsNumber: true, hint: 'meist nicht nötig' },
-      { value: 'ordered', label: 'Bestellt' },
+      { value: 'form_written', label: 'Formular geschrieben', short: 'geschr.', needsNumber: true },
+      { value: 'form_signed', label: 'Formular unterschrieben', short: 'unterschr.', needsNumber: true },
+      { value: 'form_submitted', label: 'Formular in Verwaltung', short: 'in Verw.', needsNumber: true },
+      { value: 'approval', label: 'Freigabe erteilt', short: 'Freigabe', needsNumber: true, hint: 'meist nicht nötig' },
+      { value: 'ordered', label: 'Bestellt', short: 'bestellt' },
     ],
   },
   {
     key: 'invoice', label: 'Rechnung', steps: [
-      { value: 'invoice_received', label: 'Rechnung da', afterOrdered: true },
-      { value: 'invoice_signed', label: 'Rechnung unterschrieben', afterOrdered: true },
-      { value: 'invoice_submitted', label: 'Rechnung in Verwaltung', afterOrdered: true },
-      { value: 'closed', label: 'Abgeschlossen', afterOrdered: true, hint: 'automatisch mit „Rechnung in Verwaltung“; von Hand für Bestellungen ohne Rechnung (Muster)' },
+      { value: 'invoice_received', label: 'Rechnung da', short: 'da', afterOrdered: true },
+      { value: 'invoice_signed', label: 'Rechnung unterschrieben', short: 'unterschr.', afterOrdered: true },
+      { value: 'invoice_submitted', label: 'Rechnung in Verwaltung', short: 'in Verw.', afterOrdered: true },
+      { value: 'closed', label: 'Abgeschlossen', short: 'abgeschl.', afterOrdered: true, hint: 'automatisch mit „Rechnung in Verwaltung“; von Hand für Bestellungen ohne Rechnung (Muster)' },
     ],
   },
+];
+
+/** Spur „Ware“ (nur Anzeige, aus den Lieferbuchungen). */
+export const WARE_STEPS = [
+  { value: 'partial', label: 'Teilgeliefert', short: 'teilgel.' },
+  { value: 'delivered', label: 'Geliefert', short: 'geliefert' },
 ];
 
 export function stepMeta(value) {

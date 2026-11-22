@@ -36,6 +36,10 @@
         <div class="pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-lg px-4 py-3 text-sm shadow-lg"
              :class="{ 'bg-slate-800 text-white': t.type === 'info', 'bg-emerald-700 text-white': t.type === 'success', 'bg-red-700 text-white': t.type === 'error' }">
           <span class="flex-1" x-text="t.message"></span>
+          <template x-for="a in t.actions" :key="a.label">
+            <button type="button" class="shrink-0 rounded px-1.5 font-semibold underline-offset-2 hover:underline" data-toast-action
+                    @click="$store.toasts.act(t, a)" x-text="a.label"></button>
+          </template>
           <button type="button" class="opacity-70 hover:opacity-100" @click="$store.toasts.dismiss(t.id)" aria-label="Schließen">✕</button>
         </div>
       </template>
