@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  PB_URL, setup, resetData, createUser, createGroup, addItem, changeStatus, bookDelivery,
+  PB_URL, setup, resetData, createUser, createGroup, addItem, markOrdered, bookDelivery,
   enableRateLimits, disableRateLimits,
 } from './helpers.mjs';
 import { launchBrowser, otpFromMailpit, sleep } from './browser.mjs';
@@ -22,7 +22,7 @@ async function seed() {
   await addItem(owner.token, { supplier: 'mouser', part_number: '595-SN74HC595N', name: 'Schieberegister 8 Bit, DIP-16', qty: 5, group: a.id, price_unit: 0.62 });
   await addItem(owner.token, { supplier: 'mouser', part_number: '595-sn74hc595n', name: 'x', qty: 3, group: b.id });
   const r = await addItem(owner.token, { supplier: 'reichelt', part_number: 'NE 555 DIP', name: 'Timer NE555', qty: 10, group: b.id, price_unit: 0.25 });
-  await changeStatus(owner.token, r.order.id, 'advance', { supplier_order_no: 'R-4711' });
+  await markOrdered(owner.token, r.order.id, { supplier_order_no: 'R-4711' });
   await bookDelivery(owner.token, r.order.id, [{ item: r.item.id, qty: 4 }], 'Paket 1');
   return { groupA: a.id, login: await createUser('E2E Tester') };
 }

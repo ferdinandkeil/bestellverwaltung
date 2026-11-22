@@ -105,15 +105,20 @@ export function nextInternalNo() {
   return `2026IW${String(50000 + (++internalNoCounter)).padStart(5, '0')}`;
 }
 
+/** Verwaltungsschritt abhaken (done: false = zurücknehmen), ARCHITECTURE.md Kap. 4.3. */
+export function setStep(token, orderId, step, extra = {}) {
+  return http('POST', `/api/lab/orders/${orderId}/steps`, { token, json: { step, ...extra } });
+}
+
 /**
- * Statusschritt. Bei „advance“ ohne Angabe wird eine frische interne Bestellnummer mitgeschickt
- * (Pflicht beim Schritt angefragt → bestellt; bei anderen Schritten ignoriert der Server sie).
+ * Warenkorb direkt bestellen (Schritt „bestellt“; offene Formularschritte gelten als übersprungen).
+ * Ohne Angabe wird eine frische interne Bestellnummer mitgeschickt.
  * Für Tests ohne Nummer explizit `internal_order_no: ''` übergeben.
  */
-export function changeStatus(token, orderId, action, extra = {}) {
-  const json = { action, ...extra };
-  if (action === 'advance' && !('internal_order_no' in extra) && !('without_internal_order_no' in extra)) json.internal_order_no = nextInternalNo();
-  return http('POST', `/api/lab/orders/${orderId}/status`, { token, json });
+export function markOrdered(token, orderId, extra = {}) {
+  const json = { ...extra };
+  if (!('internal_order_no' in extra) && !('without_internal_order_no' in extra)) json.internal_order_no = nextInternalNo();
+  return setStep(token, orderId, 'ordered', json);
 }
 
 export function bookDelivery(token, orderId, lines, note = '') {

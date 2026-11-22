@@ -35,23 +35,20 @@ routerAdd("POST", "/api/lab/cart-items/batch", (e) => {
 }, $apis.requireAuth("users"));
 
 /**
- * POST /api/lab/orders/{id}/status
- * Body: { action: "advance" | "back", internal_order_no? | without_internal_order_no: true, supplier_order_no? }
- *   Beim Schritt angefragt → bestellt ist die interne Bestellnummer Pflicht (falls noch nicht gesetzt),
- *   außer es wird ausdrücklich „ohne interne Bestellnummer“ gewählt (z. B. Muster).
+ * POST /api/lab/orders/{id}/steps   – Verwaltungsschritt abhaken, Datum ändern oder zurücknehmen (Kap. 4.3)
+ * Body: { step, done?: true | false, date?: "JJJJ-MM-TT" (leer = jetzt),
+ *         internal_order_no? | without_internal_order_no: true, supplier_order_no? }
+ *   Formularschritte/Freigabe brauchen die interne Bestellnummer; „bestellt“ die Nummer oder
+ *   ausdrücklich „ohne interne Bestellnummer“. Die Phase (status) wird danach neu abgeleitet.
  * Antwort: order
  */
-routerAdd("POST", "/api/lab/orders/{id}/status", (e) => {
-  const { changeStatus } = require(`${__hooks}/lib/status.js`);
+routerAdd("POST", "/api/lab/orders/{id}/steps", (e) => {
+  const { setStep } = require(`${__hooks}/lib/status.js`);
   const id = e.request.pathValue("id");
   const body = e.requestInfo().body || {};
   let order;
   $app.runInTransaction((txApp) => {
-    order = changeStatus(txApp, id, String(body.action || ""), {
-      internal_order_no: body.internal_order_no,
-      without_internal_order_no: body.without_internal_order_no,
-      supplier_order_no: body.supplier_order_no,
-    });
+    order = setStep(txApp, id, body, e.auth.id);
   });
   return e.json(200, order);
 }, $apis.requireAuth("users"));
@@ -126,7 +123,8 @@ routerAdd("POST", "/api/lab/orders/{id}/items", (e) => {
  *   supplier, supplier_custom_name?, internal_order_no? | without_internal_order_no: true,
  *   supplier_order_no?, note?, items: [{ part_number, name?, qty, group? }] (bei multipart als JSON-String),
  *   receipt?: eine Datei (Lieferschein als PDF)
- * Legt Bestellung (bestellt), Positionen und Lieferung in einer Transaktion an → Status „geliefert“.
+ * Legt Bestellung (Schritt „bestellt“, mit interner Nummer auch die Formularschritte ohne Datum), Positionen
+ * und Lieferung in einer Transaktion an → Phase „geliefert“.
  * Antwort: { order, delivery, status }
  */
 routerAdd("POST", "/api/lab/orders/from-delivery-note", (e) => {

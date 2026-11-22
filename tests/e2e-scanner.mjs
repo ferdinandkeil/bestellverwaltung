@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PB_URL, MAILPIT_URL, setup, resetData, createUser, addItem, changeStatus, listRecords, admin } from './helpers.mjs';
+import { PB_URL, MAILPIT_URL, setup, resetData, createUser, addItem, markOrdered, listRecords, admin } from './helpers.mjs';
 import { enableRateLimits, disableRateLimits } from './helpers.mjs';
 import { launchBrowser, loginViaUi, sleep } from './browser.mjs';
 
@@ -106,15 +106,15 @@ async function seed() {
     order = (await addItem(owner.token, { supplier: 'reichelt', part_number: part, name, qty })).order;
   }
   await addItem(owner.token, { supplier: 'reichelt', part_number: 'NICHT GELIEFERT 1', name: 'fehlt auf dem Lieferschein', qty: 1 });
-  await changeStatus(owner.token, order.id, 'advance', { internal_order_no: ORDER_NO });
+  await markOrdered(owner.token, order.id, { internal_order_no: ORDER_NO });
   // Zweite offene Reichelt-Bestellung: Zuordnung muss über die interne Bestellnummer erfolgen.
   const other = await addItem(owner.token, { supplier: 'reichelt', part_number: 'XIAO ESP32C6', name: 'andere Bestellung', qty: 1 });
-  await changeStatus(owner.token, other.order.id, 'advance', { internal_order_no: '2026IW00999' });
+  await markOrdered(owner.token, other.order.id, { internal_order_no: '2026IW00999' });
   let mouserOrder;
   for (const [part, ordered] of MOUSER_ROWS) {
     mouserOrder = (await addItem(owner.token, { supplier: 'mouser', part_number: part, name: 'Mouser-Teil', qty: ordered })).order;
   }
-  await changeStatus(owner.token, mouserOrder.id, 'advance', { internal_order_no: MOUSER_NO });
+  await markOrdered(owner.token, mouserOrder.id, { internal_order_no: MOUSER_NO });
   return { orderId: order.id, mouserOrderId: mouserOrder.id, login: await createUser('Scanner-Tester') };
 }
 

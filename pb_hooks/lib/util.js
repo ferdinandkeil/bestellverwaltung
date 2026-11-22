@@ -1,11 +1,10 @@
 // Gemeinsame Hilfsfunktionen für die Hooks (CommonJS, wird per require() geladen).
 
 const SUPPLIERS = ["mouser", "farnell", "reichelt", "voelkner", "tme", "wuerth", "printus", "other"];
-const STATUSES = ["angefragt", "bestellt", "teilgeliefert", "geliefert", "geprueft", "abgerechnet"];
-/** Status, in denen der Lieferstatus automatisch berechnet wird. */
-const AUTO_STATUSES = ["bestellt", "teilgeliefert", "geliefert"];
-/** Status, in denen Positionen bearbeitet und Lieferungen gebucht werden dürfen. */
-const DELIVERY_STATUSES = AUTO_STATUSES;
+/** Phasen einer Bestellung (abgeleitet aus den Verwaltungsschritten, ARCHITECTURE.md Kap. 4.3). */
+const STATUSES = ["angefragt", "freigabe", "bestellt", "teilgeliefert", "geliefert", "abgeschlossen"];
+/** Phasen, in denen Lieferungen gebucht und Positionen nachgetragen werden dürfen. */
+const DELIVERY_STATUSES = ["bestellt", "teilgeliefert", "geliefert"];
 
 /**
  * Bestellnummer normalisieren: Großbuchstaben, Leerraum (auch Tabulator, geschützte und unsichtbare
@@ -67,7 +66,6 @@ function nonZeroInt(value, label) {
 module.exports = {
   SUPPLIERS,
   STATUSES,
-  AUTO_STATUSES,
   DELIVERY_STATUSES,
   normalizePartNumber,
   normalizeShopName,
