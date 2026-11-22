@@ -53,7 +53,7 @@ export function initUiStore() {
 }
 
 /** Tooltip: Verzögerung bis zum ersten Tooltip; wer innerhalb von TOOLTIP_WARM_MS zum nächsten wechselt, sieht ihn sofort. */
-const TOOLTIP_DELAY_MS = 700;
+const TOOLTIP_DELAY_MS = 500;
 const TOOLTIP_WARM_MS = 1000;
 
 /**
