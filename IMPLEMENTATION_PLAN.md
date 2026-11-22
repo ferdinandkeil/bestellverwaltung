@@ -111,7 +111,7 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 5. Tests: Schritte, Phase, Rechte, Migration, Lieferschein, Browser-Durchläufe.
 
 ### Startseite (Branch `ui-startseite`)
-**Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidungen in ARCHITECTURE Kap. 7 (Startseite, „Handeln statt fragen“, keine Beträge) und 4.1/4.3 (`closed_at`).
+**Status:** abgenommen (22.11.2026). Entscheidungen in ARCHITECTURE Kap. 7 (Startseite, „Handeln statt fragen“, keine Beträge) und 4.1/4.3 (`closed_at`).
 1. Toasts mit Aktionen („Rückgängig“, „Datum ändern“), verzögertes Löschen (`deferredAction`).
 2. `orders.closed_at` (Hook), `date: null` = Datum unbekannt in der Schritt-Route; Tests.
 3. Startseite: Tabelle mit Schritt-Checkboxen (PC), kompakte aufklappbare Tabelle und „Lieferschein scannen“ (Smartphone/Tablet), Filter (Phase, Zeitraum, Lieferant, Gruppe), Suche; abgeschlossene ausgegraut.
@@ -119,7 +119,7 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 5. Browser-Tests angepasst.
 
 ### Warenkorb-Symbol (Branch `ui-warenkorb`, auf `ui-startseite`)
-**Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidung in ARCHITECTURE Kap. 7 (Warenkorb-Symbol) und Kap. 5 (Slot `header-actions`).
+**Status:** abgenommen (22.11.2026). Entscheidung in ARCHITECTURE Kap. 7 (Warenkorb-Symbol) und Kap. 5 (Slot `header-actions`).
 1. Symbol mit Zahl der offenen Positionen in der Kopfzeile; Ausklappfeld (höchstens 5 Positionen je Korb), auf dem Smartphone Seite `#/carts`.
 2. „+ Position erfassen“ rechtsbündig unter den Warenkörben, Moodle-Import als Symbol links neben dem Warenkorb (Slot `header-actions`); Warenkorb-Leiste und Erfassen-Knöpfe der Startseite entfallen.
 3. Smartphone: Warenkorb als fester Knopf unten rechts, Seite Warenkörbe mit ✕ zurück; Navigation und Logout im Hamburger-Menü.
