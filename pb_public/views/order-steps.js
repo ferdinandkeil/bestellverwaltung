@@ -362,16 +362,16 @@ export const orderStepsSection = /* html */ `
               <li class="px-1" x-data="stepItem">
                 <!-- offen und klickbar: Kästchen und Text sind ein Knopf (Überfahren zeigt das graue Vorschau-Häkchen) -->
                 <template x-if="s.state === 'open' && s.clickable">
-                  <button type="button" class="group/step flex cursor-pointer items-start gap-2.5 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  <button type="button" class="group/step flex cursor-pointer items-center gap-2.5 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                           :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state" @click="toggleStep(order, steps, s.value)">
-                    <span class="mt-0.5">${STEP_BOX}</span>
+                    ${STEP_BOX}
                     <span class="text-sm" x-text="s.label" :data-step-label="s.value"
                           :class="s.next ? 'font-semibold text-slate-900' : 'text-slate-700'"></span>
                   </button>
                 </template>
                 <template x-if="!(s.state === 'open' && s.clickable)">
-                <div class="flex items-start gap-2.5">
-                  <button type="button" class="group/step relative mt-0.5 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                <div class="flex items-center gap-2.5">
+                  <button type="button" class="group/step relative rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                           :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :aria-disabled="!s.clickable"
                           x-tip="s.tipLong" :aria-label="s.ariaLabel" :data-step="s.value" :data-state="s.state"
                           @click="s.clickable && toggleStep(order, steps, s.value)">${STEP_BOX}</button>
