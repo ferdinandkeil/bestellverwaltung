@@ -67,6 +67,10 @@ if [ "$status" -eq 0 ] && [ "$E2E" -eq 1 ]; then
     node "$ROOT/tests/e2e-scanner.mjs" || status=$?
   fi
   if [ "$status" -eq 0 ]; then
+    echo "--- Browser-Durchlauf Kamera im Scanner ---"
+    node "$ROOT/tests/e2e-camera.mjs" || status=$?
+  fi
+  if [ "$status" -eq 0 ]; then
     echo "--- Browser-Durchlauf Moodle-Import ---"
     node "$ROOT/tests/e2e-moodle.mjs" || status=$?
   fi

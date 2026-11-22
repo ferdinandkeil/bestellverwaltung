@@ -15,10 +15,11 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ---------------------------------------------------------------------------
 // Minimaler CDP-Client
 // ---------------------------------------------------------------------------
-export async function launchBrowser(profileDir) {
+/** extraArgs: zusätzliche Chrome-Schalter, z. B. für eine simulierte Kamera (tests/e2e-camera.mjs). */
+export async function launchBrowser(profileDir, extraArgs = []) {
   const proc = spawn(CHROME, [
     '--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir}`,
-    '--no-first-run', '--no-default-browser-check', `--window-size=${VIEWPORT.width},${VIEWPORT.height}`, 'about:blank',
+    '--no-first-run', '--no-default-browser-check', `--window-size=${VIEWPORT.width},${VIEWPORT.height}`, ...extraArgs, 'about:blank',
   ], { stdio: 'ignore' });
 
   let page;

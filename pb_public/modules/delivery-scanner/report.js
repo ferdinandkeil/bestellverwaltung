@@ -4,7 +4,7 @@ import { profileMatchesOrder } from './profiles/index.js';
 
 /**
  * Version des Formats von scan_reports.analysis – bei Änderungen erhöhen.
- *   2 (11/2026): Seiten mit cornersMethod und sharpness, OCR mit Tabellenlinien (lines), Zeilen mit
+ *   2 (11/2026): Seiten mit cornersMethod und sharpness (ab 22.11.2026 nur an Kanten gemessen, Werte ~10× höher), OCR mit Tabellenlinien (lines), Zeilen mit
  *                qtyOrdered/qtyConflict und gelesenen Mengenzellen (cells); Fotos ≤ 3200 px, Ecken in deren Koordinaten.
  */
 export const REPORT_VERSION = 2;

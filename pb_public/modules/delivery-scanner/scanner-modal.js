@@ -15,6 +15,7 @@ import {
   loadVision, fileToCanvas, detectCorners, defaultCorners, rectify, prepareForOcr, sharpness, SHARPNESS_MIN,
   downscale, toGrayJpeg, toJpeg,
 } from './vision.js';
+import { cameraSupported, openCamera, takePhoto, setTorch, closeCamera, AutoTrigger } from './camera.js';
 import { preloadOcr, recognizePage, recognizeNumbers, terminateOcr } from './ocr.js';
 import { extractRows, boxKey, matchRows, orderNumberTokens, rankOrders, findInternalOrderNumbers, findKnownInternalOrderNumbers } from './matcher.js';
 import { detectProfile, profileForOrder, profileMatchesOrder } from './profiles/index.js';
@@ -28,6 +29,21 @@ const REPORT_PHOTO_SIDE = 3200;
 /** Längste Seite der Seitenbilder im Beleg-PDF (gut lesbar, PDF bleibt klein; die OCR nutzt die volle Auflösung). */
 const RECEIPT_PAGE_SIDE = 2600;
 const CORNER_KEYS = ['topLeftCorner', 'topRightCorner', 'bottomRightCorner', 'bottomLeftCorner'];
+/** Breite des Vorschaubilds für die Live-Eckenerkennung (die Erkennung arbeitet ohnehin mit ~1000 px). */
+const LIVE_DETECT_WIDTH = 960;
+/** Abstand der Live-Erkennung: ~6–8 Durchläufe pro Sekunde genügen und lassen dem Handy Luft. */
+const LIVE_INTERVAL_MS = 120;
+/** Automatisches Auslösen an/aus – pro Gerät gemerkt (Browser-Speicher). */
+const AUTO_CAPTURE_KEY = 'deliveryScanner.autoCapture';
+const CAMERA_MESSAGES = {
+  search: 'Lieferschein ins Bild halten',
+  closer: 'Näher heran',
+  next: 'Nächste Seite hinlegen – oder „Fertig“',
+};
+
+function loadAutoCapture() {
+  try { return localStorage.getItem(AUTO_CAPTURE_KEY) !== '0'; } catch { return true; }
+}
 const STATUS_COLORS = { sure: '#059669', check: '#d97706', none: '#dc2626' };
 
 const template = /* html */ `
@@ -59,7 +75,9 @@ const template = /* html */ `
             Mehrseitige Lieferscheine Seite für Seite aufnehmen.
           </p>
           <div class="mb-4 grid grid-cols-2 gap-2">
-            <label class="btn btn-primary cursor-pointer py-3">
+            <!-- Kamera im Scanner (automatisches Auslösen); ohne takePhoto() bzw. ohne Kamerazugriff die System-Kamera -->
+            <button type="button" x-show="liveCamera()" class="btn btn-primary py-3" @click="startCamera()" data-start-camera>Foto aufnehmen</button>
+            <label x-show="!liveCamera()" class="btn btn-primary cursor-pointer py-3">
               Foto aufnehmen
               <input type="file" accept="image/*" capture="environment" class="hidden" @change="addFiles($event)">
             </label>
@@ -85,6 +103,32 @@ const template = /* html */ `
             <button type="button" class="btn btn-success" :disabled="!pages.length || !!busyText" @click="recognize()">
               <span x-text="pages.length > 1 ? pages.length + ' Seiten erkennen' : 'Erkennung starten'"></span>
             </button>
+          </div>
+        </section>
+
+        <!-- Schritt: Kamera (bildschirmfüllend) -->
+        <section x-show="step === 'camera'" class="fixed inset-0 z-50 flex flex-col bg-black text-white" data-camera>
+          <div class="flex items-center gap-3 px-4 py-3 text-sm">
+            <span x-text="pages.length === 1 ? '1 Seite' : pages.length + ' Seiten'" data-camera-count></span>
+            <label class="ml-auto flex cursor-pointer items-center gap-2">
+              <input type="checkbox" class="size-5 accent-emerald-500" x-model="autoCapture" @change="saveAutoCapture()" data-auto-capture>
+              Automatisch auslösen
+            </label>
+          </div>
+          <div class="relative min-h-0 flex-1">
+            <video x-ref="cameraVideo" playsinline muted class="absolute inset-0 h-full w-full object-contain"></video>
+            <canvas x-ref="cameraOverlay" class="pointer-events-none absolute inset-0 h-full w-full"></canvas>
+            <div x-show="camera.flash" class="absolute inset-0 bg-white/60"></div>
+            <div class="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
+              <p class="rounded-full bg-black/70 px-3 py-1 text-center text-sm" :class="camera.warn && 'text-amber-300'" x-text="camera.message" data-camera-message></p>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 items-center px-4 py-4">
+            <button type="button" class="btn btn-secondary justify-self-start" @click="stopCamera()">Fertig</button>
+            <button type="button" class="size-16 justify-self-center rounded-full border-4 border-white bg-white/25 active:bg-white/60 disabled:opacity-40"
+                    :disabled="camera.busy || !camera.ready" @click="cameraShoot(false)" aria-label="Foto aufnehmen" data-shutter></button>
+            <button type="button" x-show="camera.torchSupported" class="btn btn-ghost justify-self-end text-white hover:bg-white/10"
+                    @click="toggleTorch()" x-text="camera.torch ? 'Licht aus' : 'Licht an'"></button>
           </div>
         </section>
 
@@ -375,6 +419,10 @@ function component() {
   let detectedProfile = null;
   let internalNos = []; // auf dem Lieferschein gelesene interne Bestellnummern
   let pageCounter = 0;
+  let cam = null; // geöffnete Kamera (camera.openCamera)
+  let autoTrigger = null;
+  let liveTimer = null;
+  const liveCanvas = document.createElement('canvas');
 
   return {
     isOpen: false,
@@ -383,6 +431,9 @@ function component() {
     libError: '',
     busyText: '',
     pages: [], // [{ id, thumb }]
+    autoCapture: loadAutoCapture(),
+    cameraFailed: false, // Kamera im Scanner ging nicht → System-Kamera
+    camera: { ready: false, busy: false, message: '', warn: false, torch: false, torchSupported: false, flash: false },
     cornersDetected: true,
     loupeSide: '', // '' = Lupe ausgeblendet, sonst 'left'/'right'
     progress: { value: 0, label: '' },
@@ -439,6 +490,7 @@ function component() {
     },
 
     reset() {
+      this.shutdownCamera();
       this.pages.forEach((p) => URL.revokeObjectURL(p.thumb));
       queue = [];
       source = null;
@@ -647,30 +699,7 @@ function component() {
     async acceptCorners() {
       this.busyText = 'Seite wird entzerrt …';
       try {
-        const canvas = rectify(source.canvas, source.corners);
-        const sharp = sharpness(canvas);
-        // Meldungsfoto verkleinert; Eckpunkte deshalb in dessen Koordinaten umgerechnet
-        const reportPhoto = downscale(source.canvas, REPORT_PHOTO_SIDE);
-        const k = reportPhoto.width / source.canvas.width;
-        const scaled = (c) => c && Object.fromEntries(Object.entries(c).map(([n, q]) => [n, { x: q.x * k, y: q.y * k }]));
-        const [jpeg, original] = await Promise.all([toGrayJpeg(downscale(canvas, RECEIPT_PAGE_SIDE)), toJpeg(reportPhoto)]);
-        pageData.push({
-          canvas, jpeg, ocr: null,
-          prepared: null, // aufbereitete Seite für die OCR (vision.prepareForOcr), entsteht bei der Erkennung
-          reads: new Map(), // Zellen-Lesungen (boxKey → { value, conf })
-          // für Problem-Meldungen: Originalfoto und Eckpunkte (Koordinaten im Meldungsfoto)
-          original,
-          meta: {
-            source: { width: reportPhoto.width, height: reportPhoto.height },
-            cornersDetected: source.detected,
-            cornersMethod: source.cornersMethod,
-            cornersAuto: scaled(source.cornersAuto),
-            corners: scaled(source.corners),
-            rectified: { width: canvas.width, height: canvas.height },
-            sharpness: sharp,
-          },
-        });
-        this.pages.push({ id: ++pageCounter, thumb: URL.createObjectURL(jpeg), blurry: sharp < SHARPNESS_MIN });
+        await this.addPage(source);
         source = null;
       } catch (err) {
         toast.error('Entzerrung fehlgeschlagen: ' + (err?.message ?? err));
@@ -678,6 +707,191 @@ function component() {
         this.busyText = '';
       }
       await this.nextFromQueue();
+    },
+
+    /**
+     * Foto (src: { canvas, corners, cornersAuto, cornersMethod, detected }) als Seite übernehmen.
+     * canvas/sharp: bereits entzerrte Seite und ihre Schärfe, falls schon berechnet. → Schärfe
+     */
+    async addPage(src, canvas = rectify(src.canvas, src.corners), sharp = sharpness(canvas)) {
+      // Meldungsfoto verkleinert; Eckpunkte deshalb in dessen Koordinaten umgerechnet
+      const reportPhoto = downscale(src.canvas, REPORT_PHOTO_SIDE);
+      const k = reportPhoto.width / src.canvas.width;
+      const scaled = (c) => c && Object.fromEntries(Object.entries(c).map(([n, q]) => [n, { x: q.x * k, y: q.y * k }]));
+      const [jpeg, original] = await Promise.all([toGrayJpeg(downscale(canvas, RECEIPT_PAGE_SIDE)), toJpeg(reportPhoto)]);
+      pageData.push({
+        canvas, jpeg, ocr: null,
+        prepared: null, // aufbereitete Seite für die OCR (vision.prepareForOcr), entsteht bei der Erkennung
+        reads: new Map(), // Zellen-Lesungen (boxKey → { value, conf })
+        // für Problem-Meldungen: Originalfoto und Eckpunkte (Koordinaten im Meldungsfoto)
+        original,
+        meta: {
+          source: { width: reportPhoto.width, height: reportPhoto.height },
+          cornersDetected: src.detected,
+          cornersMethod: src.cornersMethod,
+          cornersAuto: scaled(src.cornersAuto),
+          corners: scaled(src.corners),
+          rectified: { width: canvas.width, height: canvas.height },
+          sharpness: sharp,
+        },
+      });
+      this.pages.push({ id: ++pageCounter, thumb: URL.createObjectURL(jpeg), blurry: sharp < SHARPNESS_MIN });
+      return sharp;
+    },
+
+    // ---- Kamera im Scanner --------------------------------------------------
+    liveCamera() {
+      return cameraSupported() && !this.cameraFailed;
+    },
+
+    saveAutoCapture() {
+      try { localStorage.setItem(AUTO_CAPTURE_KEY, this.autoCapture ? '1' : '0'); } catch { /* nur Komfort */ }
+    },
+
+    async startCamera() {
+      this.step = 'camera';
+      this.camera = { ready: false, busy: false, message: 'Kamera wird gestartet …', warn: false, torch: false, torchSupported: false, flash: false };
+      await this.$nextTick();
+      const video = this.$refs.cameraVideo;
+      try {
+        await loadVision();
+        cam = await openCamera(video);
+      } catch (err) {
+        this.shutdownCamera();
+        this.cameraFailed = true;
+        this.step = 'pages';
+        toast.error('Kamera im Browser nicht verfügbar (' + (err?.message || err?.name || err) + '). „Foto aufnehmen“ öffnet jetzt die Kamera-App.');
+        return;
+      }
+      // z. B. Kamera von einer anderen App übernommen
+      cam.track.addEventListener('ended', () => {
+        if (this.step !== 'camera') return;
+        this.stopCamera();
+        toast.error('Die Kamera wurde beendet. Bitte erneut „Foto aufnehmen“ tippen.');
+      });
+      autoTrigger = new AutoTrigger();
+      Object.assign(this.camera, { ready: true, torchSupported: cam.torch, message: CAMERA_MESSAGES.search });
+      this.liveStep();
+    },
+
+    /** Live-Erkennung: Blatt im Vorschaubild suchen, Rahmen zeichnen, ggf. automatisch auslösen. */
+    liveStep() {
+      liveTimer = null;
+      if (this.step !== 'camera' || !cam) return;
+      const video = this.$refs.cameraVideo;
+      if (!this.camera.busy && video.videoWidth) {
+        liveCanvas.width = LIVE_DETECT_WIDTH;
+        liveCanvas.height = Math.round(video.videoHeight * (LIVE_DETECT_WIDTH / video.videoWidth));
+        liveCanvas.getContext('2d').drawImage(video, 0, 0, liveCanvas.width, liveCanvas.height);
+        const det = detectCorners(liveCanvas);
+        const r = autoTrigger.update(det.detected ? det.corners : null, liveCanvas.width, liveCanvas.height, performance.now());
+        this.drawLive(r);
+        if (!this.camera.warn) {
+          this.camera.message = CAMERA_MESSAGES[r.state] ?? (this.autoCapture ? 'Ruhig halten …' : 'Bereit – auslösen');
+        }
+        if (r.state === 'ready' && this.autoCapture) this.cameraShoot(true);
+      }
+      liveTimer = setTimeout(() => this.liveStep(), LIVE_INTERVAL_MS);
+    },
+
+    /** Erkanntes Blatt über dem Kamerabild (object-contain: Bild ggf. mit Rand) – grün füllt sich beim Halten. */
+    drawLive({ corners, hold, state }) {
+      const view = this.$refs.cameraOverlay;
+      const W = Math.round(view.clientWidth * devicePixelRatio);
+      const H = Math.round(view.clientHeight * devicePixelRatio);
+      view.width = W;
+      view.height = H;
+      const ctx = view.getContext('2d');
+      if (!corners) return;
+      const k = Math.min(W / liveCanvas.width, H / liveCanvas.height);
+      const ox = (W - liveCanvas.width * k) / 2;
+      const oy = (H - liveCanvas.height * k) / 2;
+      const good = state === 'hold' || state === 'ready';
+      ctx.lineWidth = 4 * devicePixelRatio;
+      ctx.strokeStyle = state === 'next' ? '#94a3b8' : good ? '#22c55e' : '#f59e0b';
+      ctx.fillStyle = good ? `rgba(34, 197, 94, ${0.08 + 0.25 * hold})` : 'rgba(245, 158, 11, 0.12)';
+      ctx.beginPath();
+      CORNER_KEYS.forEach((key, i) => {
+        const x = ox + corners[key].x * k;
+        const y = oy + corners[key].y * k;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    },
+
+    /**
+     * Foto aufnehmen und gleich als Seite übernehmen. Verwackelt (das entsteht beim Auslösen selbst, die
+     * Vorschau sieht es nicht): automatisch ausgelöst → verwerfen und erneut versuchen; von Hand ausgelöst →
+     * behalten, aber als unscharf markieren. Blattkanten im Foto nicht gefunden → nach „Fertig“ von Hand setzen.
+     */
+    async cameraShoot(auto) {
+      if (this.camera.busy || !cam) return;
+      this.camera.busy = true;
+      this.camera.warn = false;
+      autoTrigger.shot(performance.now());
+      // Rückmeldung per Vibration – nur nach einer Berührung erlaubt (sonst Warnung in der Konsole)
+      if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(50);
+      this.camera.flash = true;
+      setTimeout(() => { this.camera.flash = false; }, 150);
+      this.camera.message = 'Foto wird verarbeitet …';
+      try {
+        const blob = await takePhoto(cam);
+        const canvas = await fileToCanvas(blob);
+        const { corners, detected, method } = detectCorners(canvas);
+        if (!detected) {
+          queue.push(new File([blob], `seite-${pageCounter + queue.length + 1}.jpg`, { type: blob.type || 'image/jpeg' }));
+          this.cameraNote('Blattkanten nicht erkannt – nach „Fertig“ bitte die Ecken setzen.');
+          return;
+        }
+        const src = { canvas, corners, cornersAuto: structuredClone(corners), cornersMethod: method, detected };
+        const page = rectify(canvas, corners);
+        const sharp = sharpness(page);
+        if (sharp < SHARPNESS_MIN && auto) {
+          autoTrigger.shotCorners = null; // dieselbe Seite noch einmal versuchen
+          this.cameraNote('Verwackelt – bitte ruhig halten, neues Foto …');
+          return;
+        }
+        await this.addPage(src, page, sharp);
+        const n = this.pages.length;
+        if (sharp < SHARPNESS_MIN) this.cameraNote(`Seite ${n} ist unscharf – besser neu aufnehmen.`);
+        else this.camera.message = `Seite ${n} aufgenommen`;
+      } catch (err) {
+        this.cameraNote('Foto fehlgeschlagen: ' + (err?.message ?? err));
+      } finally {
+        this.camera.busy = false;
+      }
+    },
+
+    /** Hinweis im Kamerabild, bleibt 2,5 s stehen (statt der laufenden Anleitung). */
+    cameraNote(text) {
+      Object.assign(this.camera, { message: text, warn: true });
+      setTimeout(() => { if (this.camera.message === text) this.camera.warn = false; }, 2500);
+    },
+
+    async toggleTorch() {
+      try {
+        await setTorch(cam, !this.camera.torch);
+        this.camera.torch = !this.camera.torch;
+      } catch (err) {
+        this.cameraNote('Licht nicht schaltbar: ' + (err?.message ?? err));
+      }
+    },
+
+    /** „Fertig“: Kamera schließen; Fotos ohne erkannte Kanten gehen jetzt durch die Eckenprüfung. */
+    async stopCamera() {
+      this.shutdownCamera();
+      this.step = 'pages';
+      if (queue.length) await this.nextFromQueue();
+    },
+
+    shutdownCamera() {
+      clearTimeout(liveTimer);
+      liveTimer = null;
+      closeCamera(cam, this.$refs?.cameraVideo);
+      cam = null;
+      autoTrigger = null;
     },
 
     removePage(i) {

@@ -21,10 +21,10 @@ export const PAGE_MAX_WIDTH = 4096;
 /** Breite, auf der die Schärfe gemessen wird (Werte damit unabhängig von der Fotoauflösung vergleichbar). */
 const SHARPNESS_WIDTH = 1800;
 /**
- * Unter diesem Schärfewert (Varianz des Laplace-Filters auf der entzerrten Seite) gilt ein Foto als unscharf.
- * Kalibriert 11/2026 an echten Belegen und dem Testblatt: lesbare Fotos 70–720, verwackelte < 40.
+ * Unter diesem Schärfewert (siehe sharpness) gilt ein Foto als unscharf. Kalibriert 22.11.2026 an echten
+ * Belegen, Mouser-Testbelegen und dem Testblatt KT1: lesbare Fotos 720–3700, verwackeltes Foto 181.
  */
-export const SHARPNESS_MIN = 40;
+export const SHARPNESS_MIN = 400;
 
 let readyPromise = null;
 
@@ -219,8 +219,10 @@ export function rectify(canvas, corners) {
 }
 
 /**
- * Schärfe der entzerrten Seite: Varianz des Laplace-Filters auf einer Kopie mit SHARPNESS_WIDTH Breite
- * (größer = schärfer; hängt auch vom Inhalt ab – ein fast leeres Blatt hat wenig Kanten).
+ * Schärfe der entzerrten Seite: Varianz des Laplace-Filters, gemessen nur in der Nähe von Kanten (Text,
+ * Linien) auf einer Kopie mit SHARPNESS_WIDTH Breite. Größer = schärfer. Anders als die Varianz über die
+ * ganze Seite hängt der Wert kaum davon ab, wie viel Text auf dem Blatt steht (bis 11/2026: ganze Seite;
+ * ein dicht bedruckter Beleg lag dort doppelt so hoch wie ein gleich scharfes, fast leeres Blatt).
  */
 export function sharpness(page) {
   const cv = window.cv;
@@ -231,16 +233,24 @@ export function sharpness(page) {
   copy.getContext('2d').drawImage(page, 0, 0, copy.width, copy.height);
   const src = cv.imread(copy);
   const gray = new cv.Mat();
+  const blurred = new cv.Mat();
+  const edges = new cv.Mat();
+  const kernel = cv.Mat.ones(5, 5, cv.CV_8U);
   const lap = new cv.Mat();
   const mean = new cv.Mat();
   const std = new cv.Mat();
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    // Kantenmaske: Canny auf leicht geglättetem Bild (Papierstruktur, Rauschen fallen weg), etwas verbreitert
+    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+    cv.Canny(blurred, edges, 30, 90);
+    cv.dilate(edges, edges, kernel);
+    if (cv.countNonZero(edges) < 0.002 * edges.rows * edges.cols) return 0; // (fast) leeres Bild
     cv.Laplacian(gray, lap, cv.CV_64F);
-    cv.meanStdDev(lap, mean, std);
+    cv.meanStdDev(lap, mean, std, edges);
     return Math.round(std.doubleAt(0, 0) ** 2);
   } finally {
-    [src, gray, lap, mean, std].forEach((m) => m.delete());
+    [src, gray, blurred, edges, kernel, lap, mean, std].forEach((m) => m.delete());
   }
 }
 
