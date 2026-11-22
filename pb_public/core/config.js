@@ -78,6 +78,8 @@ export function stepMeta(value) {
     const step = track.steps.find((s) => s.value === value);
     if (step) return { ...step, track };
   }
+  const ware = WARE_STEPS.find((s) => s.value === value);
+  if (ware) return { ...ware, track: null }; // Ware: aus den Lieferbuchungen, keine gespeicherten Schritte
   return { value, label: value, track: null };
 }
 

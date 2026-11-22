@@ -9,7 +9,7 @@
 import {
   STEP_TRACKS, WARE_STEPS, trackStates, stepMeta, supplierLabel, INTERNAL_ORDER_NO_RE, defaultWithoutInternalOrderNo,
 } from '../core/config.js';
-import { setOrderStep, errorMessage } from '../core/api.js';
+import { setOrderStep, bookRestDelivered, cancelDelivery, errorMessage } from '../core/api.js';
 import { fmt, toast } from '../core/ui.js';
 
 const CHECK = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-3.5" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>';
@@ -63,6 +63,7 @@ function orderName(order) {
 /**
  * Nächster sinnvoller Schritt (Hauptknopf der Bestellung, Hervorhebung): der erste offene nach dem zuletzt
  * erledigten. Die Freigabe ist meist nicht nötig → dann „bestellt“; ohne interne Nummer (Muster) direkt „bestellt“.
+ * Nach „bestellt“ ist „Geliefert“ dran, solange Ware offen ist, danach die Rechnung.
  */
 export function nextStepOf(order, steps) {
   if (!order || order.status === 'abgeschlossen') return null;
@@ -77,6 +78,7 @@ export function nextStepOf(order, steps) {
     const candidate = firstOpenAfterLast(orderTrack);
     return !candidate || candidate.value === 'approval' ? 'ordered' : candidate.value;
   }
+  if (['bestellt', 'teilgeliefert'].includes(order.status)) return 'delivered';
   const candidate = firstOpenAfterLast(invoiceTrack);
   return candidate && candidate.value !== 'closed' ? candidate.value : null;
 }
@@ -126,9 +128,12 @@ export function stepView(order, steps, deliveries = []) {
       state = 'done';
       detail = fmt.date(order.delivered_at);
     }
-    const disabledReason = 'Ergibt sich automatisch aus den Lieferbuchungen.';
+    // „Geliefert“ abhaken bucht den Rest aller Positionen (deliverRest); „Teilgeliefert“ ergibt sich nur aus Buchungen.
+    const canDeliverRest = w.value === 'delivered' && state === 'open' && ['bestellt', 'teilgeliefert'].includes(order.status);
+    const disabledReason = canDeliverRest ? '' : 'Ergibt sich aus den Lieferbuchungen.';
     const tip = state === 'done' ? detail || NO_DATE : '';
-    return { ...w, state, detail, tip, tipLong: tip, ariaLabel: `${w.label}: ${tip || (state === 'skipped' ? 'übersprungen' : 'offen')}`, record: null, next: false, clickable: false, disabledReason };
+    return { ...w, state, detail, tip, tipLong: tip, ariaLabel: `${w.label}: ${tip || (state === 'skipped' ? 'übersprungen' : 'offen')}`,
+      record: null, next: w.value === next, clickable: canDeliverRest, disabledReason };
   });
 
   const [orderTrack, invoiceTrack] = STEP_TRACKS;
@@ -174,6 +179,7 @@ export async function changeStepDate(order, value, current = '') {
  * steps: { step: record } der Bestellung (Stand vor dem Klick).
  */
 export async function toggleStep(order, steps, value) {
+  if (value === 'delivered') return deliverRest(order);
   const meta = stepMeta(value);
   const name = orderName(order);
   const record = steps[value];
@@ -218,6 +224,34 @@ export async function toggleStep(order, steps, value) {
     { label: 'Datum ändern', icon: 'calendar', run: () => changeStepDate(order, value, today()) },
     { label: 'Rückgängig', icon: 'undo', run: () => apply(order, value, { done: false }) },
   ]);
+}
+
+/**
+ * „Geliefert“ abhaken: Rest aller Positionen sofort als eine Lieferung buchen; „Rückgängig“ nimmt die Buchung zurück.
+ */
+async function deliverRest(order) {
+  const name = orderName(order);
+  let result;
+  try {
+    result = await bookRestDelivered(order.id);
+  } catch (err) {
+    toast.error(errorMessage(err));
+    notifyChanged(order);
+    return;
+  }
+  notifyChanged(order);
+  toast.done(`„Geliefert“ abgehakt – alle Positionen vollständig geliefert gebucht (${name}).`, [{
+    label: 'Rückgängig',
+    icon: 'undo',
+    run: async () => {
+      try {
+        await cancelDelivery(result.delivery.id);
+      } catch (err) {
+        toast.error(errorMessage(err));
+      }
+      notifyChanged(order);
+    },
+  }]);
 }
 
 // ---------------------------------------------------------------------------

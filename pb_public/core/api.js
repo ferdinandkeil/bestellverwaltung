@@ -88,6 +88,16 @@ export function bookDelivery(orderId, lines, { note = '', receipt = null, newIte
 // ---------------------------------------------------------------------------
 
 /** Beginn des Zeitraums für abgeschlossene Bestellungen: '3m', '12m', 'year:JJJJ' oder 'all'. → { from, to } | null */
+/** „Geliefert“ abhaken: Rest aller Positionen als eine Lieferung buchen. → { delivery, status } */
+export function bookRestDelivered(orderId) {
+  return pb.send(`/api/lab/orders/${orderId}/deliveries/rest`, { method: 'POST' });
+}
+
+/** Letzte Lieferbuchung zurücknehmen („Rückgängig“, nur ohne Beleg). → { status } */
+export function cancelDelivery(deliveryId) {
+  return pb.send(`/api/lab/deliveries/${deliveryId}`, { method: 'DELETE' });
+}
+
 export function periodRange(period, now = new Date()) {
   if (period === '3m' || period === '12m') {
     const from = new Date(now);
