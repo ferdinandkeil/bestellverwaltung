@@ -116,11 +116,14 @@ export async function confirmAction(message, { confirmLabel = 'Bestätigen', can
 const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 const dateTime = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' });
+const shortDate = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
 export const fmt = {
   eur: (n) => eur.format(n || 0),
   dateTime: (s) => (s ? dateTime.format(new Date(s.replace(' ', 'T'))) : ''),
   date: (s) => (s ? date.format(new Date(s.replace(' ', 'T'))) : ''),
+  /** 22.11.26 – für schmale Spalten */
+  shortDate: (s) => (s ? shortDate.format(new Date(s.replace(' ', 'T'))) : ''),
 };
 
 /** Leere Zeichenkette → null, sonst Zahl (für optionale Zahlenfelder). */

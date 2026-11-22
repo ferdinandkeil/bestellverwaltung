@@ -1,13 +1,13 @@
 // Startseite „Bestellungen“ (ARCHITECTURE.md Kap. 7): Warenkörbe als Leiste, Bestellungen als Tabelle mit den
 // Verwaltungsschritten (PC) bzw. als Karten (Smartphone), Filter, Suche, Erfassung neuer Positionen, Plugin-Slot.
 // Schritte werden direkt in der Tabelle abgehakt (views/order-steps.js, „Handeln statt fragen“).
-import { SUPPLIERS, STATUSES, supplierLabel, statusMeta, stepMeta, groupsByCourse, groupLabel } from '../core/config.js';
+import { SUPPLIERS, STATUSES, supplierLabel, statusMeta, groupsByCourse, groupLabel } from '../core/config.js';
 import { listOverviewOrders, listOpenCarts, listGroups, subscribe, errorMessage } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
 import { unmatchedReceiptsSection } from './unmatched-receipts.js';
-import { STEP_BOX, stepView, nextStepOf, toggleStep } from './order-steps.js';
+import { STEP_BOX, stepView, toggleStep } from './order-steps.js';
 
 const FILTER_KEY = 'overview-filters';
 const SEARCH_DELAY_MS = 300;
@@ -48,8 +48,8 @@ const template = /* html */ `
     </div>
   </section>
 
-  <!-- Filter: auf dem Smartphone eingeklappt, aktive Filter als Chips -->
-  <div class="mb-3 flex flex-wrap items-center gap-2 sm:hidden">
+  <!-- Filter: auf Smartphone/Tablet eingeklappt, aktive Filter als Chips -->
+  <div class="mb-3 flex flex-wrap items-center gap-2 lg:hidden">
     <button type="button" class="btn btn-secondary btn-sm" @click="filtersOpen = !filtersOpen" :aria-expanded="filtersOpen">
       Filter
       <span x-show="activeFilters().length" class="rounded-full bg-blue-600 px-1.5 text-[10px] text-white" x-text="activeFilters().length"></span>
@@ -62,7 +62,7 @@ const template = /* html */ `
       </button>
     </template>
   </div>
-  <div class="mb-4 flex-wrap items-end gap-x-4 gap-y-3 sm:flex" :class="filtersOpen ? 'flex' : 'hidden'" data-overview-filters>
+  <div class="mb-4 flex-wrap items-end gap-x-4 gap-y-3 lg:flex" :class="filtersOpen ? 'flex' : 'hidden'" data-overview-filters>
     <div class="w-full sm:w-auto">
       <span class="label">Phase</span>
       <div class="flex flex-wrap gap-1.5">
@@ -108,19 +108,23 @@ const template = /* html */ `
     Keine Bestellungen gefunden.
   </p>
 
-  <!-- PC: Tabelle wie die bisherige Verwaltungstabelle -->
-  <div x-show="rows.length" class="card hidden overflow-x-auto lg:block" data-overview-table>
+  <!-- Bestellungen als Tabelle. PC (lg+): alle Schritt-Spalten, Klick auf Nr./Wo/Was öffnet die Bestellung.
+       Smartphone/Tablet: nur Nr., Wo, Was (ab sm), Datum und Phase; Antippen klappt die Schritte auf. -->
+  <div x-show="rows.length" class="card overflow-x-auto" data-overview-table>
     <table class="w-full text-sm">
       <thead class="text-xs text-slate-500">
         <tr>
-          <th rowspan="2" class="px-3 pt-2 text-left font-semibold">Bestell-Nr.</th>
-          <th rowspan="2" class="px-3 pt-2 text-left font-semibold">Wo</th>
-          <th rowspan="2" class="px-3 pt-2 text-left font-semibold">Was</th>
+          <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold">Bestell-Nr.</th>
+          <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold">Wo</th>
+          <th rowspan="2" class="hidden px-3 py-2 text-left align-bottom font-semibold sm:table-cell">Was</th>
+          <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold">Datum</th>
+          <th rowspan="2" class="px-3 py-2 text-left align-bottom font-semibold lg:hidden">Phase</th>
+          <th rowspan="2" class="w-8 lg:hidden"><span class="sr-only">Aufklappen</span></th>
           <template x-for="g in columnGroups" :key="g.label">
-            <th :colspan="g.steps.length" class="border-l border-slate-200 px-2 pt-2 text-center font-semibold" x-text="g.label"></th>
+            <th :colspan="g.steps.length" class="hidden border-l border-slate-200 px-2 pt-2 text-center font-semibold lg:table-cell" x-text="g.label"></th>
           </template>
         </tr>
-        <tr>
+        <tr class="hidden lg:table-row">
           <template x-for="g in columnGroups" :key="'h-' + g.label">
             <template x-for="(s, i) in g.steps" :key="s.value">
               <th class="px-1 pb-2 pt-1 text-center font-normal" :class="i === 0 && 'border-l border-slate-200'" :title="s.label" x-text="s.short"></th>
@@ -128,21 +132,33 @@ const template = /* html */ `
           </template>
         </tr>
       </thead>
-      <tbody>
-        <template x-for="row in rows" :key="row.order.id">
-          <tr class="border-t border-slate-100 hover:bg-slate-50/60" :class="row.closed && 'text-slate-400'" :data-order="row.order.id">
-            <td class="whitespace-nowrap px-3 py-2 font-mono text-xs">
-              <a :href="'#/orders/' + row.order.id" class="hover:text-blue-700 hover:underline" x-text="row.number"></a>
+      <template x-for="row in rows" :key="row.order.id">
+        <tbody class="border-t border-slate-100" :class="row.closed && 'text-slate-400'">
+          <tr class="cursor-pointer hover:bg-slate-50/60 lg:cursor-auto" :data-order="row.order.id" @click="rowClicked(row, $event)">
+            <td class="whitespace-nowrap px-3 py-2.5 font-mono text-xs lg:py-2">
+              <a :href="'#/orders/' + row.order.id" class="pointer-events-none hover:text-blue-700 hover:underline lg:pointer-events-auto" x-text="row.number"></a>
             </td>
-            <td class="whitespace-nowrap px-3 py-2">
-              <a :href="'#/orders/' + row.order.id" class="font-medium hover:text-blue-700 hover:underline" x-text="supplierLabel(row.order)"></a>
+            <td class="max-w-28 truncate px-3 py-2.5 sm:max-w-none sm:whitespace-nowrap lg:py-2">
+              <a :href="'#/orders/' + row.order.id" class="pointer-events-none font-medium hover:text-blue-700 hover:underline lg:pointer-events-auto" x-text="supplierLabel(row.order)"></a>
             </td>
-            <td class="px-3 py-2">
-              <a :href="'#/orders/' + row.order.id" class="hover:text-blue-700 hover:underline" x-text="row.order.subject || '–'"></a>
+            <td class="hidden px-3 py-2.5 sm:table-cell lg:py-2">
+              <a :href="'#/orders/' + row.order.id" class="pointer-events-none line-clamp-1 hover:text-blue-700 hover:underline lg:pointer-events-auto" x-text="row.order.subject || '–'"></a>
+            </td>
+            <td class="whitespace-nowrap px-3 py-2.5 text-xs text-slate-600 lg:py-2" :class="row.closed && 'text-slate-400'" :title="'angelegt ' + fmt.date(row.order.created)">
+              <span class="sm:hidden" x-text="fmt.shortDate(row.order.created)"></span>
+              <span class="hidden sm:inline" x-text="fmt.date(row.order.created)"></span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-2.5 lg:hidden">
+              <span class="badge" :class="statusMeta(row.order.status).badge" x-text="statusMeta(row.order.status).short || statusMeta(row.order.status).label"></span>
+            </td>
+            <td class="pr-2 text-right lg:hidden">
+              <button type="button" class="rounded p-1 text-slate-500" :aria-expanded="!!open[row.order.id]" aria-label="Schritte anzeigen" data-row-toggle>
+                <svg viewBox="0 0 20 20" fill="currentColor" class="size-5 transition-transform" :class="open[row.order.id] && 'rotate-180'" aria-hidden="true"><path fill-rule="evenodd" d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+              </button>
             </td>
             <template x-for="track in row.view" :key="track.key">
               <template x-for="(s, i) in track.steps" :key="s.value">
-                <td class="px-1 py-2 text-center" :class="{ 'border-l border-slate-100': i === 0, 'opacity-50': row.closed }">
+                <td class="hidden px-1 py-2 text-center lg:table-cell" :class="{ 'border-l border-slate-100': i === 0, 'opacity-50': row.closed }">
                   <button type="button" class="inline-flex rounded align-middle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                           :class="s.clickable ? 'cursor-pointer' : 'cursor-default'" :disabled="!s.clickable"
                           :title="s.tooltip" :aria-label="s.tooltip" :data-step="s.value" :data-state="s.state"
@@ -151,32 +167,34 @@ const template = /* html */ `
               </template>
             </template>
           </tr>
-        </template>
-      </tbody>
+          <!-- Aufgeklappt (nur Smartphone/Tablet): Schritte mit Beschriftung, Was, Link zur Bestellung -->
+          <tr x-show="open[row.order.id]" class="lg:hidden" data-row-details>
+            <td colspan="6" class="bg-slate-50 px-3 pt-1 pb-3" :class="row.closed && 'opacity-60'">
+              <p x-show="row.order.subject" class="mb-2 text-sm text-slate-700 sm:hidden" x-text="row.order.subject"></p>
+              <template x-for="track in row.view" :key="'m-' + track.key">
+                <div class="flex gap-2 py-1">
+                  <div class="w-20 shrink-0 pt-1 text-xs font-semibold text-slate-500" x-text="track.label"></div>
+                  <div class="flex flex-wrap gap-x-1 gap-y-0.5">
+                    <template x-for="s in track.steps" :key="s.value">
+                      <button type="button" class="inline-flex items-center gap-1.5 rounded px-1 py-1 text-xs text-slate-700 disabled:text-slate-400"
+                              :disabled="!s.clickable" :title="s.tooltip" :aria-label="s.tooltip" :data-step="s.value" :data-state="s.state"
+                              @click="toggleStep(row.order, row.steps, s.value)">${STEP_BOX}<span x-text="s.short"></span></button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <div class="mt-2 flex items-center justify-end gap-3 text-sm">
+                <span class="text-slate-500" x-text="positionsLabel(row.order)"></span>
+                <a :href="'#/orders/' + row.order.id" class="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-blue-700 hover:bg-blue-50" data-order-details>
+                  Positionen &amp; Details <span aria-hidden="true">→</span>
+                </a>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </template>
     </table>
   </div>
-
-  <!-- Smartphone/Tablet: Karten -->
-  <ul class="grid gap-2 md:grid-cols-2 lg:hidden">
-    <template x-for="row in rows" :key="row.order.id">
-      <li>
-        <a :href="'#/orders/' + row.order.id" class="card block p-3 transition hover:border-blue-300" :class="row.closed && 'opacity-60'">
-          <div class="flex items-start gap-2">
-            <div class="min-w-0 flex-1">
-              <div class="truncate font-semibold">
-                <span x-text="supplierLabel(row.order)"></span><span x-show="row.order.subject" class="font-normal text-slate-600" x-text="' · ' + row.order.subject"></span>
-              </div>
-              <div class="text-xs text-slate-500" x-text="row.number + ' · ' + fmt.date(row.order.created)"></div>
-            </div>
-            <span class="badge" :class="statusMeta(row.order.status).badge" x-text="statusMeta(row.order.status).label"></span>
-          </div>
-          <div x-show="row.next" class="mt-2 text-sm text-slate-600">
-            Nächster Schritt: <span class="font-medium text-slate-900" x-text="row.next && stepMeta(row.next).label"></span>
-          </div>
-        </a>
-      </li>
-    </template>
-  </ul>
 
   <!-- Modal: Position erfassen -->
   <div x-show="showForm" x-transition.opacity class="modal-backdrop" @keydown.escape.window="showForm = false"
@@ -221,7 +239,7 @@ function component() {
   return {
     suppliers: SUPPLIERS,
     tablePhases: TABLE_PHASES,
-    supplierLabel, statusMeta, stepMeta, groupsByCourse, fmt, toggleStep,
+    supplierLabel, statusMeta, groupsByCourse, fmt, toggleStep,
     filters: loadFilters(),
     search: '',
     searchTimer: null,
@@ -234,6 +252,8 @@ function component() {
     error: '',
     showForm: false,
     filtersOpen: false,
+    /** Aufgeklappte Zeilen (Smartphone/Tablet): { orderId: true } */
+    open: {},
     unsubscribe: null,
     reloadSeq: 0,
 
@@ -263,6 +283,12 @@ function component() {
       } catch (err) {
         toast.error(errorMessage(err));
       }
+    },
+
+    /** Smartphone/Tablet: Antippen der Zeile klappt die Schritte auf; am PC öffnen die Links die Bestellung. */
+    rowClicked(row, event) {
+      if (window.matchMedia('(min-width: 64rem)').matches || event.target.closest('[data-step]')) return;
+      this.open = { ...this.open, [row.order.id]: !this.open[row.order.id] };
     },
 
     positionsLabel(order) {
@@ -328,7 +354,6 @@ function component() {
             order,
             steps,
             view: stepView(order, steps, order.expand?.deliveries_via_order ?? []),
-            next: nextStepOf(order, steps),
             closed: order.status === 'abgeschlossen',
             number: order.internal_order_no || (order.without_internal_order_no ? 'ohne Nr.' : '–'),
           };

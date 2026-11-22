@@ -30,7 +30,7 @@ async function seed() {
 // ---------------------------------------------------------------------------
 // Ablauf
 // ---------------------------------------------------------------------------
-const ORDER_LINKS = `document.querySelectorAll('#view ul a[href^="#/orders/"]')`; // Karten (Smartphone)
+const ORDER_LINKS = `document.querySelectorAll('[data-overview-table] tr[data-order]')`; // Zeilen der Übersicht
 const CART_LINKS = `document.querySelectorAll('#view [data-cart]')`;
 /** Letzte (neueste) Toast-Aktion mit dieser Beschriftung anklicken. */
 const TOAST_ACTION = (label) => `[...document.querySelectorAll('[data-toast-action]')].filter((e) => e.innerText.trim() === ${JSON.stringify(label)}).pop()`;
@@ -70,7 +70,7 @@ try {
   if (!(await b.evaluate(`document.querySelector('[data-prominent-action]')?.offsetParent && document.querySelector('[data-prominent-action]').innerText.includes('Lieferschein scannen')`))) {
     throw new Error('Smartphone: „Lieferschein scannen“ nicht als Hauptknopf oben');
   }
-  ok('Login → Startseite: Warenkorb in der Leiste, 1 Bestellung als Karte, „Lieferschein scannen“ groß oben');
+  ok('Login → Startseite: Warenkorb in der Leiste, 1 Bestellung in der kompakten Tabelle, „Lieferschein scannen“ groß oben');
   await b.screenshot('02-dashboard');
 
   if (await b.evaluate(`!!document.querySelector('#view select')?.offsetParent`)) throw new Error('Filter sollten mobil eingeklappt sein');
@@ -96,10 +96,14 @@ try {
   await b.clickText('.modal-panel button', 'Schließen');
   ok('Akzeptanzkriterium: Merge auf 10 Stück');
 
-  await b.evaluate(`[...${ORDER_LINKS}].find((a) => a.innerText.includes('Reichelt')).click()`);
+  // Smartphone: Antippen klappt die Schritte auf, „Positionen & Details“ öffnet die Bestellung
+  await b.evaluate(`[...${ORDER_LINKS}].find((r) => r.innerText.includes('Reichelt')).click()`);
+  await b.waitFor(`[...document.querySelectorAll('[data-row-details]')].some((d) => d.offsetParent && d.querySelector('[data-step=ordered]')?.dataset.state === 'done')`, 'Zeile aufgeklappt');
+  await b.screenshot('03b-aufgeklappt');
+  await b.evaluate(`[...document.querySelectorAll('[data-order-details]')].find((a) => a.offsetParent).click()`);
   await b.waitFor(`document.querySelector('[x-data=orderDetailView]') && document.body.innerText.includes('Lieferhistorie')`, 'Detail');
   if ((await b.evaluate(BADGE)) !== 'Teilgeliefert') throw new Error('Status sollte Teilgeliefert sein');
-  ok('Detail Reichelt (teilgeliefert)');
+  ok('Zeile aufgeklappt (Schritte), Detail Reichelt (teilgeliefert) über „Positionen & Details“');
   await b.screenshot('04-detail');
 
   await b.clickText('button', '+1');

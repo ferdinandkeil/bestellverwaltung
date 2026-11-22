@@ -114,7 +114,7 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 **Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidungen in ARCHITECTURE Kap. 7 (Startseite, „Handeln statt fragen“, keine Beträge) und 4.1/4.3 (`closed_at`).
 1. Toasts mit Aktionen („Rückgängig“, „Datum ändern“), verzögertes Löschen (`deferredAction`).
 2. `orders.closed_at` (Hook), `date: null` = Datum unbekannt in der Schritt-Route; Tests.
-3. Startseite: Warenkorb-Leiste, Tabelle mit Schritt-Checkboxen (PC), Karten mit „Lieferschein scannen“ (Smartphone), Filter (Phase, Zeitraum, Lieferant, Gruppe), Suche; abgeschlossene ausgegraut.
+3. Startseite: Warenkorb-Leiste, Tabelle mit Schritt-Checkboxen (PC), kompakte aufklappbare Tabelle und „Lieferschein scannen“ (Smartphone/Tablet), Filter (Phase, Zeitraum, Lieferant, Gruppe), Suche; abgeschlossene ausgegraut.
 4. Verwaltungsschritte in der Bestellung ebenfalls ohne Rückfrage (gemeinsame Logik); Ablage „Lieferscheine ohne Bestellung“: Löschen mit „Rückgängig“; Preisfeld im Formular „Position erfassen“ entfällt.
 5. Browser-Tests angepasst.
 
