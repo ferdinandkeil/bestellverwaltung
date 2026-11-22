@@ -85,8 +85,26 @@ try {
   await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Filter zurücksetzen');
   ok('Filter mobil eingeklappt, Gruppenfilter mit Chip');
 
-  // Smartphone: Warenkorb-Symbol öffnet die eigene Seite, dort „+ Position erfassen“
-  await b.evaluate(`document.querySelector('[data-cart-button]').click()`);
+  // Smartphone: Hamburger-Menü mit Navigation und Logout; Warenkorb als fester Knopf unten rechts
+  if (await b.evaluate(`!!document.querySelector('[data-cart-button]').offsetParent || !document.querySelector('[data-cart-fab]').getClientRects().length`)) {
+    throw new Error('Smartphone: Warenkorb gehört als Knopf unten rechts, nicht in die Kopfzeile');
+  }
+  await b.evaluate(`document.querySelector('[data-menu-button]').click()`);
+  await b.waitFor(`document.querySelector('[data-mobile-menu]')?.offsetParent && document.querySelector('[data-mobile-menu]').innerText.includes('Logout')`, 'Menü offen');
+  await b.screenshot('02c-menu');
+  await b.evaluate(`[...document.querySelectorAll('[data-mobile-menu] a')].find((a) => a.innerText.includes('Gruppen')).click()`);
+  await b.waitFor(`location.hash === '#/groups' && !document.querySelector('[data-mobile-menu]').offsetParent`, 'Gruppen über das Menü, Menü geschlossen');
+  // ✕ auf der Seite Warenkörbe führt zur vorigen Ansicht zurück
+  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
+  await b.waitFor(`location.hash === '#/carts' && !document.querySelector('[data-cart-fab]').getClientRects().length`, 'Seite Warenkörbe (ohne Knopf)');
+  await b.evaluate(`document.querySelector('[data-carts-close]').click()`);
+  await b.waitFor(`location.hash === '#/groups'`, '✕ zurück zu Gruppen');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Startseite');
+  ok('Smartphone: Hamburger-Menü, Warenkorb-Knopf unten rechts, ✕ zurück zur vorigen Ansicht');
+
+  // Smartphone: Warenkorb-Knopf öffnet die eigene Seite, dort „+ Position erfassen“
+  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
   await b.waitFor(`location.hash === '#/carts' && document.querySelector('#view [data-cart]')?.offsetParent`, 'Seite Warenkörbe');
   await b.clickText('#view button', '+ Position erfassen');
   await b.waitFor(`document.querySelector('.modal-panel input[placeholder^="z. B. 595"]')?.offsetParent`, 'Formular');
@@ -172,7 +190,7 @@ try {
   // Offenen Mouser-Korb: Formular geschrieben (fehlende interne Bestellnummer → Dialog) → bestellt (Rest übersprungen)
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`${CART_LINKS}.length === 1`, 'Startseite');
-  await b.evaluate(`document.querySelector('[data-cart-button]').click()`);
+  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
   await b.waitFor(`location.hash === '#/carts'`, 'Seite Warenkörbe');
   await b.evaluate(`[...document.querySelectorAll('#view [data-cart] a')].find((a) => a.innerText.includes('Mouser')).click()`);
   await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');

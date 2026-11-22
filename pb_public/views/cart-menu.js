@@ -1,5 +1,6 @@
-// Warenkorb in der Kopfzeile (ARCHITECTURE.md Kap. 7): Symbol mit Zahl der offenen Positionen, ein Klick klappt
-// die Warenkörbe auf (ab sm) bzw. öffnet die eigene Seite #/carts (Smartphone), darunter rechts „+ Position erfassen“.
+// Warenkorb (ARCHITECTURE.md Kap. 7): ab sm Symbol in der Kopfzeile mit Zahl der offenen Positionen, ein Klick klappt
+// die Warenkörbe auf, darunter rechts „+ Position erfassen“. Auf dem Smartphone runder Knopf unten rechts (fest),
+// der die eigene Seite #/carts öffnet; dort führt ✕ zur vorigen Ansicht zurück.
 // Das Formular „Position erfassen“ ist seitenweit verfügbar (Ereignis `open-item-form`).
 // Links neben dem Warenkorb: Module im Slot 'header-actions' als Symbol (z. B. Moodle-Import).
 import Alpine from '../vendor/alpinejs@3.17.5/dist/module.esm.js';
@@ -11,8 +12,13 @@ import { itemFormFields } from './item-form.js';
 
 /** Positionen je Korb im ausgeklappten Feld; der Rest steht hinter „+ n weitere →“. */
 const PREVIEW_ITEMS = 5;
-/** Unter sm (640 px) öffnet das Symbol die eigene Seite statt des Ausklappfelds. */
-const PHONE_QUERY = '(max-width: 39.99rem)';
+/** Seite Warenkörbe über den Knopf geöffnet → ✕ geht im Verlauf zurück; sonst (direkt aufgerufen) zur Startseite. */
+let openedFromApp = false;
+
+function openCartsPage() {
+  openedFromApp = true;
+  location.hash = '#/carts';
+}
 
 const CART_ICON = /* html */ `
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-6" aria-hidden="true">
@@ -87,6 +93,19 @@ export const cartMenuTemplate = /* html */ `
   </div>
 </div>`;
 
+/**
+ * Smartphone: runder Warenkorb-Knopf unten rechts (fest), mit Zahl der offenen Positionen. Nicht auf der Seite
+ * Warenkörbe selbst; Dialoge (z-40) und die Auswahlleiste der Favoriten (z-20) liegen darüber.
+ */
+export const cartFabTemplate = /* html */ `
+<button type="button" x-data x-show="$store.auth.user && $store.route.name !== 'carts' && $store.route.name !== 'login'"
+        class="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-900/20 active:bg-blue-700 sm:hidden"
+        @click="$store.carts.openPage()" :aria-label="$store.carts.label()" data-cart-fab>
+  ${CART_ICON.replace('size-6', 'size-7')}
+  <span x-show="$store.carts.count" x-text="$store.carts.count" data-cart-count
+        class="absolute -top-1 -right-1 min-w-6 rounded-full bg-white px-1.5 text-center text-xs leading-6 font-bold text-blue-700 ring-2 ring-blue-600"></span>
+</button>`;
+
 /** Formular „Position erfassen“ als Modal, seitenweit (index.html). */
 export const itemFormModalTemplate = /* html */ `
 <div x-data="{ show: false }" x-show="show" x-transition.opacity class="modal-backdrop"
@@ -102,7 +121,12 @@ export const itemFormModalTemplate = /* html */ `
 /** Eigene Seite #/carts (Smartphone): alle Positionen, Aktionen oben. */
 const pageTemplate = /* html */ `
 <div x-data="cartsView">
-  <h1 class="mb-3 text-xl font-semibold">Warenkörbe</h1>
+  <div class="mb-3 flex items-center gap-2">
+    <h1 class="mr-auto text-xl font-semibold">Warenkörbe</h1>
+    <button type="button" class="-mr-2 rounded-lg p-2 text-slate-600 hover:bg-slate-100" @click="close()" aria-label="Schließen" data-carts-close>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-6" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
   <div class="mb-2 flex">${CART_ACTIONS}</div>
   <div class="card px-4">${CART_LIST}</div>
 </div>`;
@@ -141,6 +165,11 @@ function registerCartsStore() {
     get count() {
       return this.list.reduce((n, c) => n + (c.expand?.order_items_via_order?.length ?? 0), 0);
     },
+    label() {
+      const n = this.count;
+      return n ? `Warenkörbe (${n} ${n === 1 ? 'Position' : 'Positionen'})` : 'Warenkörbe';
+    },
+    openPage: openCartsPage,
     async load() {
       try {
         const list = await listOpenCarts();
@@ -188,15 +217,9 @@ export function registerCartMenu() {
       window.removeEventListener('hashchange', this.onHash);
     },
     buttonLabel() {
-      const n = this.$store.carts.count;
-      return n ? `Warenkörbe (${n} ${n === 1 ? 'Position' : 'Positionen'})` : 'Warenkörbe';
+      return this.$store.carts.label();
     },
     toggle() {
-      if (window.matchMedia(PHONE_QUERY).matches) {
-        this.open = false;
-        location.hash = '#/carts';
-        return;
-      }
       this.open = !this.open;
       if (this.open) this.$store.carts.load();
     },
@@ -230,6 +253,15 @@ export default {
     ...cartHelpers(0),
     init() {
       this.$store.carts.load();
+    },
+    /** ✕: zurück zur vorigen Ansicht (wie „Zurück“ im Browser); direkt aufgerufen → Startseite. */
+    close() {
+      if (openedFromApp) {
+        openedFromApp = false;
+        history.back();
+      } else {
+        location.hash = '#/';
+      }
     },
   }),
 };

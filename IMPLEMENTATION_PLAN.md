@@ -122,7 +122,8 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 **Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidung in ARCHITECTURE Kap. 7 (Warenkorb-Symbol) und Kap. 5 (Slot `header-actions`).
 1. Symbol mit Zahl der offenen Positionen in der Kopfzeile; Ausklappfeld (höchstens 5 Positionen je Korb), auf dem Smartphone Seite `#/carts`.
 2. „+ Position erfassen“ rechtsbündig unter den Warenkörben, Moodle-Import als Symbol links neben dem Warenkorb (Slot `header-actions`); Warenkorb-Leiste und Erfassen-Knöpfe der Startseite entfallen.
-3. Browser-Tests angepasst (Startseite, Merge, Moodle-Import, Ausklappfeld am PC).
+3. Smartphone: Warenkorb als fester Knopf unten rechts, Seite Warenkörbe mit ✕ zurück; Navigation und Logout im Hamburger-Menü.
+4. Browser-Tests angepasst (Startseite, Merge, Moodle-Import, Ausklappfeld am PC, Menü und Knopf auf dem Smartphone).
 
 ### Folgende Branches (Reihenfolge vorläufig)
 1. `ui-bestellung`: Positionen kompakt (Tabelle am PC), Inhalte je Phase, Beträge entfernen, „Handeln statt fragen“.
