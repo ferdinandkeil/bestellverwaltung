@@ -71,6 +71,7 @@
     import favoriteListView from './views/favorite-list-view.js';
     import { registerItemForm } from './views/item-form.js';
     import { registerUnmatchedReceipts } from './views/unmatched-receipts.js';
+    import { registerOrderSteps } from './views/order-steps.js';
 
     // Erweiterungsmodule (registrieren sich selbst über core/plugin-registry.js):
     const MODULES = [
@@ -106,6 +107,7 @@
     for (const v of ROUTES.map((r) => r.view)) Alpine.data(v.dataName, v.component);
     registerItemForm(Alpine);
     registerUnmatchedReceipts(Alpine);
+    registerOrderSteps(Alpine);
 
     const main = document.getElementById('view');
     let mounted = null;

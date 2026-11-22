@@ -103,7 +103,7 @@ Ziel: Bedienbarkeit und Orientierung am tatsächlichen Ablauf; Schwerpunkt UX, n
 Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Branch Abnahme.
 
 ### Verwaltungsschritte (Branch `prozessschritte`)
-**Status:** in Arbeit. Entscheidungen in ARCHITECTURE Kap. 4.3.
+**Status:** umgesetzt, Abnahme durch den Nutzer ausstehend. Entscheidungen in ARCHITECTURE Kap. 4.3 und 7, Deploy-Hinweis in `docs/DEPLOYMENT.md`.
 1. Schema: Collection `order_steps` (erledigt = Datensatz, Datum leer = unbekannt, kein „übersprungen“-Feld), `orders.subject` („Was“), `orders.delivered_at`; Phasen `angefragt|freigabe|bestellt|teilgeliefert|geliefert|abgeschlossen` statt `geprueft`/`abgerechnet`.
 2. Migration der Altbestellungen (Schritte bis zum Stand ohne Datum, Freigabe nicht, `geprueft`/`abgerechnet` auf Lieferstand zurück).
 3. Hooks: Route `POST /api/lab/orders/{id}/steps` ersetzt `/status`; Phase serverseitig abgeleitet; Lieferschein-Bestellung legt `ordered` (+ Formularschritte ohne Datum) an.

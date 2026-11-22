@@ -19,7 +19,7 @@ async function seed() {
   await addItem(other.token, { supplier: 'reichelt', part_number: 'LED 5MM RT', name: 'LED rot', qty: 20 });
   await addItem(other.token, { supplier: 'reichelt', part_number: 'NICHT MITNEHMEN', qty: 1 });
   // Bestellen, damit der Warenkorb danach neu angelegt wird (Favoriten → neuer offener Korb)
-  await http('POST', `/api/lab/orders/${a.order.id}/status`, { token: other.token, json: { action: 'advance', internal_order_no: '2026IW08001' } });
+  await http('POST', `/api/lab/orders/${a.order.id}/steps`, { token: other.token, json: { step: 'ordered', internal_order_no: '2026IW08001' } });
   const list = (title, isPublic, supplier = 'printus') => http('POST', '/api/collections/favorite_lists/records', {
     token: other.token, json: { owner: other.user.id, title, is_public: isPublic, supplier },
   });
@@ -116,7 +116,7 @@ try {
   await sleep(300);
   await b.screenshot('fav-03-warenkorb');
   await b.clickText('[data-cart-form] button', '2 Artikel in den Warenkorb');
-  await b.waitFor(`location.hash.startsWith('#/orders/') && document.querySelector('#view [data-status-badge]')?.innerText.trim() === 'Angefragt'`, 'Warenkorb geöffnet');
+  await b.waitFor(`location.hash.startsWith('#/orders/') && document.querySelector('#view [data-status-badge]')?.innerText.trim() === 'Warenkorb'`, 'Warenkorb geöffnet');
   const items = await listRecords('order_items', `order.status = "angefragt"`);
   const by = (p) => items.find((i) => i.part_number === p);
   if (items.length !== 2 || by('LED 5MM RT')?.qty_ordered !== 25 || by('NE 555 DIP')?.qty_ordered !== 10) throw new Error('Warenkorb: ' + JSON.stringify(items.map((i) => [i.part_number, i.qty_ordered])));

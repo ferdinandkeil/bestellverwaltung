@@ -41,15 +41,25 @@ export function addItemToSupplierCart(data) {
 }
 
 /**
- * action: 'advance' | 'back'
- * numbers (nur angefragt → bestellt): { internal_order_no | without_internal_order_no: true, supplier_order_no? }
+ * Verwaltungsschritt abhaken, Datum ändern (done: true bei erledigtem Schritt) oder zurücknehmen (done: false).
+ * options: { done = true, date?: 'JJJJ-MM-TT' (leer = jetzt), internal_order_no? | without_internal_order_no: true, supplier_order_no? }
+ * → Bestellung mit neu abgeleiteter Phase
  */
-export function changeOrderStatus(orderId, action, numbers = {}) {
-  const body = { action };
-  if (numbers.internal_order_no) body.internal_order_no = numbers.internal_order_no;
-  if (numbers.without_internal_order_no) body.without_internal_order_no = true;
-  if (numbers.supplier_order_no) body.supplier_order_no = numbers.supplier_order_no;
-  return pb.send(`/api/lab/orders/${orderId}/status`, { method: 'POST', body });
+export function setOrderStep(orderId, step, { done = true, date = '', internal_order_no = '', without_internal_order_no = false, supplier_order_no = '' } = {}) {
+  const body = { step, done };
+  if (date) body.date = date;
+  if (internal_order_no) body.internal_order_no = internal_order_no;
+  if (without_internal_order_no) body.without_internal_order_no = true;
+  if (supplier_order_no) body.supplier_order_no = supplier_order_no;
+  return pb.send(`/api/lab/orders/${orderId}/steps`, { method: 'POST', body });
+}
+
+/** Erledigte Verwaltungsschritte einer Bestellung als { step: record } (mit done_by expandiert). */
+export async function listOrderSteps(orderId) {
+  const list = await pb.collection('order_steps').getFullList({
+    filter: pb.filter('order = {:id}', { id: orderId }), expand: 'done_by',
+  });
+  return Object.fromEntries(list.map((s) => [s.step, s]));
 }
 
 /**

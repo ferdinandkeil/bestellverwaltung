@@ -1,12 +1,13 @@
-// Browser-Durchlauf Shop-Export: Mouser-Korb → Vorschau (Storno abgezogen) → CSV → Änderung während des Bestellens
-// wird erkannt → erneuter Download → „Exportiert & auf ‚Bestellt‘ setzen“. Sichtbarkeit je Shop und Status.
-// Würth: Liste für die Bestell-Mail. Printus: Abhakliste (Stand im Browser, Mengenänderung öffnet den Haken).
+// Browser-Durchlauf Shop-Export: Mouser in Freigabe → Vorschau (Storno abgezogen) → CSV → Mengenänderung während des
+// Bestellens wird erkannt → erneuter Download → „Exportiert & auf ‚Bestellt‘ setzen“. Sichtbarkeit je Shop und Phase
+// (Warenkorb mit Formular: noch nicht). Würth: Liste für die Bestell-Mail schon im Warenkorb (ohne Formular).
+// Printus: Abhakliste (Stand im Browser, Mengenänderung öffnet den Haken).
 // Start über:  tests/run.sh --e2e
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  PB_URL, setup, resetData, createUser, createGroup, addItem, http, getRecord, enableRateLimits, disableRateLimits,
+  PB_URL, setup, resetData, createUser, createGroup, addItem, setStep, http, getRecord, enableRateLimits, disableRateLimits,
 } from './helpers.mjs';
 import { launchBrowser, loginViaUi, sleep } from './browser.mjs';
 
@@ -16,7 +17,7 @@ async function seed() {
   const owner = await createUser('Seed');
   const g = await createGroup('Gruppe A');
   const m1 = await addItem(owner.token, { supplier: 'mouser', part_number: '595-SN74HC595N', name: 'Schieberegister', qty: 5, group: g.id });
-  await addItem(owner.token, { supplier: 'mouser', part_number: '511-NUCLEO-G031K8', qty: 1, group: g.id });
+  const nucleo = await addItem(owner.token, { supplier: 'mouser', part_number: '511-NUCLEO-G031K8', qty: 1, group: g.id });
   const gone = await addItem(owner.token, { supplier: 'mouser', part_number: '667-ERJ-3EKF1001V', name: 'Widerstand', qty: 10, group: g.id });
   await http('PATCH', `/api/collections/order_items/records/${gone.item.id}`, { token: owner.token, json: { qty_cancelled: 10 } });
   await http('PATCH', `/api/collections/order_items/records/${m1.item.id}`, { token: owner.token, json: { qty_cancelled: 2 } });
@@ -25,9 +26,14 @@ async function seed() {
   const we = await addItem(owner.token, { supplier: 'wuerth', part_number: '885012207098', qty: 10, group: g.id });
   await addItem(owner.token, { supplier: 'wuerth', part_number: '7447789100', qty: 5, group: g.id });
   const pr = await addItem(owner.token, { supplier: 'printus', part_number: '892586', name: 'Kopierpapier A4', qty: 5 });
-  await addItem(owner.token, { supplier: 'printus', part_number: '302491', name: 'Briefumschläge', qty: 1 });
+  const envelopes = await addItem(owner.token, { supplier: 'printus', part_number: '302491', name: 'Briefumschläge', qty: 1 });
+  const reichelt = await addItem(owner.token, { supplier: 'reichelt', part_number: 'NE 555 DIP', qty: 1 });
+  // Export erst nach dem Formular (Phase „In Freigabe“); Würth (ohne Formular) schon im Warenkorb
+  await setStep(owner.token, m1.order.id, 'form_written', { internal_order_no: '2026IW07001' });
+  await setStep(owner.token, tme.order.id, 'form_written', { internal_order_no: '2026IW07003' });
+  await setStep(owner.token, pr.order.id, 'form_written', { internal_order_no: '2026IW07002' });
   return {
-    printus: pr.order.id,
+    printus: pr.order.id, paper: pr.item.id, envelopes: envelopes.item.id, nucleo: nucleo.item.id, reichelt: reichelt.order.id,
     owner, group: g.id, mouser: m1.order.id, tme: tme.order.id, farnell: farnell.order.id, wuerth: we.order.id,
     login: await createUser('Export-Tester'),
   };
@@ -63,11 +69,14 @@ try {
   await loginViaUi(b, PB_URL, s.login.email);
 
   await openOrder(s.farnell);
-  await b.waitFor(`document.body.innerText.includes('Als bestellt markieren')`, 'Farnell-Detail');
+  await b.waitFor(`document.querySelector('[data-next-step]')`, 'Farnell-Detail');
   if (await b.evaluate(hasExportButton)) throw new Error('Export für Farnell sichtbar (kein verifiziertes Format)');
+  await openOrder(s.reichelt);
+  await b.waitFor(`${BADGE} === 'Warenkorb' && document.querySelector('[data-next-step]')`, 'Reichelt-Detail');
+  if (await b.evaluate(hasExportButton)) throw new Error('Export im Warenkorb mit Formular sichtbar (erst ab „In Freigabe“)');
   await openOrder(s.tme);
   await b.waitFor(hasExportButton, 'Export-Button TME');
-  ok('Export nur für Shops mit verifiziertem Format (TME ja, Farnell nein)');
+  ok('Export nur für Shops mit verifiziertem Format (TME ja, Farnell nein) und erst nach dem Formular');
 
   await openOrder(s.mouser);
   await b.waitFor(hasExportButton, 'Export-Button Mouser');
@@ -90,16 +99,16 @@ try {
   if (d1.name !== 'mouser-2026IW07001.csv' || d1.text !== expected1) throw new Error('Download: ' + JSON.stringify(d1));
   ok('CSV im Mouser-Format, Dateiname mit interner Bestellnummer');
 
-  // Während im Shop bestellt wird, ergänzt jemand eine Position → Statuswechsel wird angehalten
-  await addItem(s.owner.token, { supplier: 'mouser', part_number: '595-TL072CP', qty: 2, group: s.group });
+  // Während im Shop bestellt wird, ändert jemand eine Menge → „Bestellt“ wird angehalten
+  await http('PATCH', `/api/collections/order_items/records/${s.nucleo}`, { token: s.owner.token, json: { qty_ordered: 2 } });
   await b.clickText('[data-shop-export] button', 'Exportiert');
-  await b.waitFor(`document.querySelector('[data-export-changed]').offsetParent && document.querySelectorAll('[data-export-lines] li').length === 3`, 'Änderung erkannt');
-  if ((await getRecord('orders', s.mouser)).status !== 'angefragt') throw new Error('Status trotz Änderung gesetzt');
-  ok('Änderung seit dem Download erkannt, Status bleibt „angefragt“');
+  await b.waitFor(`document.querySelector('[data-export-changed]').offsetParent && document.querySelector('[data-export-lines]').innerText.includes('2×')`, 'Änderung erkannt');
+  if ((await getRecord('orders', s.mouser)).status !== 'freigabe') throw new Error('Phase trotz Änderung gesetzt');
+  ok('Änderung seit dem Download erkannt, Phase bleibt „In Freigabe“');
   await b.screenshot('export-02-geaendert');
 
   await b.clickText('[data-shop-export] button', 'CSV herunterladen');
-  await b.waitFor(`window.__downloads.length === 2 && window.__downloads[1].text.includes('595-TL072CP,,2,,')`, 'Download 2');
+  await b.waitFor(`window.__downloads.length === 2 && window.__downloads[1].text.includes('511-NUCLEO-G031K8,,2,,')`, 'Download 2');
   await b.fill('#export-supplier-no', 'M-123456');
   await b.clickText('[data-shop-export] button', 'Exportiert');
   await b.confirmDialog('Als bestellt markieren');
@@ -107,14 +116,17 @@ try {
   const order = await getRecord('orders', s.mouser);
   if (order.internal_order_no !== '2026IW07001' || order.supplier_order_no !== 'M-123456') throw new Error('Nummern: ' + JSON.stringify(order));
   if (await b.evaluate(hasExportButton)) throw new Error('Export nach „Bestellt“ noch sichtbar');
-  ok('Exportiert & bestellt: Status, interne Bestellnummer und Shop-Auftragsnummer gesetzt');
+  if (!(await b.evaluate(`document.querySelector('[data-step=ordered]').dataset.state === 'done' && document.querySelector('[data-step=form_signed]').dataset.state === 'skipped'`))) {
+    throw new Error('Schritt „Bestellt“ nicht abgehakt bzw. offene Formularschritte nicht übersprungen');
+  }
+  ok('Exportiert & bestellt: Schritt „Bestellt“, interne Bestellnummer und Shop-Auftragsnummer gesetzt');
   await b.screenshot('export-03-bestellt');
 
   // ---- Würth Elektronik: Liste für die Bestell-Mail, Muster ohne interne Bestellnummer ----
   await openOrder(s.wuerth);
   await b.waitFor(hasExportButton, 'Export-Button Würth');
-  if (!(await b.evaluate(`document.querySelector('[data-without-internal-no] input').checked`))) {
-    throw new Error('Würth: „ohne interne Bestellnummer“ in der Bestellung nicht vorausgewählt');
+  if ((await b.evaluate(`document.querySelector('[data-next-step]').innerText.trim()`)) !== '✓ Bestellt') {
+    throw new Error('Würth: nächster Schritt sollte direkt „Bestellt“ sein (Muster ohne Formular)');
   }
   await b.clickText('#view button', 'Shop-Export');
   await b.waitFor(`${exp}.isOpen && document.querySelector('[data-export-copy]')?.offsetParent`, 'Würth-Export');
@@ -181,7 +193,7 @@ try {
 
   // Stand bleibt beim Neuladen erhalten; Mengenänderung im Warenkorb öffnet nur den Mengen-Haken
   await tick('892586', 'qty');
-  await addItem(s.owner.token, { supplier: 'printus', part_number: '302491', qty: 2 });
+  await http('PATCH', `/api/collections/order_items/records/${s.envelopes}`, { token: s.owner.token, json: { qty_ordered: 3 } });
   await openPrintus({ reload: true });
   await b.waitFor(`${ROW('302491')}?.innerText.includes('3×')`, 'neue Menge nach dem Neuladen');
   const st = await b.evaluate(`[...document.querySelectorAll('[data-checklist-row]')].map((e) =>
@@ -193,18 +205,16 @@ try {
   ok('Printus: Haken bleiben beim Neuladen, geänderte Menge muss neu abgehakt werden');
 
   // Änderung, während der Dialog offen ist → beim „Bestellt“-Setzen erkannt
-  await addItem(s.owner.token, { supplier: 'printus', part_number: '423741', qty: 3 });
-  await b.fill('#export-internal-no', '2026IW07002');
+  await http('PATCH', `/api/collections/order_items/records/${s.paper}`, { token: s.owner.token, json: { qty_ordered: 6 } });
   await b.clickText('[data-shop-export] button', 'Exportiert');
-  await b.waitFor(`document.querySelector('[data-export-changed]').offsetParent && ${ROW('423741')} && ${ORDERED_DISABLED}`, 'Printus: Änderung erkannt');
-  await tick('423741', 'part');
-  await tick('423741', 'qty');
+  await b.waitFor(`document.querySelector('[data-export-changed]').offsetParent && ${ROW('892586')}.innerText.includes('6×') && ${ORDERED_DISABLED}`, 'Printus: Änderung erkannt');
+  await tick('892586', 'qty');
   await b.clickText('[data-shop-export] button', 'Exportiert');
   await b.confirmDialog('Als bestellt markieren');
   await b.waitFor(`!${exp}.isOpen && ${BADGE} === 'Bestellt'`, 'Printus bestellt');
   if ((await getRecord('orders', s.printus)).internal_order_no !== '2026IW07002') throw new Error('Printus: interne Bestellnummer');
   if (await b.evaluate(`localStorage.getItem('shop-export-checklist:${s.printus}')`) !== null) throw new Error('Printus: Abhakstand nicht aufgeräumt');
-  ok('Printus: neue Position während des Übertragens erkannt, danach bestellt und Abhakstand aufgeräumt');
+  ok('Printus: Mengenänderung während des Übertragens erkannt, danach bestellt und Abhakstand aufgeräumt');
 
   if (b.problems.length) throw new Error('Fehler in der Browser-Konsole:\n  ' + b.problems.join('\n  '));
   ok('keine Fehler in der Browser-Konsole');
