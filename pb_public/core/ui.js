@@ -2,19 +2,34 @@
 // Grundsatz „Handeln statt fragen“ (ARCHITECTURE Kap. 7): sofort ausführen, im Toast „Rückgängig“ anbieten.
 import Alpine from '../vendor/alpinejs@3.17.5/dist/module.esm.js';
 
+// Symbole (Heroicons-Stil, 24×24, Strich) für Toast-Typen und -Aktionen. Feste Zeichenketten aus dem Code (x-html).
+const svg = (d) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-full" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  success: svg('<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>'),
+  info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+  error: svg('<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4M12 17h.01"/>'),
+  undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
+  calendar: svg('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+  close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
+};
+
 export function initUiStore() {
   Alpine.store('toasts', {
     items: [],
-    /** actions: [{ label, run }] – Knöpfe im Toast; ein Klick führt run() aus und schließt den Toast. */
+    /** actions: [{ label, icon, run }] – Knöpfe im Toast (icon: Schlüssel aus ICONS, z. B. 'undo', 'calendar');
+     *  ein Klick führt run() aus und schließt den Toast. */
     push(message, type = 'info', timeoutMs = 4000, actions = []) {
       const id = Math.random().toString(36).slice(2);
       // Höchstens drei Meldungen gleichzeitig, damit der Inhalt sichtbar bleibt.
-      this.items = [...this.items.slice(-2), { id, message, type, actions }];
+      this.items = [...this.items.slice(-2), { id, message, type, actions, timeoutMs }];
       if (timeoutMs) setTimeout(() => this.dismiss(id), timeoutMs);
       return id;
     },
     dismiss(id) {
       this.items = this.items.filter((t) => t.id !== id);
+    },
+    icon(name) {
+      return ICONS[name] || '';
     },
     act(t, action) {
       this.dismiss(t.id);
@@ -43,7 +58,7 @@ export const toast = {
   info: (msg) => Alpine.store('toasts').push(msg, 'info'),
   success: (msg) => Alpine.store('toasts').push(msg, 'success'),
   error: (msg) => Alpine.store('toasts').push(msg, 'error', 8000),
-  /** Erfolgsmeldung mit Knöpfen, z. B. [{ label: 'Rückgängig', run }]. */
+  /** Erfolgsmeldung mit Knöpfen, z. B. [{ label: 'Rückgängig', icon: 'undo', run }]. */
   done: (msg, actions) => Alpine.store('toasts').push(msg, 'success', ACTION_TOAST_MS, actions),
 };
 
@@ -58,6 +73,7 @@ export function deferredAction({ message, run, undo }) {
     let cancelled = false;
     Alpine.store('toasts').push(message, 'info', ACTION_TOAST_MS, [{
       label: 'Rückgängig',
+      icon: 'undo',
       run: () => { cancelled = true; undo?.(); resolve(false); },
     }]);
     setTimeout(async () => {

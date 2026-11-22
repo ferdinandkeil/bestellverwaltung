@@ -7,6 +7,11 @@
 
 [x-cloak] { display: none !important; }
 
+/* Ablaufbalken im Toast: schrumpft über die Standzeit (animation-duration kommt aus dem Toast). */
+.toast-progress { animation-name: toast-progress; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .toast-progress { animation: none; } }
+
 @layer components {
   .card {
     @apply rounded-xl border border-slate-200 bg-white shadow-sm;

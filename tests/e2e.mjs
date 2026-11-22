@@ -34,7 +34,7 @@ const ORDER_LINKS = `document.querySelectorAll('#view ul a[href^="#/orders/"]')`
 const CART_LINKS = `document.querySelectorAll('#view [data-cart]')`;
 /** Letzte (neueste) Toast-Aktion mit dieser Beschriftung anklicken. */
 const TOAST_ACTION = (label) => `[...document.querySelectorAll('[data-toast-action]')].filter((e) => e.innerText.trim() === ${JSON.stringify(label)}).pop()`;
-const TOASTS = `[...document.querySelectorAll('[data-toast-action]')].map((e) => e.closest('div').innerText).join(' | ')`;
+const TOASTS = `[...document.querySelectorAll('[data-toast-action]')].map((e) => e.closest('[data-toast]').innerText).join(' | ')`;
 const BADGE = `document.querySelector('#view [data-status-badge]').innerText.trim()`;
 
 const { groupA, login } = await seed();

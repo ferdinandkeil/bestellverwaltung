@@ -175,6 +175,7 @@ export async function toggleStep(order, steps, value) {
     if (!(await apply(order, value, { done: false }))) return;
     toast.done(`„${meta.label}“ entfernt (${name}).`, [{
       label: 'Rückgängig',
+      icon: 'undo',
       run: () => apply(order, value, { done: true, date: previous }),
     }]);
     return;
@@ -206,8 +207,8 @@ export async function toggleStep(order, steps, value) {
   if (skipped.length) message += ` Übersprungen: ${skipped.join(', ')}.`;
   if (closesCart) message += ' Warenkorb geschlossen.';
   toast.done(message, [
-    { label: 'Datum ändern', run: () => changeStepDate(order, value, today()) },
-    { label: 'Rückgängig', run: () => apply(order, value, { done: false }) },
+    { label: 'Datum ändern', icon: 'calendar', run: () => changeStepDate(order, value, today()) },
+    { label: 'Rückgängig', icon: 'undo', run: () => apply(order, value, { done: false }) },
   ]);
 }
 
