@@ -26,17 +26,29 @@ const CHEVRON = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-5 shri
  * speichert (Toast mit „Rückgängig“), Escape bricht ab. Im Warenkorb Art.-Nr., Bezeichnung und Gesamtmenge,
  * ab „bestellt“ nur die stornierte Menge (Klick auf die bestellte Menge).
  */
+/** Gemeinsamer Rahmen (sieht aus wie ein Eingabefeld) und das rahmenlose Feld darin. */
+const FRAME_CLASS = 'input flex w-auto items-center gap-1.5 py-1 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/30';
+const FRAMED_INPUT_CLASS = 'min-w-0 border-0 bg-transparent p-0 text-right text-sm text-slate-900 outline-none';
+
+/**
+ * Ganze Tabellenzelle klickbar: öffnet die Bearbeitung des Feldes (field = JS-Ausdruck), Hover über die Zelle.
+ */
+function cellClick(field) {
+  return `@click="startCell(it, ${field})" :class="canEditCell(${field}) && !isEditing(it, ${field}) && 'cursor-text hover:bg-slate-50'"`;
+}
+
 function cellEdit(field, display, { input = '', align = 'left', prefix = '' } = {}) {
   // Ein umschließendes Element: der Baustein steht auch als einziger Inhalt eines x-if-Templates.
   return /* html */ `
 <span class="${align === 'left' ? 'block' : 'inline-flex justify-end'}" data-cell-wrap>
 <template x-if="!isEditing(it, '${field}')">
-  <button type="button" class="-mx-1 max-w-full rounded px-1 text-${align} ${align === 'left' ? 'block' : ''}" data-cell="${field}" :disabled="!canEditCell('${field}')"
-          :class="canEditCell('${field}') ? 'cursor-text hover:bg-slate-100' : 'cursor-default'" @click.stop="startCell(it, '${field}')">${display}</button>
+  <button type="button" class="max-w-full text-${align} ${align === 'left' ? 'block' : ''}" data-cell="${field}" :disabled="!canEditCell('${field}')"
+          :class="canEditCell('${field}') ? 'cursor-text' : 'cursor-default'" @click.stop="startCell(it, '${field}')">${display}</button>
 </template>
 <template x-if="isEditing(it, '${field}')">
-  <label class="flex items-center gap-1" @click.stop>${prefix}
-    <input class="input py-1 text-sm text-slate-900 ${input}" x-model="cellValue" data-cell-input="${field}"
+  <!-- Mit prefix umfasst ein gemeinsamer Rahmen Vorspann und Feld (z. B. „10 − [2]“). -->
+  <label class="${prefix ? FRAME_CLASS : 'flex items-center gap-1'}" @click.stop>${prefix}
+    <input class="${prefix ? FRAMED_INPUT_CLASS : 'input py-1 text-sm text-slate-900'} ${input}" x-model="cellValue" data-cell-input="${field}"
            x-init="$nextTick(() => { $el.focus(); $el.select(); })"
            @keydown.enter.prevent="saveCell(it)" @keydown.escape.prevent.stop="cancelCell()" @blur="saveCell(it)">
   </label>
@@ -49,7 +61,7 @@ const ORDERED_CELL = cellEdit('qty_cancelled',
   `<span class="tabular-nums whitespace-nowrap"><span x-text="it.qty_ordered"></span><span x-show="it.qty_cancelled" class="ml-1 text-red-700" x-text="'−' + it.qty_cancelled"></span></span>`,
   {
     align: 'right',
-    input: 'w-16 text-right" type="number" min="0" step="1" inputmode="numeric" aria-label="Stornierte Menge',
+    input: 'w-12" type="number" min="0" step="1" inputmode="numeric" aria-label="Stornierte Menge',
     // Links die ursprünglich bestellte Menge und ein rotes Minus, rechts das Feld für die stornierte Menge: „10 − [2]“
     prefix: '<span class="tabular-nums" x-text="it.qty_ordered"></span>'
       + '<svg viewBox="0 0 20 20" fill="currentColor" class="size-4 shrink-0 text-red-600" aria-hidden="true"><path fill-rule="evenodd" d="M4 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 10Z" clip-rule="evenodd"/></svg>',
@@ -205,12 +217,12 @@ const template = /* html */ `
                 <template x-for="(g, gi) in groupRows(it)" :key="gi">
                   <tr>
                     <template x-if="gi === 0">
-                      <td class="px-3 py-1.5 align-middle font-mono font-semibold whitespace-nowrap" :rowspan="groupRows(it).length">
+                      <td class="px-3 py-1.5 align-middle font-mono font-semibold whitespace-nowrap" :rowspan="groupRows(it).length" ${cellClick("'part_number'")}>
                         ${PART_CELL}
                       </td>
                     </template>
                     <template x-if="gi === 0">
-                      <td class="max-w-0 px-3 py-1.5 align-middle" :rowspan="groupRows(it).length">
+                      <td class="max-w-0 px-3 py-1.5 align-middle" :rowspan="groupRows(it).length" ${cellClick("'name'")}>
                         ${NAME_CELL}
                       </td>
                     </template>
@@ -218,7 +230,8 @@ const template = /* html */ `
                         x-text="g.name || '–'" data-group></td>
                     <td class="px-3 py-1.5 text-right align-middle tabular-nums" x-text="g.qty"></td>
                     <template x-if="gi === 0">
-                      <td class="px-3 py-1.5 text-right align-middle tabular-nums" :rowspan="groupRows(it).length">
+                      <td class="px-3 py-1.5 text-right align-middle tabular-nums" :rowspan="groupRows(it).length"
+                          ${cellClick("isCart() ? 'qty_ordered' : 'qty_cancelled'")} data-ordered-cell>
                         <template x-if="isCart()">
                           <div class="flex flex-col items-end">
                             ${QTY_CELL}
