@@ -312,23 +312,23 @@ try {
   const groupsShown = await b.evaluate(`[...${PC_ITEM('595-SN74HC595N')}.querySelectorAll('[data-group]')].map((g) => g.innerText.trim()).join()`);
   if (!groupsShown.includes('Gruppe A') || !groupsShown.includes('Gruppe B')) throw new Error('Gruppenzeilen: ' + groupsShown);
   if ((await b.evaluate(`${PC_ITEM('595-SN74HC595N')}.querySelectorAll('tr').length`)) < 2) throw new Error('keine eigene Zeile je Gruppe');
-  await b.evaluate(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-ordered]').click()`);
-  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cancel-qty]')`, 'Feld „storniert“');
-  await b.evaluate(`(() => { const i = ${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cancel-qty]'); i.value = '2'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
-  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-ordered]')?.innerText.replace(/\\s+/g, '') === '10−2' && ${PC_ITEM('595-SN74HC595N')}.querySelector('[data-open]').innerText.trim() === '8'`, 'Storno 2, offen 8');
+  await b.evaluate(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell=qty_cancelled]').click()`);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell-input=qty_cancelled]')`, 'Feld „storniert“');
+  await b.evaluate(`(() => { const i = ${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell-input=qty_cancelled]'); i.value = '2'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell=qty_cancelled]')?.innerText.replace(/\\s+/g, '') === '10−2' && ${PC_ITEM('595-SN74HC595N')}.querySelector('[data-open]').innerText.trim() === '8'`, 'Storno 2, offen 8');
   await b.screenshot('05b-positionen-pc');
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
-  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-ordered]')?.innerText.trim() === '10'`, 'Storno zurückgenommen');
-  ok('PC: Positionen mit einer Zeile je Gruppe; Storno über „Bestellt“, „Rückgängig“');
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell=qty_cancelled]')?.innerText.trim() === '10'`, 'Storno zurückgenommen');
+  ok('PC: Positionen mit einer Zeile je Gruppe; Storno per Klick auf „Bestellt“, „Rückgängig“');
 
   // PC: Warenkorb – Klick macht die Zeile zur Eingabezeile (Enter speichert), Löschen sofort mit „Rückgängig“
   const conrad = await addItem(login.token, { supplier: 'farnell', part_number: 'C-100', name: 'Kabel', qty: 2, group: groupA });
   await b.navigate(PB_URL + '/#/orders/' + conrad.order.id);
   await b.waitFor(`${PC_ITEM('C-100')}?.offsetParent`, 'Warenkorb Conrad');
-  await b.evaluate(`${PC_ITEM('C-100')}.click()`);
-  await b.waitFor(`${PC_ITEM('C-100')}.querySelector('[data-edit-qty]')?.offsetParent`, 'Eingabezeile');
-  await b.evaluate(`(() => { const i = ${PC_ITEM('C-100')}.querySelector('[data-edit-qty]'); i.value = '4'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
-  await b.waitFor(`!${PC_ITEM('C-100')}.querySelector('[data-edit-qty]').offsetParent && ${PC_ITEM('C-100')}.innerText.includes('4')`, 'Menge gespeichert');
+  await b.evaluate(`${PC_ITEM('C-100')}.querySelector('[data-cell=qty_ordered]').click()`);
+  await b.waitFor(`${PC_ITEM('C-100')}.querySelector('[data-cell-input=qty_ordered]')?.offsetParent && !${PC_ITEM('C-100')}.querySelector('[data-cell-input=name]')`, 'nur diese Zelle editierbar');
+  await b.evaluate(`(() => { const i = ${PC_ITEM('C-100')}.querySelector('[data-cell-input=qty_ordered]'); i.value = '4'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`!${PC_ITEM('C-100')}.querySelector('[data-cell-input=qty_ordered]') && ${PC_ITEM('C-100')}.querySelector('[data-cell=qty_ordered]').innerText.trim() === '4'`, 'Menge gespeichert');
   await b.evaluate(`${PC_ITEM('C-100')}.querySelector('[data-item-delete]').click()`);
   await b.waitFor(`!${PC_ITEM('C-100')}`, 'sofort ausgeblendet');
   if (await b.evaluate(`document.querySelector('#confirm-dialog')?.open`)) throw new Error('Sicherheitsabfrage beim Löschen');
@@ -341,7 +341,7 @@ try {
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
   await b.waitFor(`location.hash === '#/orders/${conrad.order.id}' && ${PC_ITEM('C-100')}?.offsetParent`, 'zurück im Warenkorb');
   await b.setViewport();
-  ok('PC: Warenkorb – Zeile bearbeiten (Enter); Position und Warenkorb löschen ohne Rückfrage mit „Rückgängig“');
+  ok('PC: Warenkorb – Klick bearbeitet nur die Zelle (Enter); Position und Warenkorb löschen ohne Rückfrage mit „Rückgängig“');
 
   await b.navigate(PB_URL + '/#/groups');
   await b.waitFor(`document.querySelector('[x-data=groupsView]') && [...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('Gruppe B'))`, 'Gruppenliste');

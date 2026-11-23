@@ -21,24 +21,33 @@ const CART_STATUSES = ['angefragt', 'freigabe'];
 const TRASH = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-4" aria-hidden="true"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.44c-.8.08-1.58.18-2.36.3a.75.75 0 1 0 .22 1.49l.15-.03.8 10.1A2.75 2.75 0 0 0 7.55 18.6h4.9a2.75 2.75 0 0 0 2.74-2.54l.8-10.1.15.03a.75.75 0 1 0 .22-1.49c-.78-.12-1.57-.22-2.36-.3v-.44A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.67.03 2.5.08v-.33c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.33C8.33 4.03 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg>';
 const CHEVRON = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-5 shrink-0 text-slate-400 transition-transform" :class="openRow === it.id && \'rotate-180\'" aria-hidden="true"><path fill-rule="evenodd" d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>';
 
-/** Bestellte Menge mit Storno („10 −2“); ab „bestellt“ öffnet ein Klick das Feld „storniert“. */
-const ORDERED_CELL = /* html */ `
-<span class="inline-flex items-center justify-end gap-1 whitespace-nowrap">
-  <template x-if="cancelId !== it.id">
-    <button type="button" class="rounded px-1 tabular-nums" data-ordered :disabled="!canCancel()"
-            :class="canCancel() ? 'cursor-pointer decoration-dotted hover:bg-slate-100 hover:underline' : 'cursor-default'"
-            @click.stop="startCancel(it)">
-      <span x-text="it.qty_ordered"></span><span x-show="it.qty_cancelled" class="ml-1 text-red-700" x-text="'−' + it.qty_cancelled"></span>
-    </button>
-  </template>
-  <template x-if="cancelId === it.id">
-    <label class="flex items-center gap-1 text-xs text-slate-500" @click.stop>storniert
-      <input type="number" min="0" step="1" inputmode="numeric" class="input w-16 py-1 text-right" data-cancel-qty
-             :max="maxCancel(it)" x-model.number="cancelQty" x-init="$nextTick(() => { $el.focus(); $el.select(); })"
-             @keydown.enter.prevent="saveCancel(it)" @keydown.escape.prevent.stop="cancelId = null" @blur="saveCancel(it)">
-    </label>
-  </template>
+/**
+ * Eine Zelle einer Position bearbeiten: als Text, ein Klick macht nur diese Zelle editierbar; Enter bzw. Verlassen
+ * speichert (Toast mit „Rückgängig“), Escape bricht ab. Im Warenkorb Art.-Nr., Bezeichnung und Gesamtmenge,
+ * ab „bestellt“ nur die stornierte Menge (Klick auf die bestellte Menge).
+ */
+function cellEdit(field, display, { input = '', align = 'left', label = '' } = {}) {
+  // Ein umschließendes Element: der Baustein steht auch als einziger Inhalt eines x-if-Templates.
+  return /* html */ `
+<span class="${align === 'left' ? 'block' : 'inline-flex justify-end'}" data-cell-wrap>
+<template x-if="!isEditing(it, '${field}')">
+  <button type="button" class="-mx-1 max-w-full rounded px-1 text-${align} ${align === 'left' ? 'block' : ''}" data-cell="${field}" :disabled="!canEditCell('${field}')"
+          :class="canEditCell('${field}') ? 'cursor-text hover:bg-slate-100' : 'cursor-default'" @click.stop="startCell(it, '${field}')">${display}</button>
+</template>
+<template x-if="isEditing(it, '${field}')">
+  <label class="flex items-center gap-1 text-xs text-slate-500" @click.stop>${label}
+    <input class="input py-1 text-sm text-slate-900 ${input}" x-model="cellValue" data-cell-input="${field}"
+           x-init="$nextTick(() => { $el.focus(); $el.select(); })"
+           @keydown.enter.prevent="saveCell(it)" @keydown.escape.prevent.stop="cancelCell()" @blur="saveCell(it)">
+  </label>
+</template>
 </span>`;
+}
+
+/** Bestellte Menge mit Storno („10 −2“); ab „bestellt“ öffnet ein Klick das Feld „storniert“. */
+const ORDERED_CELL = cellEdit('qty_cancelled',
+  `<span class="tabular-nums whitespace-nowrap"><span x-text="it.qty_ordered"></span><span x-show="it.qty_cancelled" class="ml-1 text-red-700" x-text="'−' + it.qty_cancelled"></span></span>`,
+  { align: 'right', label: 'storniert', input: 'w-16 text-right" type="number" min="0" step="1" inputmode="numeric' });
 
 /** Menge dieser Lieferung (Zahl vom Lieferschein); wird gesammelt und gemeinsam gebucht. */
 const DELIVER_INPUT = /* html */ `
@@ -93,7 +102,11 @@ function headField(key, label, { id, mono = false, maxlength = 100, placeholder 
 </div>`;
 }
 
-const EDIT_KEYS = '@click.stop @keydown.enter.prevent="saveEdit(it)" @keydown.escape.prevent.stop="cancelEdit()"';
+const PART_CELL = cellEdit('part_number', '<span x-text="it.part_number"></span>',
+  { input: 'w-48 font-mono" maxlength="100" autocapitalize="characters" spellcheck="false" aria-label="Bestellnummer des Shops' });
+const NAME_CELL = cellEdit('name', NAME_TEXT, { input: 'w-full" maxlength="300" placeholder="Bezeichnung" aria-label="Bezeichnung' });
+const QTY_CELL = cellEdit('qty_ordered', '<span class="tabular-nums" x-text="it.qty_ordered"></span>',
+  { align: 'right', input: 'w-20 text-right" type="number" min="1" step="1" inputmode="numeric" aria-label="Gesamtmenge' });
 
 const template = /* html */ `
 <div x-data="orderDetailView" @order-steps-changed.window="$event.detail.orderId === orderId && reload()">
@@ -113,7 +126,7 @@ const template = /* html */ `
               <span class="badge text-sm" data-status-badge :class="statusMeta(order.status).badge" x-text="statusMeta(order.status).label"></span>
               <span x-show="order.origin === 'lieferschein'" class="badge border-violet-200 bg-violet-50 text-violet-800">aus Lieferschein angelegt</span>
             </div>
-            <p class="text-xs text-slate-500">
+            <p class="mt-1.5 text-xs text-slate-500">
               Angelegt <span x-text="fmt.dateTime(order.created)"></span>
               <span x-show="order.expand?.created_by" x-text="'von ' + (order.expand?.created_by?.name || order.expand?.created_by?.email)"></span>
             </p>
@@ -182,23 +195,17 @@ const template = /* html */ `
               </tr>
             </thead>
             <template x-for="it in visibleItems()" :key="it.id">
-              <tbody class="border-t border-slate-200" data-item :data-part="it.part_number"
-                     :class="isCart() && editId !== it.id && 'cursor-pointer hover:bg-slate-50'"
-                     @click="isCart() && editId !== it.id && startEdit(it)">
+              <tbody class="border-t border-slate-200" data-item :data-part="it.part_number">
                 <template x-for="(g, gi) in groupRows(it)" :key="gi">
                   <tr>
                     <template x-if="gi === 0">
                       <td class="px-3 py-1.5 align-middle font-mono font-semibold whitespace-nowrap" :rowspan="groupRows(it).length">
-                        <span x-show="editId !== it.id" x-text="it.part_number"></span>
-                        <input x-show="editId === it.id" class="input w-48 py-1 font-mono" x-model="edit.part_number" maxlength="100"
-                               autocapitalize="characters" spellcheck="false" aria-label="Bestellnummer des Shops" data-edit-part ${EDIT_KEYS}>
+                        ${PART_CELL}
                       </td>
                     </template>
                     <template x-if="gi === 0">
                       <td class="max-w-0 px-3 py-1.5 align-middle" :rowspan="groupRows(it).length">
-                        <div x-show="editId !== it.id">${NAME_TEXT}</div>
-                        <input x-show="editId === it.id" class="input py-1" x-model="edit.name" maxlength="300" placeholder="Bezeichnung"
-                               aria-label="Bezeichnung" ${EDIT_KEYS}>
+                        ${NAME_CELL}
                       </td>
                     </template>
                     <td class="px-3 py-1.5 align-middle whitespace-nowrap" :class="g.none ? 'italic text-slate-400' : 'text-slate-700'"
@@ -207,11 +214,9 @@ const template = /* html */ `
                     <template x-if="gi === 0">
                       <td class="px-3 py-1.5 text-right align-middle tabular-nums" :rowspan="groupRows(it).length">
                         <template x-if="isCart()">
-                          <div>
-                            <span x-show="editId !== it.id" x-text="it.qty_ordered"></span>
-                            <input x-show="editId === it.id" type="number" min="1" step="1" class="input w-20 py-1 text-right"
-                                   x-model.number="edit.qty_ordered" aria-label="Gesamtmenge" data-edit-qty ${EDIT_KEYS}>
-                            <p x-show="editId === it.id && allocationSum(it) && allocationSum(it) !== edit.qty_ordered"
+                          <div class="flex flex-col items-end">
+                            ${QTY_CELL}
+                            <p x-show="isEditing(it, 'qty_ordered') && allocationSum(it) && allocationSum(it) !== Number(cellValue)"
                                class="hint whitespace-nowrap" x-text="'Gruppen ergeben ' + allocationSum(it)"></p>
                           </div>
                         </template>
@@ -235,12 +240,8 @@ const template = /* html */ `
                       </td>
                     </template>
                     <template x-if="gi === 0 && isCart()">
-                      <td class="px-2 py-1 align-middle whitespace-nowrap" :rowspan="groupRows(it).length" @click.stop>
-                        <div x-show="editId === it.id" class="flex gap-1">
-                          <button type="button" class="btn btn-primary btn-sm" :disabled="busy" @click="saveEdit(it)" data-edit-save>Speichern</button>
-                          <button type="button" class="btn btn-ghost btn-sm" @click="cancelEdit()">Abbrechen</button>
-                        </div>
-                        <button x-show="editId !== it.id" type="button" class="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                      <td class="px-2 py-1 align-middle whitespace-nowrap" :rowspan="groupRows(it).length">
+                        <button type="button" class="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700"
                                 @click="removeItem(it)" :aria-label="'Position ' + it.part_number + ' löschen'" x-tip="'Position löschen'"
                                 data-item-delete>${TRASH}</button>
                       </td>
@@ -284,17 +285,15 @@ const template = /* html */ `
                     </template>
                   </div>
                 </template>
-                <template x-if="isCart() && editId === it.id">
-                  <form class="space-y-2" @submit.prevent="saveEdit(it)">
-                    <input class="input font-mono" x-model="edit.part_number" maxlength="100" aria-label="Bestellnummer des Shops"
-                           autocapitalize="characters" spellcheck="false">
-                    <input class="input" x-model="edit.name" maxlength="300" placeholder="Bezeichnung" aria-label="Bezeichnung">
-                    <input class="input w-28" type="number" min="1" step="1" x-model.number="edit.qty_ordered" aria-label="Gesamtmenge">
-                    <div class="flex gap-2">
-                      <button type="submit" class="btn btn-primary" :disabled="busy">Speichern</button>
-                      <button type="button" class="btn btn-danger ml-auto" @click="removeItem(it)">Löschen</button>
-                    </div>
-                  </form>
+                <template x-if="isCart()">
+                  <dl class="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
+                    <dt class="text-slate-500">Art.-Nr.</dt><dd class="min-w-0 font-mono">${PART_CELL}</dd>
+                    <dt class="text-slate-500">Bezeichnung</dt><dd class="min-w-0">${NAME_CELL}</dd>
+                    <dt class="text-slate-500">Menge</dt><dd>${QTY_CELL}</dd>
+                  </dl>
+                </template>
+                <template x-if="isCart()">
+                  <button type="button" class="btn btn-danger btn-sm" @click="removeItem(it)">Position löschen</button>
                 </template>
               </div>
             </li>
@@ -460,15 +459,14 @@ function component() {
     orderForm: {},
     /** Feld im Kopf, das gerade bearbeitet wird. */
     editField: null,
-    editId: null,
-    edit: {},
+    /** Zelle in Bearbeitung: { id, field } und ihr Eingabewert. */
+    editCell: null,
+    cellValue: '',
     showItemForm: false,
     /** Vorgemerkte Liefermengen je Position (werden nach DELIVERY_COLLECT_MS gemeinsam gebucht). */
     pending: {},
     pendingTimer: null,
     holding: false,
-    cancelId: null,
-    cancelQty: 0,
     openRow: null,
     /** Positionen, deren Löschen läuft (ausgeblendet bis „Rückgängig“ oder Ablauf). */
     hiddenItems: {},
@@ -550,10 +548,8 @@ function component() {
     toggleRow(it) {
       if (this.openRow === it.id) {
         this.openRow = null;
-        if (this.editId === it.id) this.cancelEdit();
       } else {
         this.openRow = it.id;
-        if (this.isCart()) this.startEdit(it);
       }
     },
     allocationSum(it) { return (it.group_allocations || []).reduce((s, a) => s + (a.qty || 0), 0); },
@@ -651,43 +647,67 @@ function component() {
       }
     },
 
-    // ---- Positionen bearbeiten (Warenkorb): Zeile wird zur Eingabezeile ------------
-    async startEdit(it) {
-      if (this.editId && this.editId !== it.id) {
-        const current = this.items.find((i) => i.id === this.editId);
-        if (current) await this.saveEdit(current);
+    // ---- Positionen: eine Zelle bearbeiten (Warenkorb: Art.-Nr., Bezeichnung, Menge; ab „bestellt“: Storno) ----
+    canEditCell(field) {
+      return field === 'qty_cancelled' ? this.canCancel() : this.isCart();
+    },
+    isEditing(it, field) {
+      return this.editCell?.id === it.id && this.editCell.field === field;
+    },
+    startCell(it, field) {
+      if (!this.canEditCell(field)) return;
+      this.editCell = { id: it.id, field };
+      this.cellValue = field === 'qty_cancelled' ? (it.qty_cancelled || 0) : (it[field] ?? '');
+    },
+    cancelCell() {
+      this.editCell = null;
+    },
+
+    /** Prüfen und speichern; Enter und das anschließende blur speichern nur einmal. */
+    async saveCell(it) {
+      if (this.editCell?.id !== it.id) return;
+      const { field } = this.editCell;
+      this.editCell = null;
+      const raw = String(this.cellValue ?? '').trim();
+      const old = field === 'qty_cancelled' ? (it.qty_cancelled || 0) : (it[field] ?? '');
+      let value = raw;
+      if (field === 'part_number' && !raw) { toast.error('Die Bestellnummer des Shops darf nicht leer sein.'); return; }
+      if (field === 'qty_ordered' || field === 'qty_cancelled') {
+        value = Number(raw);
+        const [min, max] = field === 'qty_ordered' ? [1, Infinity] : [0, this.maxCancel(it)];
+        if (raw === '' || !Number.isInteger(value) || value < min || value > max) {
+          toast.error(field === 'qty_ordered' ? 'Die Menge muss eine ganze Zahl ab 1 sein.'
+            : `Stornierte Menge von ${it.part_number}: 0 bis ${max}.`);
+          return;
+        }
       }
-      this.editId = it.id;
-      this.edit = { part_number: it.part_number, name: it.name || '', qty_ordered: it.qty_ordered };
-      this.$nextTick(() => [...document.querySelectorAll('[data-edit-part]')].find((e) => e.offsetParent)?.focus());
-    },
-
-    cancelEdit() {
-      this.editId = null;
-    },
-
-    async saveEdit(it) {
-      if (this.editId !== it.id) return;
-      const data = { part_number: String(this.edit.part_number || '').trim(), name: String(this.edit.name || '').trim(), qty_ordered: Number(this.edit.qty_ordered) };
-      if (!data.part_number) { toast.error('Die Bestellnummer des Shops fehlt.'); return; }
-      if (!Number.isInteger(data.qty_ordered) || data.qty_ordered < 1) { toast.error('Die Menge muss eine ganze Zahl ab 1 sein.'); return; }
-      this.editId = null;
-      if (data.part_number === it.part_number && data.name === (it.name || '') && data.qty_ordered === it.qty_ordered) return;
-      this.busy = true;
+      if (value === old) return;
+      const message = field === 'qty_cancelled'
+        ? (value ? `${it.part_number}: ${value} storniert.` : `${it.part_number}: Storno aufgehoben.`)
+        : `${{ part_number: 'Bestellnummer', name: 'Bezeichnung', qty_ordered: 'Menge' }[field]} von ${it.part_number} gespeichert.`;
       try {
-        await updateItem(it.id, data);
+        await updateItem(it.id, { [field]: value });
         await this.reload();
-        toast.success('Position gespeichert.');
+        toast.done(message, [{
+          label: 'Rückgängig',
+          icon: 'undo',
+          run: async () => {
+            try {
+              await updateItem(it.id, { [field]: old });
+            } catch (err) {
+              toast.error(errorMessage(err));
+            }
+            await this.reload();
+          },
+        }]);
       } catch (err) {
         toast.error(errorMessage(err));
-      } finally {
-        this.busy = false;
       }
     },
 
     /** Sofort ausblenden, nach Ablauf des Toasts löschen; „Rückgängig“ blendet wieder ein. */
     async removeItem(it) {
-      this.editId = null;
+      this.editCell = null;
       this.hiddenItems = { ...this.hiddenItems, [it.id]: true };
       const show = () => { const { [it.id]: _, ...rest } = this.hiddenItems; this.hiddenItems = rest; };
       try {
@@ -695,43 +715,6 @@ function component() {
           await this.reload();
           show();
         }
-      } catch (err) {
-        toast.error(errorMessage(err));
-      }
-    },
-
-    // ---- Storno (ab „bestellt“): Klick auf die bestellte Menge ---------------------
-    startCancel(it) {
-      if (!this.canCancel()) return;
-      this.cancelId = it.id;
-      this.cancelQty = it.qty_cancelled || 0;
-    },
-
-    async saveCancel(it) {
-      if (this.cancelId !== it.id) return; // Enter und anschließendes blur
-      this.cancelId = null;
-      const qty = Number(this.cancelQty);
-      const old = it.qty_cancelled || 0;
-      if (!Number.isInteger(qty) || qty < 0 || qty > this.maxCancel(it)) {
-        toast.error(`Stornierte Menge von ${it.part_number}: 0 bis ${this.maxCancel(it)}.`);
-        return;
-      }
-      if (qty === old) return;
-      try {
-        await updateItem(it.id, { qty_cancelled: qty });
-        await this.reload();
-        toast.done(qty ? `${it.part_number}: ${qty} storniert.` : `${it.part_number}: Storno aufgehoben.`, [{
-          label: 'Rückgängig',
-          icon: 'undo',
-          run: async () => {
-            try {
-              await updateItem(it.id, { qty_cancelled: old });
-            } catch (err) {
-              toast.error(errorMessage(err));
-            }
-            await this.reload();
-          },
-        }]);
       } catch (err) {
         toast.error(errorMessage(err));
       }
