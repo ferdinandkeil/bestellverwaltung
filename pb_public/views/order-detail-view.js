@@ -85,11 +85,11 @@ const DELIVERED_CELL = cellEdit('delivered',
     align: 'right',
     input: 'w-12" type="number" min="1" step="1" inputmode="numeric" :max="backlogOf(it)" placeholder="0" aria-label="Gelieferte Menge',
     prefix: `<span class="tabular-nums" x-text="it.qty_delivered"></span>${PLUS}`,
-    suffix: DELIVER_ALL,
+    suffix: `<span class="ml-1.5 inline-flex">${DELIVER_ALL}</span>`,
   });
 /** Zelle mit immer sichtbarem Haken rechts (im offenen Rahmen sitzt er darin). */
 const DELIVERED_WITH_CHECK = /* html */ `
-<span class="inline-flex items-center justify-end gap-1.5">${DELIVERED_CELL}<span x-show="!isEditing(it, 'delivered')" class="inline-flex">${DELIVER_ALL}</span></span>`;
+<span class="inline-flex items-center justify-end gap-3">${DELIVERED_CELL}<span x-show="!isEditing(it, 'delivered')" class="inline-flex">${DELIVER_ALL}</span></span>`;
 
 /** Bezeichnung (wird kaum genutzt: schmal, gekürzt, voll im Tooltip) und Kennzeichen „nachgetragen“. */
 const NAME_TEXT = /* html */ `
