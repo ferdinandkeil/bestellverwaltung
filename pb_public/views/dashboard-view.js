@@ -24,18 +24,25 @@ const template = /* html */ `
   </template>
 
   <div class="mb-4 flex flex-wrap items-center gap-2">
-    <h1 class="w-full text-xl font-semibold sm:mr-auto sm:w-auto">Bestellungen</h1>
-    <input type="search" class="input order-last w-full sm:order-none sm:w-64" placeholder="Suchen: Nr., Lieferant, Was, Artikel"
-           x-model="search" @input="searchChanged()" aria-label="Bestellungen durchsuchen" data-overview-search>
-    <template x-for="p in plugins()" :key="p.id">
-      <button type="button" class="btn btn-secondary" :class="p.prominent && 'hidden sm:inline-flex'" @click="runPlugin(p)" x-text="p.label"></button>
+    <h1 class="mr-auto text-xl font-semibold">Bestellungen</h1>
+    <!-- prominente Module (Scanner) ab sm als Symbol in der Kopfzeile -->
+    <template x-for="p in plugins().filter((p) => !p.prominent)" :key="p.id">
+      <button type="button" class="btn btn-secondary" @click="runPlugin(p)" x-text="p.label"></button>
     </template>
   </div>
 
   ${unmatchedReceiptsSection}
 
+  <!-- Suche: auf dem PC rechts in der Filterzeile (füllt den Rest), auf Smartphone/Tablet über dem Filter-Knopf -->
+  <div class="mb-4 flex flex-wrap items-start gap-x-4 gap-y-3">
+  <div class="w-full lg:order-last lg:w-auto lg:min-w-48 lg:flex-1">
+    <label class="label hidden lg:block" for="overview-search">Suche</label>
+    <input type="search" id="overview-search" class="input" placeholder="Nr., Lieferant, Was, Artikel"
+           x-model="search" @input="searchChanged()" aria-label="Bestellungen durchsuchen" data-overview-search>
+  </div>
+
   <!-- Filter: auf Smartphone/Tablet eingeklappt, aktive Filter als Chips -->
-  <div class="mb-3 flex flex-wrap items-center gap-2 lg:hidden">
+  <div class="flex w-full flex-wrap items-center gap-2 lg:hidden">
     <button type="button" class="btn btn-secondary btn-sm" @click="filtersOpen = !filtersOpen" :aria-expanded="filtersOpen">
       Filter
       <span x-show="activeFilters().length" class="rounded-full bg-blue-600 px-1.5 text-[10px] text-white" x-text="activeFilters().length"></span>
@@ -48,7 +55,7 @@ const template = /* html */ `
       </button>
     </template>
   </div>
-  <div class="mb-4 flex-wrap items-start gap-x-4 gap-y-3 lg:flex" :class="filtersOpen ? 'flex' : 'hidden'" data-overview-filters>
+  <div class="w-full flex-wrap items-start gap-x-4 gap-y-3 lg:flex lg:w-auto" :class="filtersOpen ? 'flex' : 'hidden'" data-overview-filters>
     <div class="w-full sm:w-auto">
       <span class="label">Phase</span>
       <!-- Höhe wie die Auswahlfelder daneben, Chips mittig dazu -->
@@ -84,6 +91,7 @@ const template = /* html */ `
         </template>
       </select>
     </div>
+  </div>
   </div>
 
   <p x-show="search.trim()" class="mb-2 text-sm text-slate-600">

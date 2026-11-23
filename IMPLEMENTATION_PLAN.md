@@ -130,6 +130,12 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 1. ✔ Ablauf (22.11.2026): verbundene Kästchen mit Abzweig ab „Bestellt“, nächste Schritte, Tooltip/Stift/Lupe, Vorschau-Häkchen, keine Hauptknöpfe; „Geliefert“ bucht den Rest (`POST …/deliveries/rest`, Rückgängig über `DELETE /api/lab/deliveries/{id}`). Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
 2. Offen: Positionen kompakt (Tabelle am PC), Inhalte je Phase, Beträge entfernen, „Handeln statt fragen“ (Löschen, Shop-Export).
 
+### Startseite, Nachbesserung (Branch `ui-startseite-2`)
+**Status:** abgenommen (23.11.2026). Entwickelt auf `ui-bestellung`, per Cherry-Pick ohne den Stand der Bestellansicht nach `main` übernommen.
+1. ✔ Hintergrund Karopapier mit Kaffeeflecken und Bleistift-Bauteilen (Experiment, übernommen); Rahmen als `border` statt 1-px-`ring` (ARCHITECTURE Kap. 7).
+2. ✔ „Lieferschein scannen“ ab 640 px als Symbol in der Kopfzeile; Suche rechts in der Filterzeile; Auswahlfelder so hoch wie Eingabefelder.
+3. ✔ Nebenbei (Branch `cache-control`): Oberfläche mit `Cache-Control: no-cache` (ARCHITECTURE Kap. 9).
+
 ### Folgende Branches (Reihenfolge vorläufig)
 1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
 

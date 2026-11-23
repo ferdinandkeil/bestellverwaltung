@@ -13,7 +13,7 @@ Maßgebliche Projektdokumente: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `pb_
 - Strikt phasenweise arbeiten; nach jeder Phase Feedback einholen, bevor die nächste beginnt.
 - Kein JS-Build (kein `package.json`, kein npm/Vite/Webpack). Alle Frontend-JS-Dateien als native ES6-Module unter `pb_public/`. Einzige Ausnahme: CSS-Build mit dem Tailwind Standalone CLI (`scripts/build-css.sh`); das erzeugte `pb_public/assets/app.css` wird mitcommittet.
 - Geschäftslogik, die mehrere Datensätze konsistent ändert, gehört in `pb_hooks/` (transaktional), nicht ins Frontend.
-- Nach Änderungen an `pb_hooks/` oder Schema: `tests/run.sh`; nach UI-Änderungen: `scripts/build-css.sh` und `tests/run.sh --e2e`.
+- Während der Arbeit: `tests/run.sh --changed` (nur die zu den Änderungen passenden Tests, Zuordnung in `tests/select.mjs`); nach UI-Änderungen vorher `scripts/build-css.sh`. **Vor jedem Merge nach `main`: `tests/run.sh --e2e`** (alles). Neue Module, Ansichten oder Testdateien in `tests/select.mjs` eintragen.
 - Feldnamen exakt wie in `pb_schema.json`.
 
 ## Git
