@@ -72,7 +72,7 @@
     <footer class="w-full border-t border-slate-200 bg-white/70 pb-20 backdrop-blur-sm sm:pb-0" data-footer
             x-data="{ version: '' }"
             x-init="fetch('version.json').then((r) => r.json()).then((v) => { version = v.commit ? `Version ${v.date} (${v.commit})` : 'Entwicklungsstand'; }).catch(() => { version = ''; })">
-      <div class="mx-auto max-w-6xl px-4 py-3 text-center text-xs text-slate-500">
+      <div class="mx-auto max-w-6xl px-4 py-0.5 text-center text-xs leading-4 text-slate-500">
         Labor-Bestellsystem<span x-show="version"> · <span x-text="version"></span></span> · Ferdinand Keil
       </div>
     </footer>
