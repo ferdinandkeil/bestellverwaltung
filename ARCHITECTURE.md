@@ -287,7 +287,9 @@ registerPlugin({
 * `tests/run.sh` startet eine frische PocketBase-Instanz (+ Mailpit als Test-Mailserver) außerhalb von Dropbox, importiert das Schema und führt `node --test` aus (nur Node-Bordmittel, kein npm).
 * `tests/run.sh --e2e` führt zusätzlich die Browser-Durchläufe in headless Chrome aus (App-Ablauf, Lieferschein-Erfassung, Moodle-Import, Shop-Export, Favoriten); sie schlagen auch bei Fehlern in der Browser-Konsole fehl. Klicks warten, bis das Element sichtbar ist (Alpine schaltet `x-show` erst im nächsten Animation-Frame um).
 * Testdaten sind synthetisch. Der Scanner-Test erzeugt einen Lieferschein im Reichelt-Layout als HTML und „fotografiert“ ihn schräg; echte Belege (`samples/`) gelangen nie ins Repo.
-* Nach Änderungen an `pb_hooks/` oder am Schema: `tests/run.sh`; nach UI-Änderungen zusätzlich `scripts/build-css.sh` und `tests/run.sh --e2e`.
+* **Gestuft testen (11/2026):** Während der Arbeit `tests/run.sh --changed [ref]` – nur die Tests zu den geänderten Dateien (gegenüber dem Abzweig von `main` bzw. `ref`, inkl. nicht committeter); vor jedem Merge nach `main` `tests/run.sh --e2e` (alles). Nach UI-Änderungen vorher `scripts/build-css.sh`.
+  * Zuordnung Datei → Tests als Regelliste in `tests/select.mjs` (erste passende Regel gilt), geprüft durch `tests/select.test.mjs`. **Lieber zu viel als zu wenig:** Gemeinsames (`core/`, `index.html`, Schema, Migrationen, `vendor/`, Test-Infrastruktur) und jede Datei ohne Regel lösen den vollen Lauf aus; `pb_hooks/` alle Unit-Tests; CSS alle Browser-Tests; eine Ansicht die Browser-Tests, die durch sie hindurchführen. Neue Module, Ansichten oder Testdateien dort eintragen.
+  * Warum kein fertiges Werkzeug: `node --test --watch` und Vitest/Jest wählen nach dem Import-Graphen, unsere Tests sprechen aber per HTTP bzw. Browser mit der App (kein Import der geprüften Dateien); dazu bräuchten sie npm.
 
 ## 9. Betrieb
 * **Produktivbetrieb:** Rate-Limiting aktiv, Client-IP über den Proxy-Header `X-Forwarded-For` (Uberspace-Proxy), Login-Mails über ein Postfach auf Uberspace.
