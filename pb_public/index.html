@@ -19,7 +19,8 @@
     <img src="assets/papier/elko.svg" alt="" class="paper-part paper-cap">
     <img src="assets/papier/transistor.svg" alt="" class="paper-part paper-transistor">
   </div>
-  <div x-data x-cloak>
+  <!-- Spalte über die ganze Höhe: die Fußzeile steht auch bei kurzen Seiten unten -->
+  <div x-data x-cloak class="flex min-h-dvh flex-col">
     <!-- Kopfzeile (nur eingeloggt) -->
     <header x-show="$store.auth.user" class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div class="relative mx-auto flex max-w-6xl items-center gap-1 px-4 py-2" x-data="{ menu: false }"
@@ -64,7 +65,15 @@
     </header>
 
     <!-- Aktuelle Ansicht (wird vom Router ein-/ausgehängt) -->
-    <main id="view" class="mx-auto max-w-6xl px-4 py-4 pb-24"></main>
+    <main id="view" class="mx-auto w-full max-w-6xl flex-1 px-4 py-4"></main>
+
+    <!-- Fußzeile: Version (version.json schreibt scripts/deploy.sh auf dem Server; im Repo leer = Entwicklungsstand) und Autor.
+         Unten Platz für den Warenkorb-Knopf auf dem Smartphone. -->
+    <footer class="mx-auto w-full max-w-6xl px-4 pt-2 pb-24 text-center text-xs text-slate-400 sm:pb-6" data-footer
+            x-data="{ version: '' }"
+            x-init="fetch('version.json').then((r) => r.json()).then((v) => { version = v.commit ? `Version ${v.date} (${v.commit})` : 'Entwicklungsstand'; }).catch(() => { version = ''; })">
+      Labor-Bestellsystem<span x-show="version"> · <span x-text="version"></span></span> · Ferdinand Keil
+    </footer>
 
     <!-- Formular „Position erfassen“ (views/cart-menu.js, Ereignis open-item-form) und Warenkorb-Knopf (Smartphone) -->
     <div id="item-form-modal"></div>

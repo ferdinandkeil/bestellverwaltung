@@ -94,6 +94,9 @@ step "Migrationen, Hooks und Oberfläche"
 "${RSYNC_KEEP[@]}" pb_migrations/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_migrations/"
 "${RSYNC[@]}" pb_hooks/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_hooks/"
 "${RSYNC[@]}" pb_public/ "$DEPLOY_SSH:$DEPLOY_DIR/pb_public/"
+# Version für die Fußzeile: Datum und Kurzhash des deployten Commits (im Repo liegt ein leerer Platzhalter)
+printf '{"date": "%s", "commit": "%s"}\n' "$(git log -1 --format=%cs)" "$REV" | ssh "$DEPLOY_SSH" "cat > '$DEPLOY_DIR/pb_public/version.json'"
+echo "version.json: $(git log -1 --format=%cs) ($REV)"
 
 step "Neustart"
 ssh "$DEPLOY_SSH" "supervisorctl restart '$DEPLOY_SERVICE'"

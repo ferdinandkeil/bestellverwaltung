@@ -101,7 +101,7 @@ scripts/deploy.sh --dry-run                        # zeigt, was sich auf dem Ser
 scripts/deploy.sh                                  # Tests → Schema → Migrationen/Hooks/Oberfläche → Neustart → Prüfung
 ```
 
-Das Skript deployt nur von `main` mit sauberem Arbeitsverzeichnis und merkt sich den Stand in `~/bestellverwaltung/DEPLOYED_REVISION`. Hat sich `pb_schema.json` seitdem geändert (oder ist der Stand unbekannt, z. B. beim ersten Lauf), kopiert es zuerst das Schema und **hält an**: dann im Admin-UI ein Backup erstellen und das Schema importieren (Schritt 2.2), danach mit Enter fortfahren. Am Ende prüft es, dass die Hooks geladen sind (`401`).
+Das Skript deployt nur von `main` mit sauberem Arbeitsverzeichnis und merkt sich den Stand in `~/bestellverwaltung/DEPLOYED_REVISION`. Nach dem Kopieren der Oberfläche schreibt es `pb_public/version.json` (Datum und Kurzhash des Commits) für die Fußzeile der App; beim Deploy von Hand diese Datei ebenso anlegen, sonst steht dort „Entwicklungsstand“. Hat sich `pb_schema.json` seitdem geändert (oder ist der Stand unbekannt, z. B. beim ersten Lauf), kopiert es zuerst das Schema und **hält an**: dann im Admin-UI ein Backup erstellen und das Schema importieren (Schritt 2.2), danach mit Enter fortfahren. Am Ende prüft es, dass die Hooks geladen sind (`401`).
 
 **Von Hand** (gleiche Schritte):
 
