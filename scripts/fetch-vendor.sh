@@ -25,10 +25,14 @@ FILES=(
   "tesseract.js-core@7.0.0               tesseract-core-lstm.wasm.js"
   "tesseract.js-core@7.0.0               tesseract-core-simd-lstm.wasm.js"
   "tesseract.js-core@7.0.0               tesseract-core-relaxedsimd-lstm.wasm.js"
+  # PDF-Vorschau der Anhänge (wird erst beim Aufklappen der Anhänge geladen)
+  "pdfjs-dist@4.10.38                    build/pdf.min.mjs"
+  "pdfjs-dist@4.10.38                    build/pdf.worker.min.mjs"
   # Moodle-Import (wird erst beim Öffnen des Imports geladen)
   "papaparse@5.7.0                       papaparse.min.js"
   # Lizenztexte (werden mit ausgeliefert; Übersicht in THIRD_PARTY_NOTICES.md)
   "papaparse@5.7.0                       LICENSE"
+  "pdfjs-dist@4.10.38                    LICENSE"
   "pocketbase@0.28.1                     LICENSE.md"
   "jscanify@1.4.3                        LICENSE"
   "@techstark/opencv-js@5.0.0-release.1  LICENSE"

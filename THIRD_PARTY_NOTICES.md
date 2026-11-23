@@ -14,6 +14,7 @@ Prüfsummen in `pb_public/vendor/SHA256SUMS`). Die Lizenztexte liegen jeweils ne
 | tesseract.js-core (Tesseract OCR als WebAssembly) | 7.0.0 | Apache-2.0 | Tesseract.js contributors, Tesseract OCR authors | `vendor/tesseract.js-core@7.0.0/LICENSE` |
 | Sprachdaten deu/eng (tessdata_best, int) | 4.0.0 | Apache-2.0 (Daten des Tesseract-OCR-Projekts; npm-Paketierung @tesseract.js-data unter MIT) | Tesseract OCR authors | Apache-2.0, siehe Lizenztext von tesseract.js-core |
 | Papa Parse | 5.7.0 | MIT | Matthew Holt | `vendor/papaparse@5.7.0/LICENSE` |
+| PDF.js (pdfjs-dist) | 4.10.38 | Apache-2.0 | Mozilla Foundation and contributors | `vendor/pdfjs-dist@4.10.38/LICENSE` |
 
 Keines der Apache-2.0-Pakete enthält eine NOTICE-Datei.
 

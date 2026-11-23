@@ -12,6 +12,7 @@ import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast, deferredAction } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
 import { orderStepsSection } from './order-steps.js';
+import { pdfPreview } from '../core/pdf-preview.js';
 
 /** Phasen, in denen Positionen bearbeitet werden (vor „bestellt“); danach nur noch Storno. */
 const CART_STATUSES = ['angefragt', 'freigabe'];
@@ -314,21 +315,29 @@ const template = /* html */ `
       <!-- Anhänge: eigene Dateien der Bestellung und die Lieferschein-Belege der Lieferbuchungen (gespeichert an der
            Buchung, hier nur angezeigt, nicht löschbar). Eine eigene Lieferhistorie gibt es nicht (Tooltip an „Geliefert“). -->
       <section class="card p-4" data-attachments>
-        <div class="mb-3 flex items-center gap-2">
-          <h2 class="mr-auto text-lg font-semibold">Anhänge</h2>
+        <div class="flex items-center gap-2">
+          <!-- Standardmäßig eingeklappt; Vorschauen (auch PDF, erste Seite) werden erst beim Aufklappen geladen -->
+          <button type="button" class="mr-auto flex items-center gap-1 text-left" @click="toggleAttachments()"
+                  :aria-expanded="attachmentsOpen" data-attachments-toggle>
+            <h2 class="text-lg font-semibold">Anhänge <span class="text-sm font-normal text-slate-500" x-text="'(' + attachmentEntries().length + ')'"></span></h2>
+            <svg viewBox="0 0 20 20" fill="currentColor" class="size-5 shrink-0 text-slate-400 transition-transform" :class="attachmentsOpen && 'rotate-180'" aria-hidden="true"><path fill-rule="evenodd" d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+          </button>
           <label class="btn btn-secondary btn-sm cursor-pointer" x-show="!isClosed()">
             Datei hinzufügen
             <input type="file" class="hidden" multiple accept="image/jpeg,image/png,image/webp,application/pdf" @change="upload($event)">
           </label>
         </div>
-        <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6" x-show="attachmentEntries().length">
+        <ul class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6" x-show="attachmentsOpen && attachmentEntries().length">
           <template x-for="a in attachmentEntries()" :key="a.key">
             <li class="relative overflow-hidden rounded-lg border border-slate-200" :data-attachment="a.kind">
               <a :href="a.url" target="_blank" rel="noopener" class="block">
                 <template x-if="!a.pdf">
                   <img :src="a.thumb" :alt="a.label" class="aspect-square w-full object-cover" loading="lazy">
                 </template>
-                <template x-if="a.pdf">
+                <template x-if="a.pdf && pdfThumbs[a.key]">
+                  <img :src="pdfThumbs[a.key]" :alt="a.label" class="aspect-square w-full bg-white object-cover object-top" data-pdf-thumb>
+                </template>
+                <template x-if="a.pdf && !pdfThumbs[a.key]">
                   <div class="flex aspect-square items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500">PDF</div>
                 </template>
                 <div class="truncate px-2 py-1 text-xs" x-text="a.label" x-tip="a.title"></div>
@@ -338,7 +347,7 @@ const template = /* html */ `
             </li>
           </template>
         </ul>
-        <p x-show="!attachmentEntries().length" class="text-sm text-slate-500">Noch keine Anhänge.</p>
+        <p x-show="attachmentsOpen && !attachmentEntries().length" class="mt-3 text-sm text-slate-500">Noch keine Anhänge.</p>
       </section>
 
       <!-- Modal: Position hinzufügen -->
@@ -450,6 +459,9 @@ function component() {
     /** Positionen, deren Löschen läuft (ausgeblendet bis „Rückgängig“ oder Ablauf). */
     hiddenItems: {},
     hiddenFiles: {},
+    attachmentsOpen: false,
+    /** Vorschaubilder der PDFs (Object-URLs) je Eintrag; fehlt eins, bleibt die Kachel „PDF“. */
+    pdfThumbs: {},
     delivery: { open: false, qty: {}, note: '', receipt: null },
     late: { open: false, part_number: '', name: '', qty: 1, group: '', delivered: false, courses: [] },
     unsubscribe: null,
@@ -479,6 +491,7 @@ function component() {
         this.order = order;
         this.items = items;
         this.deliveries = deliveries;
+        if (this.attachmentsOpen) this.$nextTick(() => this.loadPdfThumbs());
         this.steps = steps;
         this.orderForm = {
           internal_order_no: order.internal_order_no || '',
@@ -771,6 +784,7 @@ function component() {
       if (!files.length) return;
       try {
         await uploadAttachments(this.order.id, files);
+        this.attachmentsOpen = true; // das Neue soll sichtbar sein
         await this.reload();
         toast.success(files.length === 1 ? 'Anhang hochgeladen.' : `${files.length} Anhänge hochgeladen.`);
       } catch (err) {
@@ -779,6 +793,20 @@ function component() {
     },
 
     visibleAttachments() { return (this.order?.attachments || []).filter((f) => !this.hiddenFiles[f]); },
+
+    toggleAttachments() {
+      this.attachmentsOpen = !this.attachmentsOpen;
+      if (this.attachmentsOpen) this.loadPdfThumbs();
+    },
+
+    /** PDF-Vorschauen der sichtbaren Anhänge nachladen (nur wenn aufgeklappt). */
+    loadPdfThumbs() {
+      for (const a of this.attachmentEntries()) {
+        if (!a.pdf || this.pdfThumbs[a.key]) continue;
+        pdfPreview(a.url).then((src) => { this.pdfThumbs = { ...this.pdfThumbs, [a.key]: src }; })
+          .catch((err) => console.warn('PDF-Vorschau nicht möglich', a.label, err));
+      }
+    },
 
     /** Lieferschein-Belege (an den Buchungen) und eigene Anhänge der Bestellung in einer Liste. */
     attachmentEntries() {
