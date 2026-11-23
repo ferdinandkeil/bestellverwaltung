@@ -7,7 +7,7 @@ import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
 import { INTERNAL_ORDER_NO_RE, defaultWithoutInternalOrderNo } from '../../core/config.js';
 import { setOrderStep, listOrderItems, errorMessage } from '../../core/api.js';
-import { toast, confirmAction } from '../../core/ui.js';
+import { toast } from '../../core/ui.js';
 import {
   formatForOrder, exportLines, buildCsv, buildText, csvFileName, sameLines,
   emptyChecklist, parseChecklist, checklistState, toggleChecklist, checklistComplete, checklistRemoved, forgetChecklistPart,
@@ -275,18 +275,26 @@ function component() {
           this.exported = null;
           return;
         }
+        // Handeln statt fragen (ARCHITECTURE Kap. 7): sofort setzen, „Rückgängig“ im Toast nimmt „bestellt“ zurück.
         const cart = this.order.status === 'angefragt';
-        if (!(await confirmAction(
-          (without ? 'Ohne interne Bestellnummer als bestellt markieren?' : 'Als bestellt markieren?') +
-          (cart
-            ? ' Der Warenkorb wird damit geschlossen; neue Positionen für diesen Lieferanten landen in einem neuen Warenkorb.'
-            : ' Noch offene Formularschritte gelten danach als übersprungen.'),
-          { confirmLabel: 'Als bestellt markieren' }))) return;
+        const orderId = this.order.id;
         const supplierNo = this.supplierNo.trim();
-        await setOrderStep(this.order.id, 'ordered', without
+        await setOrderStep(orderId, 'ordered', without
           ? { without_internal_order_no: true, supplier_order_no: supplierNo }
           : { internal_order_no: internal, supplier_order_no: supplierNo });
-        toast.success('Status: Bestellt');
+        notifyOrderChanged(orderId);
+        toast.done('Als bestellt markiert.' + (cart ? ' Warenkorb geschlossen.' : ''), [{
+          label: 'Rückgängig',
+          icon: 'undo',
+          run: async () => {
+            try {
+              await setOrderStep(orderId, 'ordered', { done: false });
+            } catch (err) {
+              toast.error(errorMessage(err));
+            }
+            notifyOrderChanged(orderId);
+          },
+        }]);
         if (this.format.kind === 'checklist') saveChecklist(this.order.id, null);
         this.isOpen = false;
       } catch (err) {
@@ -296,6 +304,11 @@ function component() {
       }
     },
   };
+}
+
+/** Bestellansicht und Startseite neu laden lassen (gleiches Ereignis wie beim Abhaken im Ablauf). */
+function notifyOrderChanged(orderId) {
+  window.dispatchEvent(new CustomEvent('order-steps-changed', { detail: { orderId } }));
 }
 
 // ---- Einhängen ----------------------------------------------------------------

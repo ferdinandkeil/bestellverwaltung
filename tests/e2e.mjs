@@ -125,29 +125,36 @@ try {
   await b.waitFor(`[...document.querySelectorAll('[data-row-details]')].some((d) => d.offsetParent && d.querySelector('[data-step=ordered]')?.dataset.state === 'done')`, 'Zeile aufgeklappt');
   await b.screenshot('03b-aufgeklappt');
   await b.evaluate(`[...document.querySelectorAll('[data-order-details]')].find((a) => a.offsetParent).click()`);
-  await b.waitFor(`document.querySelector('[x-data=orderDetailView]') && document.body.innerText.includes('Lieferhistorie')`, 'Detail');
+  await b.waitFor(`document.querySelector('[x-data=orderDetailView]') && document.querySelector('[data-items-list] [data-item]')`, 'Detail');
   if ((await b.evaluate(BADGE)) !== 'Teilgeliefert') throw new Error('Status sollte Teilgeliefert sein');
   ok('Zeile aufgeklappt (Schritte), Detail Reichelt (teilgeliefert) über „Positionen & Details“');
   await b.screenshot('04-detail');
 
-  await b.clickText('button', '+1');
-  await b.clickText('button', '+1');
-  await b.clickText('button', '+1');
-  await b.waitFor(`document.body.innerText.includes('+3 …')`, 'Sammelanzeige');
-  await b.waitFor(`[...document.querySelectorAll('#view dd')][1]?.innerText === '7'`, 'geliefert = 7', 6000);
-  const lines = await b.evaluate(`document.querySelectorAll('#view section li ul li').length`);
-  if (lines !== 2) throw new Error(`Lieferhistorie: ${lines} statt 2 Buchungen`);
-  ok('3× „+1“ → eine Buchung, geliefert 7');
+  // Lieferung in der Zelle „Geliefert“ (aufgeklappte Zeile): Menge dieser Lieferung → sofort gebucht, mit „Rückgängig“
+  const ITEM = (pn) => `[...document.querySelectorAll('[data-items-list] [data-item]')].find((r) => r.dataset.part === ${JSON.stringify(pn)})`;
+  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('button').click()`);
+  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-cell=delivered]')?.offsetParent`, 'Zeile aufgeklappt');
+  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-cell=delivered]').click()`);
+  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-cell-input=delivered]')?.offsetParent`, 'Liefermenge editierbar');
+  await b.evaluate(`(() => { const i = ${ITEM('NE 555 DIP')}.querySelector('[data-cell-input=delivered]'); i.value = '3'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`${TOASTS}.includes('Lieferung gebucht: NE 555 DIP +3') && ${ITEM('NE 555 DIP')}.querySelector('[data-item-summary]').innerText.trim() === '7 / 10'`, 'gebucht, geliefert 7');
+  const lines = await b.evaluate(`Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveries.length`);
+  if (lines !== 2) throw new Error(`${lines} statt 2 Lieferbuchungen`);
+  const tip = await b.evaluate(`Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveryTip(Alpine.$data(document.querySelector('[x-data=orderDetailView]')).items[0])`);
+  if (!/^\d\d\.\d\d\. \+4 · \d\d\.\d\d\. \+3$/.test(tip)) throw new Error('Tooltip an „Geliefert“: ' + tip);
+  ok('Liefermenge in „Geliefert“ eingetragen → sofort gebucht, geliefert 7');
 
-  await b.clickText('button', 'Rest komplett');
-  await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert', 6000);
-  ok('„Rest komplett“ → automatisch Geliefert');
+  // Haken „alles geliefert“ ist immer sichtbar (ohne die Zelle zu öffnen)
+  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]')?.offsetParent && !${ITEM('NE 555 DIP')}.querySelector('[data-cell-input=delivered]')`, 'Haken sichtbar');
+  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]').click()`);
+  await b.waitFor(`${BADGE} === 'Geliefert' && ${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]').disabled`, 'Status geliefert, Haken grün');
+  ok('Haken „alles geliefert“ (immer sichtbar) → automatisch Geliefert');
 
   // Verwaltungsschritte ohne Rückfrage: Klick hakt sofort ab, Toast mit „Datum ändern“/„Rückgängig“
   const STEP = (v) => `document.querySelector('#view [data-step=${v}]')`;
   await b.waitFor(`${STEP('invoice_received')} && ${STEP('invoice_received')}.getAttribute('aria-disabled') !== 'true'`, 'Rechnungsschritte freigegeben');
-  await b.clickText('#view button[data-next-step]', '✓ Rechnung da');
-  await b.waitFor(`${STEP('invoice_received')}.dataset.state === 'done' && document.querySelector('[data-order-steps]').innerText.includes('E2E Tester')`, 'Rechnung da erledigt');
+  await b.evaluate(`${STEP('invoice_received')}.click()`);
+  await b.waitFor(`${STEP('invoice_received')}.dataset.state === 'done'`, 'Rechnung da erledigt');
   await b.evaluate(`${STEP('invoice_submitted')}.click()`);
   await b.waitFor(`${BADGE} === 'Abgeschlossen' && ${STEP('invoice_signed')}.dataset.state === 'skipped' && ${STEP('closed')}.dataset.state === 'done'`, 'Abgeschlossen');
   if (!(await b.evaluate(`${TOASTS}.includes('Übersprungen: Rechnung unterschrieben')`))) throw new Error('Toast ohne Hinweis auf übersprungene Schritte: ' + await b.evaluate(TOASTS));
@@ -166,12 +173,15 @@ try {
 
   // Datum eines erledigten Schritts ändern
   const yesterday = new Date(Date.now() - 86400000);
+  // Smartphone: Lupe zeigt Datum und Person, dort „Datum ändern“
+  await b.evaluate(`document.querySelector('[data-step-info=invoice_received]').click()`);
+  await b.waitFor(`document.querySelector('[data-step-details=invoice_received]')?.offsetParent && document.querySelector('[data-step-details=invoice_received]').innerText.includes('E2E Tester')`, 'Details mit Person');
   await b.evaluate(`document.querySelector('[data-step-date=invoice_received]').click()`);
   await b.waitFor(`document.querySelector('#step-date')?.offsetParent`, 'Datumsdialog');
   await b.fill('#step-date', yesterday.toLocaleDateString('sv-SE'));
   await b.clickText('[data-step-dialog] button', 'Speichern');
   const shownDate = yesterday.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  await b.waitFor(`document.querySelector('[data-step-date=invoice_received]').innerText.includes(${JSON.stringify(shownDate)})`, 'Datum geändert');
+  await b.waitFor(`document.querySelector('[data-step-details=invoice_received]').innerText.includes(${JSON.stringify(shownDate)})`, 'Datum geändert');
   ok('Datum eines erledigten Schritts geändert');
 
   // Vergessene Position nachtragen und gleich als geliefert buchen → bleibt „Geliefert“, gekennzeichnet
@@ -183,7 +193,7 @@ try {
   await sleep(400); // Einblendung abwarten (nur für den Screenshot)
   await b.screenshot('04b-nachtragen');
   await b.clickText('.modal-panel button', 'Nachtragen');
-  await b.waitFor(`[...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('NE 556 DIP') && l.innerText.includes('nachgetragen') && l.innerText.includes('E2E Tester'))`, 'nachgetragene Position');
+  await b.waitFor(`${ITEM('NE 556 DIP')}?.textContent.includes('nachgetragen') && ${ITEM('NE 556 DIP')}.textContent.includes('E2E Tester')`, 'nachgetragene Position');
   if ((await b.evaluate(BADGE)) !== 'Geliefert') throw new Error('Status nach Nachtragen: ' + await b.evaluate(BADGE));
   ok('Position nachgetragen und geliefert gebucht – gekennzeichnet, Status bleibt Geliefert');
 
@@ -193,20 +203,39 @@ try {
   await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
   await b.waitFor(`location.hash === '#/carts'`, 'Seite Warenkörbe');
   await b.evaluate(`[...document.querySelectorAll('#view [data-cart] a')].find((a) => a.innerText.includes('Mouser')).click()`);
-  await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
-  await b.clickText('#view button[data-next-step]', '✓ Formular geschrieben');
+  await b.waitFor(`document.querySelector('[data-field=internal_order_no]')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
+  // Kopf: Felder als Text, ein Klick macht sie editierbar, Enter speichert, Escape bricht ab
+  const FIELD = (k) => `document.querySelector('[data-field=${k}]')`;
+  await b.evaluate(`${FIELD('subject')}.querySelector('[data-field-value]').click()`);
+  await b.waitFor(`document.querySelector('#order-subject')?.offsetParent`, 'Feld „Was“ editierbar');
+  await b.evaluate(`(() => { const i = document.querySelector('#order-subject'); i.value = 'Schieberegister'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`!document.querySelector('#order-subject') && ${FIELD('subject')}.innerText.includes('Schieberegister')`, '„Was“ gespeichert');
+  await b.evaluate(`${FIELD('subject')}.querySelector('[data-field-value]').click()`);
+  await b.waitFor(`document.querySelector('#order-subject')?.offsetParent`, 'erneut editierbar');
+  await b.evaluate(`(() => { const i = document.querySelector('#order-subject'); i.value = 'verworfen'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`);
+  await b.waitFor(`!document.querySelector('#order-subject') && ${FIELD('subject')}.innerText.includes('Schieberegister')`, 'Escape verwirft');
+  ok('Kopf: Feld per Klick editierbar, Enter speichert, Escape verwirft');
+  await b.evaluate(`document.querySelector('#view [data-step=form_written]').click()`);
   await b.waitFor(`document.querySelector('#step-internal-no')?.offsetParent`, 'Dialog: nur die fehlende Nummer');
   await b.fill('#step-internal-no', '2026-4711');
   await b.clickText('[data-step-dialog] button', 'Abhaken');
   await b.waitFor(`document.body.innerText.includes('hat das Format JJJJIW#####')`, 'Format-Hinweis');
   await b.fill('#step-internal-no', ' 2026iw04711 ');
   await b.clickText('[data-step-dialog] button', 'Abhaken');
-  await b.waitFor(`${BADGE} === 'In Freigabe' && document.querySelector('#internal-order-no').value === '2026IW04711'`, 'In Freigabe, normalisiert');
+  await b.waitFor(`${BADGE} === 'In Freigabe' && document.querySelector('[data-field=internal_order_no]').innerText.includes('2026IW04711')`, 'In Freigabe, normalisiert');
   if (!(await b.evaluate(`${TOASTS}.includes('Warenkorb geschlossen')`))) throw new Error('Toast ohne Hinweis auf geschlossenen Warenkorb');
   await b.evaluate(`document.querySelector('#view [data-step=ordered]').click()`);
   await b.waitFor(`${BADGE} === 'Bestellt' && document.querySelector('#view [data-step=form_signed]').dataset.state === 'skipped'`, 'Bestellt');
   if (!(await b.evaluate(`${TOASTS}.includes('Übersprungen: Formular unterschrieben, Formular in Verwaltung')`))) throw new Error('Toast: ' + await b.evaluate(TOASTS));
   await b.screenshot('05-bestellt');
+  // Nach „bestellt“: Geliefert und Rechnung da gleichzeitig als nächste Schritte; „Geliefert“ bucht den Rest
+  const NEXT = `[...document.querySelectorAll('#view [data-step-label]')].filter((e) => e.classList.contains('font-semibold')).map((e) => e.dataset.stepLabel).join()`;
+  await b.waitFor(`${NEXT} === 'delivered,invoice_received'`, 'zwei nächste Schritte');
+  await b.evaluate(`${STEP('delivered')}.click()`);
+  await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('delivered')}.dataset.state === 'done' && Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveries.some((d) => d.note === 'Rest vollständig geliefert')`, 'Rest geliefert gebucht');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`${BADGE} === 'Bestellt' && ${STEP('delivered')}.dataset.state === 'open' && !Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveries.some((d) => d.note === 'Rest vollständig geliefert')`, 'Buchung zurückgenommen');
+  ok('Nach „bestellt“ zwei nächste Schritte; „Geliefert“ bucht den Rest, „Rückgängig“ nimmt die Buchung zurück');
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('04711') && !a.innerText.includes('2026IW')) && document.querySelector('[data-overview-table] th').parentElement.innerText.includes('Best.-Nr.')`, 'Kurznummer auf der Startseite (Smartphone)');
   ok('Formular geschrieben (Nummer per Dialog, normalisiert), bestellt mit übersprungenen Schritten im Toast');
@@ -251,13 +280,73 @@ try {
   await b.waitFor(`${TIP} === ''`, 'kein Tooltip am offenen Kästchen');
   await b.evaluate(`${cell('invoice_signed')}.dispatchEvent(new MouseEvent('mouseleave'))`);
   ok('Tooltip am Kästchen zeigt nur das Datum, erst nach Verzögerung, Folgetooltip sofort');
+
+  // PC, Ablauf in der Bestellung: Verweilen über der Beschriftung → blau, unterstrichen, Stift; Klick → Datumsdialog
+  await b.evaluate(`${ROW('2026IW04711')}.querySelector('a').click()`);
+  await b.waitFor(`document.querySelector('[data-step-label=ordered]')?.offsetParent`, 'Bestellung (PC)');
+  const EDIT = `getComputedStyle(document.querySelector('[data-step-edit=ordered]')).opacity === '1'`;
+  await b.evaluate(`document.querySelector('[data-step-label=ordered]').dispatchEvent(new MouseEvent('mouseenter'))`);
+  await sleep(200);
+  if (await b.evaluate(EDIT)) throw new Error('Stift erscheint vor Ablauf der Wartezeit');
+  await b.waitFor(`${EDIT} && document.querySelector('[data-step-label=ordered]').classList.contains('text-blue-700') && document.querySelector('[data-step-label=ordered]').contains(document.querySelector('[data-step-edit=ordered]'))`, 'Stift nach Verweilen (im selben Knopf)');
+  await b.evaluate(`document.querySelector('[data-step-label=ordered]').click()`);
+  await b.waitFor(`document.querySelector('#step-date')?.offsetParent`, 'Datumsdialog über die Beschriftung');
+  await b.clickText('[data-step-dialog] button', 'Abbrechen');
+  await b.evaluate(`document.querySelector('[data-step-label=ordered]').dispatchEvent(new MouseEvent('mouseleave'))`);
+  await b.waitFor(`!(${EDIT})`, 'Stift weg nach Verlassen');
+  // warm wie Tooltips: innerhalb von 1 s die nächste Beschriftung → sofort
+  const EDIT2 = `getComputedStyle(document.querySelector('[data-step-edit=form_written]')).opacity === '1'`;
+  await b.evaluate(`document.querySelector('[data-step-label=form_written]').dispatchEvent(new MouseEvent('mouseenter'))`);
+  if (!(await b.evaluate(EDIT2))) throw new Error('Bearbeiten nicht sofort (warm)');
+  await b.evaluate(`document.querySelector('[data-step-label=form_written]').dispatchEvent(new MouseEvent('mouseleave'))`);
+  ok('PC: Beschriftung nach Verweilen blau mit Stift, Klick ändert das Datum');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`document.querySelector('[data-overview-table]')?.offsetParent && ${ROW('2026IW04711')}`, 'zurück zur Tabelle');
   await b.evaluate(`${cell('invoice_received')}.click()`);
   await b.waitFor(`${cell('invoice_received')}.dataset.state === 'done'`, 'in der Tabelle abgehakt');
   await b.screenshot('05a-tabelle');
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
   await b.waitFor(`${cell('invoice_received')}.dataset.state === 'open'`, 'Rückgängig in der Tabelle');
-  await b.setViewport();
   ok('PC: Tabelle mit Schritt-Checkboxen (Haken, Strich, leer), Abhaken in der Zeile, Rückgängig');
+
+  // PC: Positionen als Tabelle – eine Zeile je Gruppe, Storno über die Spalte „Bestellt“ (Mouser, bestellt)
+  const PC_ITEM = (pn) => `[...document.querySelectorAll('[data-items-table] [data-item]')].find((r) => r.dataset.part === ${JSON.stringify(pn)})`;
+  const mouserId = await b.evaluate(`(async () => { const { pb } = await import('/core/pb.js'); return (await pb.collection('orders').getFirstListItem('internal_order_no = "2026IW04711"')).id; })()`);
+  await b.navigate(PB_URL + '/#/orders/' + mouserId);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}?.offsetParent`, 'Positionstabelle');
+  const groupsShown = await b.evaluate(`[...${PC_ITEM('595-SN74HC595N')}.querySelectorAll('[data-group]')].map((g) => g.innerText.trim()).join()`);
+  if (!groupsShown.includes('Gruppe A') || !groupsShown.includes('Gruppe B')) throw new Error('Gruppenzeilen: ' + groupsShown);
+  if ((await b.evaluate(`${PC_ITEM('595-SN74HC595N')}.querySelectorAll('tr').length`)) < 2) throw new Error('keine eigene Zeile je Gruppe');
+  await b.evaluate(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell=qty_cancelled]').click()`);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell-input=qty_cancelled]')`, 'Feld „storniert“');
+  await b.evaluate(`(() => { const i = ${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell-input=qty_cancelled]'); i.value = '2'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell=qty_cancelled]')?.innerText.replace(/\\s+/g, '') === '10−2' && ${PC_ITEM('595-SN74HC595N')}.querySelector('[data-open]').innerText.trim() === '8'`, 'Storno 2, offen 8');
+  await b.screenshot('05b-positionen-pc');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cell=qty_cancelled]')?.innerText.trim() === '10'`, 'Storno zurückgenommen');
+  ok('PC: Positionen mit einer Zeile je Gruppe; Storno per Klick auf „Bestellt“, „Rückgängig“');
+
+  // PC: Warenkorb – Klick macht die Zeile zur Eingabezeile (Enter speichert), Löschen sofort mit „Rückgängig“
+  const conrad = await addItem(login.token, { supplier: 'farnell', part_number: 'C-100', name: 'Kabel', qty: 2, group: groupA });
+  await b.navigate(PB_URL + '/#/orders/' + conrad.order.id);
+  await b.waitFor(`${PC_ITEM('C-100')}?.offsetParent`, 'Warenkorb Conrad');
+  await b.evaluate(`${PC_ITEM('C-100')}.querySelector('[data-cell=qty_ordered]').click()`);
+  await b.waitFor(`${PC_ITEM('C-100')}.querySelector('[data-cell-input=qty_ordered]')?.offsetParent && !${PC_ITEM('C-100')}.querySelector('[data-cell-input=name]')`, 'nur diese Zelle editierbar');
+  await b.evaluate(`(() => { const i = ${PC_ITEM('C-100')}.querySelector('[data-cell-input=qty_ordered]'); i.value = '4'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`!${PC_ITEM('C-100')}.querySelector('[data-cell-input=qty_ordered]') && ${PC_ITEM('C-100')}.querySelector('[data-cell=qty_ordered]').innerText.trim() === '4'`, 'Menge gespeichert');
+  await b.evaluate(`${PC_ITEM('C-100')}.querySelector('[data-item-delete]').click()`);
+  await b.waitFor(`!${PC_ITEM('C-100')}`, 'sofort ausgeblendet');
+  if (await b.evaluate(`document.querySelector('#confirm-dialog')?.open`)) throw new Error('Sicherheitsabfrage beim Löschen');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`${PC_ITEM('C-100')}?.offsetParent`, 'wieder eingeblendet');
+  // Warenkorb löschen: sofort zur Startseite, „Rückgängig“ führt zurück
+  await b.clickText('#view button', 'Warenkorb löschen');
+  await b.waitFor(`location.hash === '#/' && ${TOASTS}.includes('Warenkorb Farnell gelöscht')`, 'Warenkorb gelöscht (Toast)');
+  if (await b.evaluate(`document.querySelector('#confirm-dialog')?.open`)) throw new Error('Sicherheitsabfrage beim Warenkorb');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`location.hash === '#/orders/${conrad.order.id}' && ${PC_ITEM('C-100')}?.offsetParent`, 'zurück im Warenkorb');
+  await b.setViewport();
+  ok('PC: Warenkorb – Klick bearbeitet nur die Zelle (Enter); Position und Warenkorb löschen ohne Rückfrage mit „Rückgängig“');
 
   await b.navigate(PB_URL + '/#/groups');
   await b.waitFor(`document.querySelector('[x-data=groupsView]') && [...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('Gruppe B'))`, 'Gruppenliste');

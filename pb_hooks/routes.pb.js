@@ -100,6 +100,34 @@ routerAdd("POST", "/api/lab/orders/{id}/deliveries", (e) => {
 }, $apis.requireAuth("users"));
 
 /**
+ * POST /api/lab/orders/{id}/deliveries/rest – „Geliefert“ abhaken: Rest aller Positionen als eine Lieferung buchen.
+ * Antwort: { delivery, status }
+ */
+routerAdd("POST", "/api/lab/orders/{id}/deliveries/rest", (e) => {
+  const { bookRest } = require(`${__hooks}/lib/deliveries.js`);
+  const id = e.request.pathValue("id");
+  let result;
+  $app.runInTransaction((txApp) => {
+    result = bookRest(txApp, id, e.auth.id);
+  });
+  return e.json(200, result);
+}, $apis.requireAuth("users"));
+
+/**
+ * DELETE /api/lab/deliveries/{id} – letzte Lieferbuchung zurücknehmen („Rückgängig“), nur ohne Beleg.
+ * Antwort: { status }
+ */
+routerAdd("DELETE", "/api/lab/deliveries/{id}", (e) => {
+  const { cancelDelivery } = require(`${__hooks}/lib/deliveries.js`);
+  const id = e.request.pathValue("id");
+  let result;
+  $app.runInTransaction((txApp) => {
+    result = cancelDelivery(txApp, id);
+  });
+  return e.json(200, result);
+}, $apis.requireAuth("users"));
+
+/**
  * POST /api/lab/orders/{id}/items   – Position nachtragen (Bestellung ab „bestellt“)
  * Body: { part_number, name?, qty, group?, url?, price_unit? }
  * Antwort: { item, status }

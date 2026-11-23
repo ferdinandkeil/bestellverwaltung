@@ -69,10 +69,10 @@ try {
   await loginViaUi(b, PB_URL, s.login.email);
 
   await openOrder(s.farnell);
-  await b.waitFor(`document.querySelector('[data-next-step]')`, 'Farnell-Detail');
+  await b.waitFor(`document.querySelector('[data-order-steps] [data-step]')`, 'Farnell-Detail');
   if (await b.evaluate(hasExportButton)) throw new Error('Export für Farnell sichtbar (kein verifiziertes Format)');
   await openOrder(s.reichelt);
-  await b.waitFor(`${BADGE} === 'Warenkorb' && document.querySelector('[data-next-step]')`, 'Reichelt-Detail');
+  await b.waitFor(`${BADGE} === 'Warenkorb' && document.querySelector('[data-order-steps] [data-step]')`, 'Reichelt-Detail');
   if (await b.evaluate(hasExportButton)) throw new Error('Export im Warenkorb mit Formular sichtbar (erst ab „In Freigabe“)');
   await openOrder(s.tme);
   await b.waitFor(hasExportButton, 'Export-Button TME');
@@ -111,8 +111,18 @@ try {
   await b.waitFor(`window.__downloads.length === 2 && window.__downloads[1].text.includes('511-NUCLEO-G031K8,,2,,')`, 'Download 2');
   await b.fill('#export-supplier-no', 'M-123456');
   await b.clickText('[data-shop-export] button', 'Exportiert');
-  await b.confirmDialog('Als bestellt markieren');
+  // Handeln statt fragen: sofort bestellt, „Rückgängig“ im Toast nimmt es zurück
   await b.waitFor(`!${exp}.isOpen && ${BADGE} === 'Bestellt'`, 'Bestellt');
+  if (await b.evaluate(`document.querySelector('#confirm-dialog')?.open`)) throw new Error('Sicherheitsabfrage beim Bestellen');
+  const UNDO = `[...document.querySelectorAll('[data-toast-action]')].filter((e) => e.innerText.trim() === 'Rückgängig').pop()`;
+  await b.evaluate(`${UNDO}.click()`);
+  await b.waitFor(`${BADGE} === 'In Freigabe'`, 'Rückgängig: wieder in Freigabe');
+  await b.clickText('#view button', 'Shop-Export');
+  await b.waitFor(`${exp}.isOpen`, 'Export erneut geöffnet');
+  await b.fill('#export-supplier-no', 'M-123456');
+  await b.clickText('[data-shop-export] button', 'CSV herunterladen');
+  await b.clickText('[data-shop-export] button', 'Exportiert');
+  await b.waitFor(`!${exp}.isOpen && ${BADGE} === 'Bestellt'`, 'erneut bestellt');
   const order = await getRecord('orders', s.mouser);
   if (order.internal_order_no !== '2026IW07001' || order.supplier_order_no !== 'M-123456') throw new Error('Nummern: ' + JSON.stringify(order));
   if (await b.evaluate(hasExportButton)) throw new Error('Export nach „Bestellt“ noch sichtbar');
@@ -125,7 +135,8 @@ try {
   // ---- Würth Elektronik: Liste für die Bestell-Mail, Muster ohne interne Bestellnummer ----
   await openOrder(s.wuerth);
   await b.waitFor(hasExportButton, 'Export-Button Würth');
-  if ((await b.evaluate(`document.querySelector('[data-next-step]').innerText.trim()`)) !== '✓ Bestellt') {
+  const nextSteps = `[...document.querySelectorAll('[data-order-steps] [data-step-label]')].filter((e) => e.classList.contains('font-semibold')).map((e) => e.dataset.stepLabel).join()`;
+  if ((await b.evaluate(nextSteps)) !== 'ordered') {
     throw new Error('Würth: nächster Schritt sollte direkt „Bestellt“ sein (Muster ohne Formular)');
   }
   await b.clickText('#view button', 'Shop-Export');
@@ -150,7 +161,6 @@ try {
   await b.screenshot('export-04-wuerth');
 
   await b.clickText('[data-shop-export] button', 'Exportiert');
-  await b.confirmDialog('Als bestellt markieren');
   await b.waitFor(`!${exp}.isOpen && ${BADGE} === 'Bestellt'`, 'Würth bestellt');
   const we = await getRecord('orders', s.wuerth);
   if (we.internal_order_no !== '' || we.without_internal_order_no !== true) throw new Error('Würth: ' + JSON.stringify(we));
@@ -210,7 +220,6 @@ try {
   await b.waitFor(`document.querySelector('[data-export-changed]').offsetParent && ${ROW('892586')}.innerText.includes('6×') && ${ORDERED_DISABLED}`, 'Printus: Änderung erkannt');
   await tick('892586', 'qty');
   await b.clickText('[data-shop-export] button', 'Exportiert');
-  await b.confirmDialog('Als bestellt markieren');
   await b.waitFor(`!${exp}.isOpen && ${BADGE} === 'Bestellt'`, 'Printus bestellt');
   if ((await getRecord('orders', s.printus)).internal_order_no !== '2026IW07002') throw new Error('Printus: interne Bestellnummer');
   if (await b.evaluate(`localStorage.getItem('shop-export-checklist:${s.printus}')`) !== null) throw new Error('Printus: Abhakstand nicht aufgeräumt');

@@ -78,3 +78,57 @@ test('Beleg als PDF; mehr als eine Datei wird abgelehnt', async () => {
   await expectHttpError(http('POST', `/api/lab/orders/${orderId}/deliveries`, { token: u.token, form: form(2) }), 400);
   assert.equal((await getRecord('order_items', ids.A)).qty_delivered, 1, 'abgelehnte Buchung ohne Wirkung');
 });
+
+// „Geliefert“ abhaken (ARCHITECTURE Kap. 4.4/7): Rest aller Positionen buchen, „Rückgängig“ nimmt die Buchung zurück
+const bookRest = (token, id) => http('POST', `/api/lab/orders/${id}/deliveries/rest`, { token });
+const cancelDelivery = (token, id) => http('DELETE', `/api/lab/deliveries/${id}`, { token });
+
+test('Rest buchen: offene Mengen aller Positionen (ohne Storno) in einer Lieferung → geliefert', async () => {
+  await markOrdered(u.token, orderId);
+  await bookDelivery(u.token, orderId, [{ item: ids.A, qty: 1 }]);
+  await http('PATCH', `/api/collections/order_items/records/${ids.B}`, { token: u.token, json: { qty_cancelled: 1 } });
+
+  const r = await bookRest(u.token, orderId);
+  assert.equal(r.status, 'geliefert');
+  assert.equal(r.delivery.note, 'Rest vollständig geliefert');
+  const lines = await listRecords('delivery_items', `delivery = "${r.delivery.id}"`);
+  assert.deepEqual(lines.map((l) => [l.order_item, l.qty]).sort(), [[ids.A, 3], [ids.B, 1]].sort());
+  assert.equal((await getRecord('order_items', ids.A)).qty_delivered, 4);
+  assert.notEqual((await getRecord('orders', orderId)).delivered_at, '');
+
+  await expectHttpError(bookRest(u.token, orderId), 400); // nichts mehr offen
+});
+
+test('Rest buchen nur ab „bestellt“ und angemeldet', async () => {
+  await expectHttpError(bookRest(u.token, orderId), 400); // Warenkorb
+  await markOrdered(u.token, orderId);
+  await expectHttpError(bookRest(undefined, orderId), 401);
+});
+
+test('Rückgängig: letzte Buchung zurücknehmen stellt Mengen und Phase wieder her', async () => {
+  await markOrdered(u.token, orderId);
+  const first = await bookDelivery(u.token, orderId, [{ item: ids.A, qty: 1 }]);
+  const rest = await bookRest(u.token, orderId);
+
+  await expectHttpError(cancelDelivery(u.token, first.delivery.id), 400); // nicht die letzte
+  const r = await cancelDelivery(u.token, rest.delivery.id);
+  assert.equal(r.status, 'teilgeliefert');
+  assert.equal((await getRecord('order_items', ids.A)).qty_delivered, 1);
+  assert.equal((await getRecord('order_items', ids.B)).qty_delivered, 0);
+  assert.equal((await getRecord('orders', orderId)).delivered_at, '');
+  assert.equal((await listRecords('deliveries')).length, 1);
+  assert.equal((await listRecords('delivery_items', `delivery = "${rest.delivery.id}"`)).length, 0);
+
+  await cancelDelivery(u.token, first.delivery.id); // jetzt die letzte
+  assert.equal((await getRecord('orders', orderId)).status, 'bestellt');
+  await expectHttpError(cancelDelivery(u.token, first.delivery.id), 404);
+});
+
+test('Rückgängig nicht für Buchungen mit Beleg', async () => {
+  await markOrdered(u.token, orderId);
+  const form = new FormData();
+  form.append('lines', JSON.stringify([{ item: ids.A, qty: 1 }]));
+  form.append('receipt', new Blob(['%PDF-1.4 synthetisch'], { type: 'application/pdf' }), 'lieferschein.pdf');
+  const r = await http('POST', `/api/lab/orders/${orderId}/deliveries`, { token: u.token, form });
+  await expectHttpError(cancelDelivery(u.token, r.delivery.id), 400);
+});

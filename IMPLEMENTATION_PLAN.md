@@ -125,6 +125,12 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 3. Smartphone: Warenkorb als fester Knopf unten rechts, Seite Warenkörbe mit ✕ zurück; Navigation und Logout im Hamburger-Menü.
 4. Browser-Tests angepasst (Startseite, Merge, Moodle-Import, Ausklappfeld am PC, Menü und Knopf auf dem Smartphone).
 
+### Bestellansicht (Branch `ui-bestellung`)
+**Status:** abgenommen (23.11.2026). Fragen geklärt (`samples/prozess/Fragen_UI_Bestellung.md`); Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
+1. ✔ Ablauf (22.11.2026): verbundene Kästchen mit Abzweig ab „Bestellt“, nächste Schritte, Tooltip/Stift/Lupe, Vorschau-Häkchen, keine Hauptknöpfe; „Geliefert“ bucht den Rest (`POST …/deliveries/rest`, Rückgängig über `DELETE /api/lab/deliveries/{id}`). Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
+2. ✔ Positionen (23.11.2026): Tabelle am PC mit einer Zeile je Gruppe, Liefermenge bzw. Kästchen „Rest“ je Zeile (gesammelt zu einer Buchung), Storno über „Bestellt“, Eingabezeile im Warenkorb, Löschen mit „Rückgängig“; Abschnitt „Kosten“, Link und „+1“ entfallen.
+3. ✔ Kopf (Felder als Text, per Klick editierbar), Bearbeiten je Zelle (Storno/Geliefert im Rahmen mit Minus/Plus, Haken „alles geliefert“), Scanner-Knopf und „Lieferung mit Beleg“ entfernt, Anhänge eingeklappt mit PDF-Vorschau, Fußzeile mit Version, Lieferhistorie entfällt (Belege unter Anhänge, Lieferdaten im Tooltip an „Geliefert“), abgeschlossen nur lesbar; „Handeln statt fragen“ für Warenkorb und Anhang löschen sowie „Exportiert & bestellt“ im Shop-Export.
+
 ### Startseite, Nachbesserung (Branch `ui-startseite-2`)
 **Status:** abgenommen (23.11.2026). Entwickelt auf `ui-bestellung`, per Cherry-Pick ohne den Stand der Bestellansicht nach `main` übernommen.
 1. ✔ Hintergrund Karopapier mit Kaffeeflecken und Bleistift-Bauteilen (Experiment, übernommen); Rahmen als `border` statt 1-px-`ring` (ARCHITECTURE Kap. 7).
@@ -132,8 +138,7 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 3. ✔ Nebenbei (Branch `cache-control`): Oberfläche mit `Cache-Control: no-cache` (ARCHITECTURE Kap. 9).
 
 ### Folgende Branches (Reihenfolge vorläufig)
-1. `ui-bestellung`: Positionen kompakt (Tabelle am PC), Inhalte je Phase, Beträge entfernen, „Handeln statt fragen“.
-2. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
+1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
 
 ## Phase 5: Word-Export (Branch `phase-5-word-export`)
 1. Vorab: `.docx`-Vorlage der Hochschule beschaffen.

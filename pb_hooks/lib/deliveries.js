@@ -92,4 +92,55 @@ function bookDelivery(app, orderId, lines, note, receipts, userId) {
   return { delivery: delivery, status: status };
 }
 
-module.exports = { bookDelivery, sumDelivered };
+/**
+ * „Geliefert“ abhaken: den Rest aller Positionen (bestellt − storniert − geliefert) als eine Lieferung buchen.
+ * Muss innerhalb einer Transaktion aufgerufen werden. Danach ist die Bestellung „geliefert“ (Phase aus den Mengen).
+ */
+function bookRest(app, orderId, userId) {
+  const items = app.findRecordsByFilter("order_items", "order = {:id}", "created", 0, 0, { id: orderId });
+  const lines = [];
+  for (const item of items) {
+    const rest = item.getInt("qty_ordered") - item.getInt("qty_cancelled") - item.getInt("qty_delivered");
+    if (rest > 0) lines.push({ item: item.id, qty: rest });
+  }
+  if (!lines.length) throw new BadRequestError("Es ist nichts mehr offen – alle Positionen sind geliefert.");
+  return bookDelivery(app, orderId, lines, "Rest vollständig geliefert", [], userId);
+}
+
+/**
+ * Letzte Lieferbuchung einer Bestellung zurücknehmen („Rückgängig“ nach dem Buchen). Muss innerhalb einer
+ * Transaktion aufgerufen werden. Nur die jeweils letzte Buchung und nur ohne Beleg (Belege bleiben erhalten);
+ * Mengen und Phase werden neu berechnet.
+ */
+function cancelDelivery(app, deliveryId) {
+  let delivery;
+  try {
+    delivery = app.findRecordById("deliveries", deliveryId);
+  } catch (_) {
+    throw new NotFoundError("Lieferbuchung nicht gefunden.");
+  }
+  const orderId = delivery.getString("order");
+  const latest = app.findRecordsByFilter("deliveries", "order = {:id}", "-created,-id", 1, 0, { id: orderId });
+  if (!latest.length || latest[0].id !== delivery.id) {
+    throw new BadRequestError("Nur die letzte Lieferbuchung einer Bestellung kann zurückgenommen werden.");
+  }
+  if (delivery.getString("receipt")) {
+    throw new BadRequestError("Lieferbuchungen mit Beleg können nicht zurückgenommen werden.");
+  }
+  const lines = app.findRecordsByFilter("delivery_items", "delivery = {:id}", "", 0, 0, { id: delivery.id });
+  const itemIds = lines.map((l) => l.getString("order_item"));
+  app.delete(delivery); // Zeilen hängen per cascadeDelete daran
+
+  for (const id of itemIds) {
+    const item = app.findRecordById("order_items", id);
+    const total = sumDelivered(app, id);
+    if (total < 0) {
+      throw new BadRequestError("Die gelieferte Menge von " + item.getString("part_number") + " würde negativ werden.");
+    }
+    item.set("qty_delivered", total);
+    app.save(item);
+  }
+  return { status: recalculateOrderStatus(app, orderId) };
+}
+
+module.exports = { bookDelivery, bookRest, cancelDelivery, sumDelivered };

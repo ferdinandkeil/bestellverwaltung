@@ -53,8 +53,8 @@ export function initUiStore() {
 }
 
 /** Tooltip: Verzögerung bis zum ersten Tooltip; wer innerhalb von TOOLTIP_WARM_MS zum nächsten wechselt, sieht ihn sofort. */
-const TOOLTIP_DELAY_MS = 500;
-const TOOLTIP_WARM_MS = 1000;
+export const TOOLTIP_DELAY_MS = 500;
+export const TOOLTIP_WARM_MS = 1000;
 
 /**
  * Tooltip `x-tip="ausdruck"`: dunkle Sprechblase mit Pfeil direkt über dem Element (darunter, wenn oben kein Platz

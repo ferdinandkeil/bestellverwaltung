@@ -30,6 +30,10 @@
 @media (min-width: 640px) { .paper-decor > img:not(.paper-part) { display: block; } }
 @media (min-width: 1440px) { .paper-decor > .paper-part { display: block; } }
 
+/* Ablauf-Linien in der Bestellung (views/order-steps.js): offen dünn und schwarz, erreicht dicker, grün, mit Schatten. */
+.step-line { fill: none; stroke: #0f172a; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+.step-line-reached { stroke: #10b981; stroke-width: 3; filter: drop-shadow(0 1px 1.5px rgb(5 150 105 / 0.45)); }
+
 /* Ablaufbalken im Toast: schrumpft über die Standzeit (animation-duration kommt aus dem Toast). */
 .toast-progress { animation-name: toast-progress; animation-timing-function: linear; animation-fill-mode: forwards; }
 @keyframes toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }

@@ -1,5 +1,6 @@
 // Lieferschein-Erfassung: Fotos aufnehmen → Ecken prüfen/entzerren → Texterkennung → Abgleich prüfen → buchen.
-// Registriert sich in den Slots 'order-detail-actions', 'dashboard-actions' (Smartphone) und 'header-actions' (ab sm).
+// Registriert sich in den Slots 'dashboard-actions' (Smartphone) und 'header-actions' (ab sm); die Bestellung wird
+// immer nach der Erkennung zugeordnet (kein Start aus einer geöffneten Bestellung, Entscheidung 11/2026).
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
 import {
@@ -47,7 +48,7 @@ function loadAutoCapture() {
 const STATUS_COLORS = { sure: '#059669', check: '#d97706', none: '#dc2626' };
 
 const template = /* html */ `
-<div x-data="deliveryScanner" @open-delivery-scanner.window="open($event.detail)" x-cloak>
+<div x-data="deliveryScanner" @open-delivery-scanner.window="open()" x-cloak>
   <div x-show="isOpen" class="fixed inset-0 z-40 flex flex-col bg-white" @keydown.escape.window="isOpen && close()">
     <!-- Kopf -->
     <div class="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
@@ -177,8 +178,8 @@ const template = /* html */ `
             <button type="button" class="btn btn-secondary btn-sm mt-2" @click="openReport()">Problem melden</button>
           </div>
 
-          <!-- Bestellung wählen (Start aus dem Dashboard) -->
-          <div x-show="!lockedOrder" class="card p-3">
+          <!-- Bestellung wählen -->
+          <div class="card p-3">
             <label class="label">Bestellung</label>
             <select class="input" x-model="selectedOrderId" @change="selectOrder(selectedOrderId)">
               <option value="">– bitte wählen –</option>
@@ -190,7 +191,7 @@ const template = /* html */ `
           </div>
 
           <!-- Keine passende Bestellung: daraus anlegen oder ablegen -->
-          <div x-show="!lockedOrder && !order && !noOrder.mode" class="card space-y-2 border-violet-300 p-3" data-no-order>
+          <div x-show="!order && !noOrder.mode" class="card space-y-2 border-violet-300 p-3" data-no-order>
             <h3 class="text-sm font-semibold">Keine passende Bestellung?</h3>
             <p class="text-xs text-slate-600">
               Z. B. Muster, Direktkauf oder eine Bestellung, die nicht im System erfasst wurde.
@@ -439,7 +440,6 @@ function component() {
     progress: { value: 0, label: '' },
     order: null,
     items: [],
-    lockedOrder: false,
     orderCandidates: [],
     selectedOrderId: '',
     detectedOrderHint: '',
@@ -462,14 +462,9 @@ function component() {
     reported: false,
 
     // ---- Öffnen / Schließen -------------------------------------------------
-    async open(detail = {}) {
+    async open() {
       this.reset();
       this.isOpen = true;
-      if (detail.order) {
-        this.order = detail.order;
-        this.items = detail.items ?? [];
-        this.lockedOrder = true;
-      }
       this.libState = 'loading';
       try {
         await loadVision();
@@ -501,7 +496,7 @@ function component() {
       internalNos = [];
       Object.assign(this, {
         step: 'pages', busyText: '', pages: [], cornersDetected: true, loupeSide: '', progress: { value: 0, label: '' },
-        order: null, items: [], lockedOrder: false, orderCandidates: [], selectedOrderId: '', detectedOrderHint: '',
+        order: null, items: [], orderCandidates: [], selectedOrderId: '', detectedOrderHint: '',
         warnings: [], reviewRows: [], unmatched: [], note: '', busy: false,
         profileLabel: '', noOrder: { mode: '' }, create: { items: [] }, archive: {},
         problems: [], recognitionFailed: false, reportOpen: false, reportNote: '', reportBusy: false, reported: false,
@@ -940,18 +935,7 @@ function component() {
       internalNos = findInternalOrderNumbers(ocrPages);
       this.warnings = [];
 
-      if (!this.lockedOrder) {
-        await this.loadOrderCandidates(detected, ocrPages);
-      } else {
-        if (detected && !profileMatchesOrder(detected, this.order)) {
-          this.warnings.push(`Der Lieferschein sieht nach ${detected.label} aus, die Bestellung ist aber bei ${supplierLabel(this.order)}. Bitte prüfen.`);
-        }
-        const own = this.order.internal_order_no;
-        // ähnlich gelesene eigene Nummer (z. B. „2026IW0S876“) ist kein Widerspruch
-        if (own && internalNos.length && !internalNos.includes(own) && !findKnownInternalOrderNumbers(ocrPages, [own]).length) {
-          this.warnings.push(`Auf dem Lieferschein steht die Bestellnummer ${internalNos.join(', ')}, diese Bestellung hat ${own}. Bitte prüfen.`);
-        }
-      }
+      await this.loadOrderCandidates(detected, ocrPages);
       await this.computeReview();
       this.updateAssessment();
     },
@@ -1358,17 +1342,7 @@ const host = document.createElement('div');
 host.innerHTML = template;
 document.body.appendChild(host.firstElementChild);
 
-const openScanner = (detail) => window.dispatchEvent(new CustomEvent('open-delivery-scanner', { detail }));
-
-registerPlugin({
-  id: 'delivery-scanner-order',
-  slot: 'order-detail-actions',
-  label: 'Lieferschein scannen (Beta)',
-  icon: 'scan',
-  isVisible: (order) => DELIVERY_STATUSES.includes(order?.status),
-  // Kopien übergeben: die Werte der Detailansicht sind reaktive Proxies einer anderen Komponente.
-  onClick: (order, items) => openScanner({ order: JSON.parse(JSON.stringify(order)), items: JSON.parse(JSON.stringify(items)) }),
-});
+const openScanner = () => window.dispatchEvent(new CustomEvent('open-delivery-scanner'));
 
 registerPlugin({
   id: 'delivery-scanner-dashboard',
@@ -1376,7 +1350,7 @@ registerPlugin({
   label: 'Lieferschein scannen (Beta)',
   icon: 'scan',
   prominent: true, // Smartphone: Hauptaufgabe am Auspacktisch (ab sm: Symbol in der Kopfzeile)
-  onClick: () => openScanner({}),
+  onClick: () => openScanner(),
 });
 
 registerPlugin({
@@ -1384,5 +1358,5 @@ registerPlugin({
   slot: 'header-actions',
   label: 'Lieferschein scannen (Beta)',
   icon: 'scan',
-  onClick: () => openScanner({}),
+  onClick: () => openScanner(),
 });

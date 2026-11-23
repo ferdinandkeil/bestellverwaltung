@@ -288,6 +288,14 @@ try {
   const order = (await listRecords('orders', `id = "${orderId}"`))[0];
   if (order.status !== 'teilgeliefert') throw new Error('Status sollte teilgeliefert sein: ' + order.status);
   ok(`PDF-Beleg angehängt (${(readFileSync(pdfPath).length / 1024).toFixed(0)} KB, qpdf ok), Status teilgeliefert`);
+  // Der Beleg erscheint in der Bestellung unter „Anhänge“ (als „Lieferschein <Datum>“, nicht löschbar)
+  // Anhänge sind eingeklappt; aufgeklappt zeigt der Beleg die erste PDF-Seite als Vorschau (PDF.js)
+  await b.navigate(PB_URL + '/#/orders/' + orderId);
+  await b.waitFor(`document.querySelector('[data-attachments-toggle]')?.offsetParent && !document.querySelector('[data-attachment=receipt]')?.offsetParent`, 'Anhänge eingeklappt');
+  await b.evaluate(`document.querySelector('[data-attachments-toggle]').click()`);
+  await b.waitFor(`[...document.querySelectorAll('[data-attachments] [data-attachment=receipt]')].some((a) => a.innerText.includes('Lieferschein ') && !a.querySelector('[data-attachment-delete]')?.offsetParent)`, 'Beleg unter Anhänge');
+  await b.waitFor(`[...document.querySelectorAll('[data-attachment=receipt] [data-pdf-thumb]')].some((i) => i.complete && i.naturalWidth > 0)`, 'PDF-Vorschau', 15000);
+  ok('Beleg in der Bestellung unter „Anhänge“ (eingeklappt), aufgeklappt mit PDF-Vorschau');
 
   // ---- Lieferschein ohne Bestellung im System → Bestellung daraus anlegen ----------------
   const scanFromDashboard = async (file) => {
