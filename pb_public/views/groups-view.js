@@ -41,7 +41,7 @@ const template = /* html */ `
                 <div class="min-w-0 flex-1">
                   <div class="font-medium" :class="!g.is_active && 'text-slate-400'" x-text="g.name"></div>
                 </div>
-                <span x-show="!g.is_active" class="badge bg-slate-100 text-slate-500 ring-slate-300">inaktiv</span>
+                <span x-show="!g.is_active" class="badge bg-slate-100 text-slate-500 border-slate-300">inaktiv</span>
                 <button type="button" class="btn btn-ghost btn-sm" @click.stop="startEdit(g)">Bearbeiten</button>
               </div>
             </li>
