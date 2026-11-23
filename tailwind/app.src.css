@@ -9,27 +9,26 @@
 
 /* Hintergrund (Experiment): kariertes Papier (5-mm-Raster ≈ 20 px), dezent.
    Kaffeeflecken ab sm, Bleistift-Bauteile nur, wenn neben dem Inhalt (max-w-6xl) genug Rand frei ist. */
-.paper {
-  background-color: #fdfcf8;
-  background-image:
-    linear-gradient(to right, rgb(96 130 170 / 0.16) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(96 130 170 / 0.16) 1px, transparent 1px);
-  background-size: 20px 20px;
-  background-attachment: fixed;
+.paper { background-color: #fdfcf8; }
+/* Raster als SVG-Kachel auf der festen Ebene: kein background-attachment: fixed (wird stückweise neu gezeichnet
+   und bei 90 %/110 % Zoom je Stück anders gerundet – Linien fehlen dann fleckenweise). */
+.paper-decor {
+  position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+  background-image: url(papier/raster.svg); background-size: 20px 20px;
 }
-.paper-decor { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; display: none; }
 .paper-decor img { position: absolute; user-select: none; }
+.paper-decor > img { display: none; }
 .paper-ring-1 { width: 300px; top: 40px; right: -110px; transform: rotate(20deg); }
 .paper-ring-2 { width: 260px; bottom: -90px; left: -70px; opacity: 0.8; transform: rotate(-60deg); }
 .paper-drops { width: 170px; bottom: 150px; left: 70px; opacity: 0.8; }
-.paper-part { opacity: 0.55; display: none; }
+.paper-part { opacity: 0.55; }
 .paper-resistor { width: 210px; top: 110px; left: -30px; }
 .paper-led { width: 80px; bottom: 30px; left: 150px; }
 .paper-ic { width: 170px; top: 300px; right: -40px; }
 .paper-cap { width: 100px; bottom: 40px; right: 40px; }
 .paper-transistor { width: 80px; top: 48%; left: 30px; }
-@media (min-width: 640px) { .paper-decor { display: block; } }
-@media (min-width: 1440px) { .paper-part { display: block; } }
+@media (min-width: 640px) { .paper-decor > img:not(.paper-part) { display: block; } }
+@media (min-width: 1440px) { .paper-decor > .paper-part { display: block; } }
 
 /* Ablaufbalken im Toast: schrumpft über die Standzeit (animation-duration kommt aus dem Toast). */
 .toast-progress { animation-name: toast-progress; animation-timing-function: linear; animation-fill-mode: forwards; }
