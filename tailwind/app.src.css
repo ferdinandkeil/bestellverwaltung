@@ -58,6 +58,9 @@
       placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30
       disabled:bg-slate-100 disabled:text-slate-500;
   }
+  /* Auswahlfelder so hoch wie Eingabefelder (20 px Zeile + 2 × 8 px + 2 × 1 px = 38 px):
+     Chrome ignoriert line-height an <select>, ohne feste Höhe wären sie 2 px niedriger. */
+  select.input { @apply h-9.5; }
   .hint { @apply mt-1 text-xs text-slate-500; }
 
   /* Rahmen als border, nicht ring: ein 1-px-Schatten verschwindet bei 90 % Zoom ganz. */
