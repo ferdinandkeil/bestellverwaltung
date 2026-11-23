@@ -61,6 +61,8 @@ const CART_ACTIONS = /* html */ `
 /** Symbole der Module im Slot 'header-actions' (Schlüssel = plugin.icon). */
 const HEADER_ICONS = {
   upload: '<path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
+  // Beleg mit Scan-Ecken
+  scan: '<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M8.5 9h7M8.5 12h7M8.5 15h4"/>',
 };
 
 /** Module als Symbol links neben dem Warenkorb (ab sm; auf dem Smartphone wird nur gescannt). */

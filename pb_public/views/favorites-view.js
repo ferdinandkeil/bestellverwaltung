@@ -47,8 +47,8 @@ const template = /* html */ `
             <a :href="'#/favorites/' + l.id" class="card block h-full p-3 transition hover:border-blue-300" :data-favorite-list="l.title">
               <div class="flex items-start gap-2">
                 <span class="min-w-0 flex-1 font-medium" x-text="l.title"></span>
-                <span x-show="l.is_public" class="badge bg-emerald-50 text-emerald-700 ring-emerald-300">öffentlich</span>
-                <span x-show="!l.is_public" class="badge bg-slate-100 text-slate-600 ring-slate-300">nicht öffentlich</span>
+                <span x-show="l.is_public" class="badge bg-emerald-50 text-emerald-700 border-emerald-300">öffentlich</span>
+                <span x-show="!l.is_public" class="badge bg-slate-100 text-slate-600 border-slate-300">nicht öffentlich</span>
               </div>
               <p x-show="l.description" class="mt-1 line-clamp-2 text-sm text-slate-600" x-text="l.description"></p>
               <p class="mt-1 text-xs text-slate-500" x-text="itemCount(l) + ' Artikel · ' + (isMine(l) ? 'eigene Liste' : 'von ' + ownerName(l))"></p>

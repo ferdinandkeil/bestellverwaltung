@@ -125,6 +125,12 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 3. Smartphone: Warenkorb als fester Knopf unten rechts, Seite Warenkörbe mit ✕ zurück; Navigation und Logout im Hamburger-Menü.
 4. Browser-Tests angepasst (Startseite, Merge, Moodle-Import, Ausklappfeld am PC, Menü und Knopf auf dem Smartphone).
 
+### Startseite, Nachbesserung (Branch `ui-startseite-2`)
+**Status:** abgenommen (23.11.2026). Entwickelt auf `ui-bestellung`, per Cherry-Pick ohne den Stand der Bestellansicht nach `main` übernommen.
+1. ✔ Hintergrund Karopapier mit Kaffeeflecken und Bleistift-Bauteilen (Experiment, übernommen); Rahmen als `border` statt 1-px-`ring` (ARCHITECTURE Kap. 7).
+2. ✔ „Lieferschein scannen“ ab 640 px als Symbol in der Kopfzeile; Suche rechts in der Filterzeile; Auswahlfelder so hoch wie Eingabefelder.
+3. ✔ Nebenbei (Branch `cache-control`): Oberfläche mit `Cache-Control: no-cache` (ARCHITECTURE Kap. 9).
+
 ### Folgende Branches (Reihenfolge vorläufig)
 1. `ui-bestellung`: Positionen kompakt (Tabelle am PC), Inhalte je Phase, Beträge entfernen, „Handeln statt fragen“.
 2. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.

@@ -29,12 +29,12 @@ export function defaultWithoutInternalOrderNo(order) {
 // Klassen stehen hier vollständig ausgeschrieben, damit der Tailwind-Build sie findet.
 /** Phasen; short = Kurzform für schmale Spalten (Startseite auf dem Smartphone). */
 export const STATUSES = [
-  { value: 'angefragt', label: 'Warenkorb', badge: 'bg-sky-50 text-sky-800 ring-sky-300' },
-  { value: 'freigabe', label: 'In Freigabe', short: 'Freigabe', badge: 'bg-violet-50 text-violet-800 ring-violet-300' },
-  { value: 'bestellt', label: 'Bestellt', badge: 'bg-blue-50 text-blue-700 ring-blue-300' },
-  { value: 'teilgeliefert', label: 'Teilgeliefert', short: 'Teilgel.', badge: 'bg-amber-50 text-amber-800 ring-amber-300' },
-  { value: 'geliefert', label: 'Geliefert', badge: 'bg-emerald-50 text-emerald-700 ring-emerald-300' },
-  { value: 'abgeschlossen', label: 'Abgeschlossen', short: 'Abgeschl.', badge: 'bg-zinc-200 text-zinc-700 ring-zinc-400' },
+  { value: 'angefragt', label: 'Warenkorb', badge: 'bg-sky-50 text-sky-800 border-sky-300' },
+  { value: 'freigabe', label: 'In Freigabe', short: 'Freigabe', badge: 'bg-violet-50 text-violet-800 border-violet-300' },
+  { value: 'bestellt', label: 'Bestellt', badge: 'bg-blue-50 text-blue-700 border-blue-300' },
+  { value: 'teilgeliefert', label: 'Teilgeliefert', short: 'Teilgel.', badge: 'bg-amber-50 text-amber-800 border-amber-300' },
+  { value: 'geliefert', label: 'Geliefert', badge: 'bg-emerald-50 text-emerald-700 border-emerald-300' },
+  { value: 'abgeschlossen', label: 'Abgeschlossen', short: 'Abgeschl.', badge: 'bg-zinc-200 text-zinc-700 border-zinc-400' },
 ];
 
 /** Phasen, in denen Positionen bearbeitet werden dürfen (danach gesperrt). */
@@ -115,7 +115,7 @@ export function orderNumbersLabel(order) {
 }
 
 export function statusMeta(value) {
-  return STATUSES.find((s) => s.value === value) ?? { value, label: value, badge: 'bg-slate-100 text-slate-700 ring-slate-300' };
+  return STATUSES.find((s) => s.value === value) ?? { value, label: value, badge: 'bg-slate-100 text-slate-700 border-slate-300' };
 }
 
 // ---------------------------------------------------------------------------

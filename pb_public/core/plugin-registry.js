@@ -1,7 +1,8 @@
 // Registry für Erweiterungsmodule (ARCHITECTURE.md Kap. 5).
 //
 // registerPlugin({ id, slot, label, icon?, prominent?, isVisible?(ctx...), onClick(ctx...) })
-//   Slot 'dashboard-actions':    onClick(); prominent: auf dem Smartphone als großer Hauptknopf oben (z. B. Scanner)
+//   Slot 'dashboard-actions':    onClick(); prominent: nur auf dem Smartphone, als großer Hauptknopf oben (z. B. Scanner;
+//                                ab sm meldet sich das Modul zusätzlich in 'header-actions' an)
 //   Slot 'header-actions':       onClick(); Symbol (icon, label als Tooltip) in der Kopfzeile links neben dem
 //                                Warenkorb, ab sm (z. B. Moodle-Import)
 //   Slot 'order-detail-actions': onClick(order, items)

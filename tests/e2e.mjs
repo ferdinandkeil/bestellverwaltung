@@ -222,6 +222,17 @@ try {
   await b.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await b.waitFor(`!document.querySelector('[data-cart-panel]').offsetParent`, 'Warenkorb-Feld geschlossen');
   ok('PC: Warenkorb-Symbol klappt die Warenkörbe mit Aktionen auf, Escape schließt');
+  // PC: Scanner als Symbol in der Kopfzeile statt als Knopf auf der Startseite; Suche in der Filterzeile
+  if (await b.evaluate(`!!document.querySelector('[data-prominent-action]')?.offsetParent || [...document.querySelectorAll('#view button')].some((e) => e.offsetParent && e.innerText.includes('Lieferschein scannen'))`)) {
+    throw new Error('PC: „Lieferschein scannen“ noch als Knopf auf der Startseite');
+  }
+  await b.evaluate(`document.querySelector('[data-header-action=delivery-scanner]').click()`);
+  await b.waitFor(`[...document.querySelectorAll('h2')].some((h) => h.offsetParent && h.innerText.includes('Lieferschein erfassen'))`, 'Scanner über das Kopfzeilen-Symbol');
+  await b.clickText('button', 'Schließen');
+  if (!(await b.evaluate(`(() => { const s = document.querySelector('[data-overview-search]').getBoundingClientRect(), g = document.querySelector('#filter-group').getBoundingClientRect(); return s.left > g.right && Math.abs(s.top - g.top) < 2; })()`))) {
+    throw new Error('PC: Suche nicht rechts neben den Filtern');
+  }
+  ok('PC: Scanner als Symbol in der Kopfzeile, Suche rechts neben den Filtern');
   const cell = (step) => `${ROW('2026IW04711')}.querySelector('[data-step=${step}]')`;
   if ((await b.evaluate(`[${cell('form_written')}, ${cell('form_signed')}, ${cell('ordered')}].map((e) => e.dataset.state).join()`)) !== 'done,skipped,done') {
     throw new Error('Tabelle: Zustände der Schritte falsch');

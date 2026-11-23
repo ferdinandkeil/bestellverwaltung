@@ -30,7 +30,7 @@ const template = /* html */ `
           <div class="mr-auto min-w-0">
             <h1 class="text-xl font-semibold" x-text="supplierLabel(order)"></h1>
             <p x-show="order.origin === 'lieferschein'" class="mb-1">
-              <span class="badge bg-violet-50 text-violet-800 ring-violet-200">aus Lieferschein angelegt</span>
+              <span class="badge bg-violet-50 text-violet-800 border-violet-200">aus Lieferschein angelegt</span>
             </p>
             <p class="text-xs text-slate-500">
               Angelegt <span x-text="fmt.dateTime(order.created)"></span>
@@ -109,7 +109,7 @@ const template = /* html */ `
                     <div class="text-sm" :class="it.name ? 'text-slate-700' : 'italic text-slate-400'" x-text="it.name || 'ohne Bezeichnung'"></div>
                     <a x-show="it.url" :href="it.url" target="_blank" rel="noopener" class="text-xs text-blue-700 hover:underline">Zum Artikel ↗</a>
                     <div x-show="it.added_later_at" class="mt-1 text-xs text-violet-800">
-                      <span class="badge bg-violet-50 text-violet-800 ring-violet-200">nachgetragen</span>
+                      <span class="badge bg-violet-50 text-violet-800 border-violet-200">nachgetragen</span>
                       <span x-text="lateLabel(it)"></span>
                     </div>
                     <div x-show="it.group_allocation_note" class="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900" x-text="it.group_allocation_note"></div>

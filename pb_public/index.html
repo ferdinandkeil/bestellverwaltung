@@ -7,7 +7,18 @@
   <title>Labor-Bestellsystem</title>
   <link rel="stylesheet" href="assets/app.css">
 </head>
-<body class="min-h-dvh bg-slate-50 text-slate-900 antialiased">
+<body class="paper min-h-dvh text-slate-900 antialiased">
+  <!-- Hintergrund (Experiment): Kaffeeflecken und Bauteile am Rand, rein dekorativ -->
+  <div class="paper-decor" aria-hidden="true">
+    <img src="assets/papier/kaffee-ring.svg" alt="" class="paper-ring-1">
+    <img src="assets/papier/kaffee-ring.svg" alt="" class="paper-ring-2">
+    <img src="assets/papier/kaffee-tropfen.svg" alt="" class="paper-drops">
+    <img src="assets/papier/widerstand.svg" alt="" class="paper-part paper-resistor">
+    <img src="assets/papier/led.svg" alt="" class="paper-part paper-led">
+    <img src="assets/papier/ic.svg" alt="" class="paper-part paper-ic">
+    <img src="assets/papier/elko.svg" alt="" class="paper-part paper-cap">
+    <img src="assets/papier/transistor.svg" alt="" class="paper-part paper-transistor">
+  </div>
   <div x-data x-cloak>
     <!-- Kopfzeile (nur eingeloggt) -->
     <header x-show="$store.auth.user" class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
