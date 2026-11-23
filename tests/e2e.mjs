@@ -142,11 +142,11 @@ try {
   if (lines !== 2) throw new Error(`Lieferhistorie: ${lines} statt 2 Buchungen`);
   ok('Liefermenge in „Geliefert“ eingetragen → sofort gebucht, geliefert 7');
 
-  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-cell=delivered]').click()`);
-  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]')?.offsetParent`, 'Doppelhäkchen');
+  // Haken „alles geliefert“ ist immer sichtbar (ohne die Zelle zu öffnen)
+  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]')?.offsetParent && !${ITEM('NE 555 DIP')}.querySelector('[data-cell-input=delivered]')`, 'Haken sichtbar');
   await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]').click()`);
-  await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert');
-  ok('Doppelhäkchen „alles geliefert“ → automatisch Geliefert');
+  await b.waitFor(`${BADGE} === 'Geliefert' && ${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]').disabled`, 'Status geliefert, Haken grün');
+  ok('Haken „alles geliefert“ (immer sichtbar) → automatisch Geliefert');
 
   // Verwaltungsschritte ohne Rückfrage: Klick hakt sofort ab, Toast mit „Datum ändern“/„Rückgängig“
   const STEP = (v) => `document.querySelector('#view [data-step=${v}]')`;

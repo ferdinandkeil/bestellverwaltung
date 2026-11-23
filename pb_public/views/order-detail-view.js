@@ -66,23 +66,30 @@ const ORDERED_CELL = cellEdit('qty_cancelled',
   });
 
 const PLUS = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-4 shrink-0 text-emerald-600" aria-hidden="true"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>';
-/** Doppelhäkchen „alles geliefert“ (wie „alles erledigt“). */
-const DONE_ALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true"><path d="M2.5 12.5l4.5 4.5 8.5-9"/><path d="M11 16.5l.5.5 10-10"/></svg>';
-
 /**
- * Geliefert: Klick öffnet „Gesamtstand + [Menge dieser Lieferung] ✓✓“; Enter bucht sofort (Toast mit „Rückgängig“),
- * das Doppelhäkchen bucht den ganzen Rest. mousedown.prevent: das Feld behält den Fokus, sonst schlösse blur den Rahmen.
+ * Haken „alles geliefert“, immer sichtbar: grau = noch offen (Klick bucht den ganzen Rest), grün = vollständig geliefert.
+ * mousedown.prevent: im offenen Rahmen behält das Mengenfeld den Fokus, sonst schlösse blur den Rahmen vor dem Klick.
  */
+const DELIVER_ALL = /* html */ `
+<button type="button" class="shrink-0 rounded p-0.5" data-deliver-all x-show="canDeliver() || !backlogOf(it)"
+        :class="backlogOf(it) ? 'cursor-pointer text-slate-400 hover:bg-emerald-50 hover:text-emerald-600' : 'cursor-default text-emerald-600'"
+        :disabled="!backlogOf(it) || !canDeliver()" :aria-label="'Alles von ' + it.part_number + ' geliefert'"
+        x-tip="backlogOf(it) ? 'Alles geliefert' : ''" @mousedown.prevent @click.stop="deliverAll(it)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true"><path d="M4.5 12.5l5 5 10-10.5"/></svg>
+</button>`;
+
+/** Geliefert: Klick in die Zelle öffnet „Gesamtstand + [Menge dieser Lieferung] ✓“; Enter bucht sofort (Toast mit „Rückgängig“). */
 const DELIVERED_CELL = cellEdit('delivered',
   `<span class="tabular-nums whitespace-nowrap" x-text="it.qty_delivered"></span>`,
   {
     align: 'right',
     input: 'w-12" type="number" min="1" step="1" inputmode="numeric" :max="backlogOf(it)" placeholder="0" aria-label="Gelieferte Menge',
     prefix: `<span class="tabular-nums" x-text="it.qty_delivered"></span>${PLUS}`,
-    suffix: `<button type="button" class="-my-0.5 -mr-1 rounded p-0.5 text-emerald-600 hover:bg-emerald-50" data-deliver-all
-                     @mousedown.prevent @click.stop="deliverAll(it)" :aria-label="'Alles von ' + it.part_number + ' geliefert'"
-                     x-tip="'Alles geliefert'">${DONE_ALL}</button>`,
+    suffix: DELIVER_ALL,
   });
+/** Zelle mit immer sichtbarem Haken rechts (im offenen Rahmen sitzt er darin). */
+const DELIVERED_WITH_CHECK = /* html */ `
+<span class="inline-flex items-center justify-end gap-1.5">${DELIVERED_CELL}<span x-show="!isEditing(it, 'delivered')" class="inline-flex">${DELIVER_ALL}</span></span>`;
 
 /** Bezeichnung (wird kaum genutzt: schmal, gekürzt, voll im Tooltip) und Kennzeichen „nachgetragen“. */
 const NAME_TEXT = /* html */ `
@@ -236,7 +243,7 @@ const template = /* html */ `
                     </template>
                     <template x-if="gi === 0 && !isCart()">
                       <td class="px-3 py-1.5 text-right align-middle whitespace-nowrap" :rowspan="groupRows(it).length"
-                          ${cellClick("'delivered'")} data-delivered>${DELIVERED_CELL}</td>
+                          ${cellClick("'delivered'")} data-delivered>${DELIVERED_WITH_CHECK}</td>
                     </template>
                     <template x-if="gi === 0 && !isCart()">
                       <td class="px-3 py-1.5 text-right align-middle tabular-nums" :rowspan="groupRows(it).length" data-open>
@@ -284,7 +291,7 @@ const template = /* html */ `
                   <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <span class="flex items-center gap-1">Bestellt ${ORDERED_CELL}</span>
                     <span>Offen <span class="font-semibold" x-text="backlogOf(it)"></span></span>
-                    <span class="flex items-center gap-1">Geliefert ${DELIVERED_CELL}</span>
+                    <span class="flex items-center gap-1">Geliefert ${DELIVERED_WITH_CHECK}</span>
                   </div>
                 </template>
                 <template x-if="isCart()">
@@ -731,7 +738,7 @@ function component() {
       await this.bookLine(it, qty);
     },
 
-    /** Doppelhäkchen: den ganzen Rest der Position buchen. */
+    /** Haken „alles geliefert“: den ganzen Rest der Position buchen. */
     async deliverAll(it) {
       this.editCell = null;
       const max = backlogOf(it);
