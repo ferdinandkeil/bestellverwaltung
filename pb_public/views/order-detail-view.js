@@ -26,7 +26,7 @@ const CHEVRON = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-5 shri
  * speichert (Toast mit „Rückgängig“), Escape bricht ab. Im Warenkorb Art.-Nr., Bezeichnung und Gesamtmenge,
  * ab „bestellt“ nur die stornierte Menge (Klick auf die bestellte Menge).
  */
-function cellEdit(field, display, { input = '', align = 'left', label = '' } = {}) {
+function cellEdit(field, display, { input = '', align = 'left', label = '', suffix = '' } = {}) {
   // Ein umschließendes Element: der Baustein steht auch als einziger Inhalt eines x-if-Templates.
   return /* html */ `
 <span class="${align === 'left' ? 'block' : 'inline-flex justify-end'}" data-cell-wrap>
@@ -38,7 +38,7 @@ function cellEdit(field, display, { input = '', align = 'left', label = '' } = {
   <label class="flex items-center gap-1 text-xs text-slate-500" @click.stop>${label}
     <input class="input py-1 text-sm text-slate-900 ${input}" x-model="cellValue" data-cell-input="${field}"
            x-init="$nextTick(() => { $el.focus(); $el.select(); })"
-           @keydown.enter.prevent="saveCell(it)" @keydown.escape.prevent.stop="cancelCell()" @blur="saveCell(it)">
+           @keydown.enter.prevent="saveCell(it)" @keydown.escape.prevent.stop="cancelCell()" @blur="saveCell(it)">${suffix}
   </label>
 </template>
 </span>`;
@@ -47,7 +47,12 @@ function cellEdit(field, display, { input = '', align = 'left', label = '' } = {
 /** Bestellte Menge mit Storno („10 −2“); ab „bestellt“ öffnet ein Klick das Feld „storniert“. */
 const ORDERED_CELL = cellEdit('qty_cancelled',
   `<span class="tabular-nums whitespace-nowrap"><span x-text="it.qty_ordered"></span><span x-show="it.qty_cancelled" class="ml-1 text-red-700" x-text="'−' + it.qty_cancelled"></span></span>`,
-  { align: 'right', label: 'storniert', input: 'w-16 text-right" type="number" min="0" step="1" inputmode="numeric' });
+  {
+    align: 'right',
+    input: 'w-16 text-right" type="number" min="0" step="1" inputmode="numeric" aria-label="Stornierte Menge',
+    // Rotes Minus rechts neben dem Feld: wie die Anzeige „10 −2“
+    suffix: '<svg viewBox="0 0 20 20" fill="currentColor" class="size-4 shrink-0 text-red-600" aria-hidden="true"><path fill-rule="evenodd" d="M4 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 10Z" clip-rule="evenodd"/></svg>',
+  });
 
 /** Menge dieser Lieferung (Zahl vom Lieferschein); wird gesammelt und gemeinsam gebucht. */
 const DELIVER_INPUT = /* html */ `
