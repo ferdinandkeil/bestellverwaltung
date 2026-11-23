@@ -30,7 +30,7 @@ const template = /* html */ `
   <div x-show="isOpen" class="fixed inset-0 z-40 flex flex-col bg-white" @keydown.escape.window="isOpen && close()">
     <div class="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
       <div class="min-w-0 flex-1">
-        <h2 class="text-base font-semibold">Moodle-Import <span class="badge ml-1 bg-amber-50 text-amber-800 ring-amber-300 align-middle">Beta</span></h2>
+        <h2 class="text-base font-semibold">Moodle-Import <span class="badge ml-1 bg-amber-50 text-amber-800 border-amber-300 align-middle">Beta</span></h2>
         <p class="truncate text-xs text-slate-500" x-text="fileName || 'CSV-Export der Moodle-Datenbank'"></p>
       </div>
       <button type="button" class="btn btn-ghost btn-sm" @click="close()">Schließen</button>
@@ -132,7 +132,7 @@ const template = /* html */ `
                 <li class="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                   <span class="text-sm break-words"><span class="font-medium" x-text="g.value || '(keine Gruppe angegeben)'"></span>
                     <span class="text-xs text-slate-500" x-text="'· ' + g.count + ' Zeile(n)'"></span>
-                    <span x-show="groupSuggested[g.value]" class="badge ml-1 bg-blue-50 text-blue-800 ring-blue-200">Vorschlag</span></span>
+                    <span x-show="groupSuggested[g.value]" class="badge ml-1 bg-blue-50 text-blue-800 border-blue-200">Vorschlag</span></span>
                   <select class="input" x-model="groupMap[g.value]" @change="groupSuggested[g.value] = false; recheck()"
                           :class="!groupMap[g.value] && 'border-red-400'" :aria-label="'Gruppe für ' + (g.value || 'leer')">
                     <option value="">– bitte wählen –</option>
