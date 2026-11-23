@@ -52,7 +52,7 @@ const template = /* html */ `
     <!-- Kopf -->
     <div class="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
       <div class="min-w-0 flex-1">
-        <h2 class="text-base font-semibold">Lieferschein erfassen <span class="badge ml-1 bg-amber-50 text-amber-800 ring-amber-300 align-middle">Beta</span></h2>
+        <h2 class="text-base font-semibold">Lieferschein erfassen <span class="badge ml-1 bg-amber-50 text-amber-800 border-amber-300 align-middle">Beta</span></h2>
         <p class="truncate text-xs text-slate-500" x-text="orderLabel()"></p>
       </div>
       <button type="button" class="btn btn-ghost btn-sm" @click="close()">Schließen</button>

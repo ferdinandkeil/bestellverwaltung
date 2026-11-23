@@ -42,7 +42,7 @@ const template = /* html */ `
       <span x-text="filtersOpen ? '▴' : '▾'"></span>
     </button>
     <template x-for="f in activeFilters()" :key="f.key">
-      <button type="button" class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-800 ring-1 ring-blue-200"
+      <button type="button" class="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-[9px] py-[3px] text-xs text-blue-800"
               @click="clearFilter(f.key)" :aria-label="'Filter ' + f.label + ' entfernen'">
         <span x-text="f.label"></span><span aria-hidden="true">✕</span>
       </button>
@@ -54,8 +54,8 @@ const template = /* html */ `
       <!-- Höhe wie die Auswahlfelder daneben, Chips mittig dazu -->
       <div class="flex min-h-[2.375rem] flex-wrap items-center gap-1.5">
         <template x-for="ph in tablePhases" :key="ph.value">
-          <button type="button" class="rounded-full px-2.5 py-1 text-xs ring-1 ring-inset transition"
-                  :class="filters.phases.includes(ph.value) ? 'bg-blue-600 text-white ring-blue-600' : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'"
+          <button type="button" class="rounded-full border px-[9px] py-[3px] text-xs transition"
+                  :class="filters.phases.includes(ph.value) ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'"
                   :aria-pressed="filters.phases.includes(ph.value)" @click="togglePhase(ph.value)" x-text="ph.label"></button>
         </template>
       </div>

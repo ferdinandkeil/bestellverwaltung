@@ -33,8 +33,8 @@ const template = /* html */ `
             <h1 class="text-xl font-semibold" x-text="list.title" data-favorite-title></h1>
             <p class="text-sm text-slate-600" x-text="supplierLabel(list) + ' · ' + (isOwner() ? 'eigene Liste' : 'von ' + ownerName())"></p>
           </div>
-          <span x-show="list.is_public" class="badge bg-emerald-50 text-emerald-700 ring-emerald-300">öffentlich</span>
-          <span x-show="!list.is_public" class="badge bg-slate-100 text-slate-600 ring-slate-300">nicht öffentlich</span>
+          <span x-show="list.is_public" class="badge bg-emerald-50 text-emerald-700 border-emerald-300">öffentlich</span>
+          <span x-show="!list.is_public" class="badge bg-slate-100 text-slate-600 border-slate-300">nicht öffentlich</span>
           <button x-show="isOwner()" type="button" class="btn btn-secondary btn-sm" @click="startEditList()">Bearbeiten</button>
         </div>
         <p x-show="list.description" class="mt-2 whitespace-pre-line text-sm text-slate-700" x-text="list.description"></p>
