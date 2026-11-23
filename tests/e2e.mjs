@@ -198,7 +198,18 @@ try {
   await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
   await b.waitFor(`location.hash === '#/carts'`, 'Seite Warenkörbe');
   await b.evaluate(`[...document.querySelectorAll('#view [data-cart] a')].find((a) => a.innerText.includes('Mouser')).click()`);
-  await b.waitFor(`document.querySelector('#internal-order-no')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
+  await b.waitFor(`document.querySelector('[data-field=internal_order_no]')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
+  // Kopf: Felder als Text, ein Klick macht sie editierbar, Enter speichert, Escape bricht ab
+  const FIELD = (k) => `document.querySelector('[data-field=${k}]')`;
+  await b.evaluate(`${FIELD('subject')}.querySelector('[data-field-value]').click()`);
+  await b.waitFor(`document.querySelector('#order-subject')?.offsetParent`, 'Feld „Was“ editierbar');
+  await b.evaluate(`(() => { const i = document.querySelector('#order-subject'); i.value = 'Schieberegister'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`!document.querySelector('#order-subject') && ${FIELD('subject')}.innerText.includes('Schieberegister')`, '„Was“ gespeichert');
+  await b.evaluate(`${FIELD('subject')}.querySelector('[data-field-value]').click()`);
+  await b.waitFor(`document.querySelector('#order-subject')?.offsetParent`, 'erneut editierbar');
+  await b.evaluate(`(() => { const i = document.querySelector('#order-subject'); i.value = 'verworfen'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`);
+  await b.waitFor(`!document.querySelector('#order-subject') && ${FIELD('subject')}.innerText.includes('Schieberegister')`, 'Escape verwirft');
+  ok('Kopf: Feld per Klick editierbar, Enter speichert, Escape verwirft');
   await b.evaluate(`document.querySelector('#view [data-step=form_written]').click()`);
   await b.waitFor(`document.querySelector('#step-internal-no')?.offsetParent`, 'Dialog: nur die fehlende Nummer');
   await b.fill('#step-internal-no', '2026-4711');
@@ -206,7 +217,7 @@ try {
   await b.waitFor(`document.body.innerText.includes('hat das Format JJJJIW#####')`, 'Format-Hinweis');
   await b.fill('#step-internal-no', ' 2026iw04711 ');
   await b.clickText('[data-step-dialog] button', 'Abhaken');
-  await b.waitFor(`${BADGE} === 'In Freigabe' && document.querySelector('#internal-order-no').value === '2026IW04711'`, 'In Freigabe, normalisiert');
+  await b.waitFor(`${BADGE} === 'In Freigabe' && document.querySelector('[data-field=internal_order_no]').innerText.includes('2026IW04711')`, 'In Freigabe, normalisiert');
   if (!(await b.evaluate(`${TOASTS}.includes('Warenkorb geschlossen')`))) throw new Error('Toast ohne Hinweis auf geschlossenen Warenkorb');
   await b.evaluate(`document.querySelector('#view [data-step=ordered]').click()`);
   await b.waitFor(`${BADGE} === 'Bestellt' && document.querySelector('#view [data-step=form_signed]').dataset.state === 'skipped'`, 'Bestellt');
@@ -323,8 +334,14 @@ try {
   if (await b.evaluate(`document.querySelector('#confirm-dialog')?.open`)) throw new Error('Sicherheitsabfrage beim Löschen');
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
   await b.waitFor(`${PC_ITEM('C-100')}?.offsetParent`, 'wieder eingeblendet');
+  // Warenkorb löschen: sofort zur Startseite, „Rückgängig“ führt zurück
+  await b.clickText('#view button', 'Warenkorb löschen');
+  await b.waitFor(`location.hash === '#/' && ${TOASTS}.includes('Warenkorb Farnell gelöscht')`, 'Warenkorb gelöscht (Toast)');
+  if (await b.evaluate(`document.querySelector('#confirm-dialog')?.open`)) throw new Error('Sicherheitsabfrage beim Warenkorb');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`location.hash === '#/orders/${conrad.order.id}' && ${PC_ITEM('C-100')}?.offsetParent`, 'zurück im Warenkorb');
   await b.setViewport();
-  ok('PC: Warenkorb – Zeile bearbeiten (Enter), Löschen ohne Rückfrage mit „Rückgängig“');
+  ok('PC: Warenkorb – Zeile bearbeiten (Enter); Position und Warenkorb löschen ohne Rückfrage mit „Rückgängig“');
 
   await b.navigate(PB_URL + '/#/groups');
   await b.waitFor(`document.querySelector('[x-data=groupsView]') && [...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('Gruppe B'))`, 'Gruppenliste');

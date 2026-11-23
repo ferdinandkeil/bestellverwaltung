@@ -9,7 +9,7 @@ import {
   subscribe, errorMessage, addLateItem, listGroups,
 } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
-import { fmt, toast, confirmAction, deferredAction } from '../core/ui.js';
+import { fmt, toast, deferredAction } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
 import { orderStepsSection, CHECK } from './order-steps.js';
 
@@ -67,6 +67,32 @@ const NAME_TEXT = /* html */ `
   <span x-show="it.added_later_at" class="badge shrink-0 border-violet-200 bg-violet-50 text-violet-800" x-tip="lateLabel(it)">nachgetragen</span>
 </span>`;
 
+/**
+ * Feld im Kopf: als Text, ein Klick macht es editierbar; Enter bzw. Verlassen speichert, Escape bricht ab.
+ * Bei Notizen (mehrzeilig) speichert nur das Verlassen.
+ */
+function headField(key, label, { id, mono = false, maxlength = 100, placeholder = '', multiline = false, attrs = '' } = {}) {
+  const input = multiline
+    ? `<textarea id="${id}" class="input" rows="3" maxlength="${maxlength}" x-model="orderForm.${key}" placeholder="${placeholder}"
+         x-init="$nextTick(() => $el.focus())" @keydown.escape.prevent.stop="cancelField()" @blur="finishField('${key}')"></textarea>`
+    : `<input id="${id}" class="input py-1 ${mono ? 'font-mono' : ''}" maxlength="${maxlength}" x-model="orderForm.${key}" placeholder="${placeholder}" ${attrs}
+         x-init="$nextTick(() => { $el.focus(); $el.select(); })" @keydown.enter.prevent="finishField('${key}')"
+         @keydown.escape.prevent.stop="cancelField()" @blur="finishField('${key}')">`;
+  return /* html */ `
+<div class="min-w-0" data-field="${key}">
+  <label class="label" for="${id}">${label}</label>
+  <template x-if="editField !== '${key}'">
+    <button type="button" class="-mx-1 block max-w-full rounded px-1 py-0.5 text-left ${mono ? 'font-mono' : ''}"
+            :class="isClosed() ? 'cursor-default' : 'cursor-text hover:bg-slate-100'" :disabled="isClosed()"
+            @click="startField('${key}')" data-field-value>
+      <span x-show="order.${key}" class="break-words whitespace-pre-wrap" x-text="order.${key}"></span>
+      <span x-show="!order.${key}" class="text-slate-400">–</span>
+    </button>
+  </template>
+  <template x-if="editField === '${key}'">${input}</template>
+</div>`;
+}
+
 const EDIT_KEYS = '@click.stop @keydown.enter.prevent="saveEdit(it)" @keydown.escape.prevent.stop="cancelEdit()"';
 
 const template = /* html */ `
@@ -78,54 +104,40 @@ const template = /* html */ `
 
   <template x-if="order">
     <div class="space-y-4" x-data="orderSteps">
-      <!-- Kopf -->
-      <section class="card p-4">
-        <div class="flex flex-wrap items-start gap-2">
+      <!-- Kopf: Lieferant, Phase und Nummern kompakt; Felder als Text, ein Klick macht sie editierbar -->
+      <section class="card p-4" data-order-head>
+        <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
           <div class="mr-auto min-w-0">
-            <h1 class="text-xl font-semibold" x-text="supplierLabel(order)"></h1>
-            <p x-show="order.origin === 'lieferschein'" class="mb-1">
-              <span class="badge bg-violet-50 text-violet-800 border-violet-200">aus Lieferschein angelegt</span>
-            </p>
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="text-xl font-semibold" x-text="supplierLabel(order)"></h1>
+              <span class="badge text-sm" data-status-badge :class="statusMeta(order.status).badge" x-text="statusMeta(order.status).label"></span>
+              <span x-show="order.origin === 'lieferschein'" class="badge border-violet-200 bg-violet-50 text-violet-800">aus Lieferschein angelegt</span>
+            </div>
             <p class="text-xs text-slate-500">
               Angelegt <span x-text="fmt.dateTime(order.created)"></span>
               <span x-show="order.expand?.created_by" x-text="'von ' + (order.expand?.created_by?.name || order.expand?.created_by?.email)"></span>
             </p>
           </div>
-          <span class="badge text-sm" data-status-badge :class="statusMeta(order.status).badge" x-text="statusMeta(order.status).label"></span>
+          <!-- Aktionen: Module (Verwaltungsschritte werden im Ablauf abgehakt) -->
+          <div class="flex flex-wrap gap-2">
+            <template x-for="p in plugins()" :key="p.id">
+              <button type="button" class="btn btn-secondary btn-sm" @click="runPlugin(p)" x-text="p.label"></button>
+            </template>
+            <template x-if="order.status === 'angefragt'">
+              <button type="button" class="btn btn-danger btn-sm" :disabled="busy" @click="removeOrder()">Warenkorb löschen</button>
+            </template>
+          </div>
         </div>
 
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <div class="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-[minmax(9rem,auto)_minmax(9rem,auto)_minmax(9rem,auto)_1fr]">
           <div>
-            <label class="label" for="internal-order-no">Interne Bestellnummer</label>
-            <input id="internal-order-no" class="input font-mono" x-model="orderForm.internal_order_no" @change="saveOrder('internal_order_no')"
-                   maxlength="11" placeholder="z. B. 2026IW01047" autocapitalize="characters" spellcheck="false">
+            ${headField('internal_order_no', 'Interne Bestellnummer', { id: 'internal-order-no', mono: true, maxlength: 11, placeholder: 'z. B. 2026IW01047', attrs: 'autocapitalize="characters" spellcheck="false"' })}
             <p class="hint" x-show="order.status === 'angefragt' && !order.internal_order_no">Spätestens beim Formular eintragen.</p>
             <p class="hint" x-show="order.without_internal_order_no">Ohne interne Bestellnummer bestellt (z. B. Muster).</p>
           </div>
-          <div>
-            <label class="label" for="supplier-order-no">Auftragsnummer des Shops <span class="font-normal text-slate-500">(optional)</span></label>
-            <input id="supplier-order-no" class="input" x-model="orderForm.supplier_order_no" @change="saveOrder('supplier_order_no')" maxlength="100"
-                   placeholder="aus der Bestellbestätigung">
-          </div>
-          <div class="sm:col-span-2">
-            <label class="label" for="order-subject">Was <span class="font-normal text-slate-500">(Kurzbeschreibung, optional)</span></label>
-            <input id="order-subject" class="input" x-model="orderForm.subject" @change="saveOrder('subject')" maxlength="100"
-                   placeholder="z. B. Kleinteile, Messgerät">
-          </div>
-          <div class="sm:col-span-2">
-            <label class="label">Notizen</label>
-            <textarea class="input" rows="1" x-model="orderForm.notes" @change="saveOrder('notes')" maxlength="2000"></textarea>
-          </div>
-        </div>
-
-        <!-- Aktionen: Module (Verwaltungsschritte werden im Ablauf abgehakt) -->
-        <div class="mt-4 flex flex-wrap gap-2">
-          <template x-for="p in plugins()" :key="p.id">
-            <button type="button" class="btn btn-secondary" @click="runPlugin(p)" x-text="p.label"></button>
-          </template>
-          <template x-if="order.status === 'angefragt'">
-            <button type="button" class="btn btn-danger ml-auto" :disabled="busy" @click="removeOrder()">Warenkorb löschen</button>
-          </template>
+          ${headField('supplier_order_no', 'Auftragsnummer des Shops', { id: 'supplier-order-no', placeholder: 'aus der Bestellbestätigung' })}
+          ${headField('subject', 'Was', { id: 'order-subject', placeholder: 'z. B. Kleinteile, Messgerät' })}
+          ${headField('notes', 'Notizen', { id: 'order-notes', maxlength: 2000, multiline: true })}
         </div>
       </section>
 
@@ -291,8 +303,10 @@ const template = /* html */ `
         <p x-show="!visibleItems().length" class="card p-6 text-center text-sm text-slate-500">Keine Positionen.</p>
       </section>
 
+      <!-- Lieferhistorie und Anhänge: am PC nebeneinander, sonst untereinander -->
+      <div class="grid items-start gap-4 lg:grid-cols-2">
       <!-- Lieferhistorie -->
-      <section class="card p-4" x-show="deliveries.length">
+      <section class="card p-4" x-show="deliveries.length" data-deliveries>
         <h2 class="mb-3 text-lg font-semibold">Lieferhistorie</h2>
         <ul class="divide-y divide-slate-100">
           <template x-for="d in deliveries" :key="d.id">
@@ -316,16 +330,16 @@ const template = /* html */ `
       </section>
 
       <!-- Anhänge -->
-      <section class="card p-4">
+      <section class="card p-4" :class="!deliveries.length && 'lg:col-span-2'" data-attachments>
         <div class="mb-3 flex items-center gap-2">
           <h2 class="mr-auto text-lg font-semibold">Anhänge</h2>
-          <label class="btn btn-secondary cursor-pointer">
+          <label class="btn btn-secondary btn-sm cursor-pointer" x-show="!isClosed()">
             Datei hinzufügen
             <input type="file" class="hidden" multiple accept="image/jpeg,image/png,image/webp,application/pdf" @change="upload($event)">
           </label>
         </div>
-        <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4" x-show="(order.attachments || []).length">
-          <template x-for="f in order.attachments" :key="f">
+        <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4" x-show="visibleAttachments().length">
+          <template x-for="f in visibleAttachments()" :key="f">
             <li class="relative overflow-hidden rounded-lg border border-slate-200">
               <a :href="fileUrl(order, f)" target="_blank" rel="noopener" class="block">
                 <template x-if="!f.toLowerCase().endsWith('.pdf')">
@@ -336,13 +350,14 @@ const template = /* html */ `
                 </template>
                 <div class="truncate px-2 py-1 text-xs" x-text="f"></div>
               </a>
-              <button type="button" class="absolute right-1 top-1 rounded bg-white/90 px-1.5 text-xs text-red-700 shadow"
-                      @click="removeFile(f)" aria-label="Anhang löschen">✕</button>
+              <button type="button" class="absolute right-1 top-1 rounded bg-white/90 px-1.5 text-xs text-red-700 shadow" x-show="!isClosed()"
+                      @click="removeFile(f)" aria-label="Anhang löschen" data-attachment-delete>✕</button>
             </li>
           </template>
         </ul>
-        <p x-show="!(order.attachments || []).length" class="text-sm text-slate-500">Noch keine Anhänge.</p>
+        <p x-show="!visibleAttachments().length" class="text-sm text-slate-500">Noch keine Anhänge.</p>
       </section>
+      </div>
 
       <!-- Modal: Position hinzufügen -->
       <div x-show="showItemForm" x-transition.opacity class="modal-backdrop" @click.self="showItemForm = false"
@@ -443,6 +458,8 @@ function component() {
     error: '',
     busy: false,
     orderForm: {},
+    /** Feld im Kopf, das gerade bearbeitet wird. */
+    editField: null,
     editId: null,
     edit: {},
     showItemForm: false,
@@ -455,6 +472,7 @@ function component() {
     openRow: null,
     /** Positionen, deren Löschen läuft (ausgeblendet bis „Rückgängig“ oder Ablauf). */
     hiddenItems: {},
+    hiddenFiles: {},
     delivery: { open: false, qty: {}, note: '', receipt: null },
     late: { open: false, part_number: '', name: '', qty: 1, group: '', delivered: false, courses: [] },
     unsubscribe: null,
@@ -517,6 +535,8 @@ function component() {
     isCart() { return CART_STATUSES.includes(this.order?.status); },
     canDeliver() { return DELIVERY_STATUSES.includes(this.order?.status); },
     canCancel() { return DELIVERY_STATUSES.includes(this.order?.status); },
+    /** Abgeschlossen: alles nur lesbar (wieder öffnen über den Ablauf). */
+    isClosed() { return this.order?.status === 'abgeschlossen'; },
     visibleItems() { return this.items.filter((i) => !this.hiddenItems[i.id]); },
     /** Eine Zeile je Gruppe; ohne Aufteilung eine Zeile, nicht aufgeteilter Rest als „ohne Gruppe“. */
     groupRows(it) {
@@ -576,6 +596,24 @@ function component() {
     },
 
     // ---- Bestellung --------------------------------------------------------
+    startField(key) {
+      if (this.isClosed()) return;
+      this.orderForm[key] = this.order[key] || '';
+      this.editField = key;
+    },
+    cancelField() {
+      if (this.editField) this.orderForm[this.editField] = this.order[this.editField] || '';
+      this.editField = null;
+    },
+    /** Enter bzw. Verlassen: speichern, wenn sich etwas geändert hat (Enter und anschließendes blur nur einmal). */
+    async finishField(key) {
+      if (this.editField !== key) return;
+      this.editField = null;
+      const value = String(this.orderForm[key] ?? '').trim();
+      if (value === (this.order[key] || '')) return;
+      if (!(await this.saveOrder(key))) this.orderForm[key] = this.order[key] || '';
+    },
+
     async saveOrder(field) {
       let value = this.orderForm[field];
       if (field === 'internal_order_no') {
@@ -583,23 +621,31 @@ function component() {
         this.orderForm.internal_order_no = value;
         if (value && !INTERNAL_ORDER_NO_RE.test(value)) {
           toast.error('Die interne Bestellnummer hat das Format JJJJIW##### (z. B. 2026IW01047).');
-          return;
+          return false;
         }
       }
+      if (typeof value === 'string') value = value.trim();
       try {
         this.order = { ...this.order, ...(await updateOrder(this.order.id, { [field]: value })) };
         toast.success('Gespeichert.');
+        return true;
       } catch (err) {
         toast.error(errorMessage(err));
+        return false;
       }
     },
 
+    /** Warenkorb sofort verlassen und nach Ablauf des Toasts löschen; „Rückgängig“ führt zurück. */
     async removeOrder() {
-      if (!(await confirmAction('Diesen Warenkorb mit allen Positionen endgültig löschen?', { confirmLabel: 'Löschen', danger: true }))) return;
+      const id = this.order.id;
+      const name = supplierLabel(this.order);
+      location.hash = '#/';
       try {
-        await deleteOrder(this.order.id);
-        toast.success('Warenkorb gelöscht.');
-        location.hash = '#/';
+        await deferredAction({
+          message: `Warenkorb ${name} gelöscht.`,
+          run: () => deleteOrder(id),
+          undo: () => { location.hash = '#/orders/' + id; },
+        });
       } catch (err) {
         toast.error(errorMessage(err));
       }
@@ -801,11 +847,18 @@ function component() {
       }
     },
 
+    visibleAttachments() { return (this.order?.attachments || []).filter((f) => !this.hiddenFiles[f]); },
+
+    /** Anhang sofort ausblenden, nach Ablauf des Toasts löschen; „Rückgängig“ blendet wieder ein. */
     async removeFile(name) {
-      if (!(await confirmAction(`Anhang „${name}“ löschen?`, { confirmLabel: 'Löschen', danger: true }))) return;
+      this.hiddenFiles = { ...this.hiddenFiles, [name]: true };
+      const show = () => { const { [name]: _, ...rest } = this.hiddenFiles; this.hiddenFiles = rest; };
+      const orderId = this.order.id;
       try {
-        await removeAttachment(this.order.id, name);
-        await this.reload();
+        if (await deferredAction({ message: `Anhang „${name}“ gelöscht.`, run: () => removeAttachment(orderId, name), undo: show })) {
+          if (this.order?.id === orderId) await this.reload();
+          show();
+        }
       } catch (err) {
         toast.error(errorMessage(err));
       }

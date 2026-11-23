@@ -129,7 +129,7 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 **Status:** in Arbeit. Fragen am 23.11.2026 geklärt (`samples/prozess/Fragen_UI_Bestellung.md`).
 1. ✔ Ablauf (22.11.2026): verbundene Kästchen mit Abzweig ab „Bestellt“, nächste Schritte, Tooltip/Stift/Lupe, Vorschau-Häkchen, keine Hauptknöpfe; „Geliefert“ bucht den Rest (`POST …/deliveries/rest`, Rückgängig über `DELETE /api/lab/deliveries/{id}`). Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
 2. ✔ Positionen (23.11.2026): Tabelle am PC mit einer Zeile je Gruppe, Liefermenge bzw. Kästchen „Rest“ je Zeile (gesammelt zu einer Buchung), Storno über „Bestellt“, Eingabezeile im Warenkorb, Löschen mit „Rückgängig“; Abschnitt „Kosten“, Link und „+1“ entfallen.
-3. Offen: Kopf (Felder erst per Klick editierbar), Lieferhistorie und Anhänge nebeneinander, „Handeln statt fragen“ (Warenkorb und Anhang löschen, Shop-Export).
+3. ✔ Kopf (Felder als Text, per Klick editierbar), Lieferhistorie und Anhänge nebeneinander, abgeschlossen nur lesbar; „Handeln statt fragen“ für Warenkorb und Anhang löschen sowie „Exportiert & bestellt“ im Shop-Export.
 
 ### Startseite, Nachbesserung (Branch `ui-startseite-2`)
 **Status:** abgenommen (23.11.2026). Entwickelt auf `ui-bestellung`, per Cherry-Pick ohne den Stand der Bestellansicht nach `main` übernommen.
