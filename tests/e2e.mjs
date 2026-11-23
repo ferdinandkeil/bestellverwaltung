@@ -130,18 +130,20 @@ try {
   ok('Zeile aufgeklappt (Schritte), Detail Reichelt (teilgeliefert) über „Positionen & Details“');
   await b.screenshot('04-detail');
 
-  await b.clickText('button', '+1');
-  await b.clickText('button', '+1');
-  await b.clickText('button', '+1');
-  await b.waitFor(`document.body.innerText.includes('+3 …')`, 'Sammelanzeige');
-  await b.waitFor(`[...document.querySelectorAll('#view dd')][1]?.innerText === '7'`, 'geliefert = 7', 6000);
-  const lines = await b.evaluate(`document.querySelectorAll('#view section li ul li').length`);
+  // Lieferung in der Positionsliste: Menge dieser Lieferung eintragen → nach kurzer Pause eine Buchung (mit „Rückgängig“)
+  const ITEM = (pn) => `[...document.querySelectorAll('[data-items-list] [data-item]')].find((r) => r.dataset.part === ${JSON.stringify(pn)})`;
+  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('button').click()`);
+  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-qty]')?.offsetParent`, 'Zeile aufgeklappt mit Mengenfeld');
+  await b.evaluate(`(() => { const i = ${ITEM('NE 555 DIP')}.querySelector('[data-deliver-qty]'); i.focus(); i.value = '3'; i.dispatchEvent(new Event('change')); i.blur(); })()`);
+  await b.waitFor(`document.querySelector('[data-pending-note]')?.offsetParent && ${ITEM('NE 555 DIP')}.querySelector('[data-item-summary]').innerText.trim() === '7 / 10'`, 'vorgemerkt');
+  await b.waitFor(`${TOASTS}.includes('Lieferung gebucht.') && !document.querySelector('[data-pending-note]').offsetParent`, 'gebucht', 8000);
+  const lines = await b.evaluate(`document.querySelectorAll('#view [data-delivery-line]').length`);
   if (lines !== 2) throw new Error(`Lieferhistorie: ${lines} statt 2 Buchungen`);
-  ok('3× „+1“ → eine Buchung, geliefert 7');
+  ok('Liefermenge eingetragen → nach kurzer Pause eine Buchung, geliefert 7');
 
-  await b.clickText('button', 'Rest komplett');
-  await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert', 6000);
-  ok('„Rest komplett“ → automatisch Geliefert');
+  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-rest]').click()`);
+  await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert', 8000);
+  ok('Kästchen „Rest geliefert“ → automatisch Geliefert');
 
   // Verwaltungsschritte ohne Rückfrage: Klick hakt sofort ab, Toast mit „Datum ändern“/„Rückgängig“
   const STEP = (v) => `document.querySelector('#view [data-step=${v}]')`;
@@ -186,7 +188,7 @@ try {
   await sleep(400); // Einblendung abwarten (nur für den Screenshot)
   await b.screenshot('04b-nachtragen');
   await b.clickText('.modal-panel button', 'Nachtragen');
-  await b.waitFor(`[...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('NE 556 DIP') && l.innerText.includes('nachgetragen') && l.innerText.includes('E2E Tester'))`, 'nachgetragene Position');
+  await b.waitFor(`${ITEM('NE 556 DIP')}?.textContent.includes('nachgetragen') && ${ITEM('NE 556 DIP')}.textContent.includes('E2E Tester')`, 'nachgetragene Position');
   if ((await b.evaluate(BADGE)) !== 'Geliefert') throw new Error('Status nach Nachtragen: ' + await b.evaluate(BADGE));
   ok('Position nachgetragen und geliefert gebucht – gekennzeichnet, Status bleibt Geliefert');
 
@@ -289,8 +291,40 @@ try {
   await b.screenshot('05a-tabelle');
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
   await b.waitFor(`${cell('invoice_received')}.dataset.state === 'open'`, 'Rückgängig in der Tabelle');
-  await b.setViewport();
   ok('PC: Tabelle mit Schritt-Checkboxen (Haken, Strich, leer), Abhaken in der Zeile, Rückgängig');
+
+  // PC: Positionen als Tabelle – eine Zeile je Gruppe, Storno über die Spalte „Bestellt“ (Mouser, bestellt)
+  const PC_ITEM = (pn) => `[...document.querySelectorAll('[data-items-table] [data-item]')].find((r) => r.dataset.part === ${JSON.stringify(pn)})`;
+  const mouserId = await b.evaluate(`(async () => { const { pb } = await import('/core/pb.js'); return (await pb.collection('orders').getFirstListItem('internal_order_no = "2026IW04711"')).id; })()`);
+  await b.navigate(PB_URL + '/#/orders/' + mouserId);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}?.offsetParent`, 'Positionstabelle');
+  const groupsShown = await b.evaluate(`[...${PC_ITEM('595-SN74HC595N')}.querySelectorAll('[data-group]')].map((g) => g.innerText.trim()).join()`);
+  if (!groupsShown.includes('Gruppe A') || !groupsShown.includes('Gruppe B')) throw new Error('Gruppenzeilen: ' + groupsShown);
+  if ((await b.evaluate(`${PC_ITEM('595-SN74HC595N')}.querySelectorAll('tr').length`)) < 2) throw new Error('keine eigene Zeile je Gruppe');
+  await b.evaluate(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-ordered]').click()`);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cancel-qty]')`, 'Feld „storniert“');
+  await b.evaluate(`(() => { const i = ${PC_ITEM('595-SN74HC595N')}.querySelector('[data-cancel-qty]'); i.value = '2'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-ordered]')?.innerText.replace(/\\s+/g, '') === '10−2' && ${PC_ITEM('595-SN74HC595N')}.querySelector('[data-open]').innerText.trim() === '8'`, 'Storno 2, offen 8');
+  await b.screenshot('05b-positionen-pc');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`${PC_ITEM('595-SN74HC595N')}.querySelector('[data-ordered]')?.innerText.trim() === '10'`, 'Storno zurückgenommen');
+  ok('PC: Positionen mit einer Zeile je Gruppe; Storno über „Bestellt“, „Rückgängig“');
+
+  // PC: Warenkorb – Klick macht die Zeile zur Eingabezeile (Enter speichert), Löschen sofort mit „Rückgängig“
+  const conrad = await addItem(login.token, { supplier: 'farnell', part_number: 'C-100', name: 'Kabel', qty: 2, group: groupA });
+  await b.navigate(PB_URL + '/#/orders/' + conrad.order.id);
+  await b.waitFor(`${PC_ITEM('C-100')}?.offsetParent`, 'Warenkorb Conrad');
+  await b.evaluate(`${PC_ITEM('C-100')}.click()`);
+  await b.waitFor(`${PC_ITEM('C-100')}.querySelector('[data-edit-qty]')?.offsetParent`, 'Eingabezeile');
+  await b.evaluate(`(() => { const i = ${PC_ITEM('C-100')}.querySelector('[data-edit-qty]'); i.value = '4'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`!${PC_ITEM('C-100')}.querySelector('[data-edit-qty]').offsetParent && ${PC_ITEM('C-100')}.innerText.includes('4')`, 'Menge gespeichert');
+  await b.evaluate(`${PC_ITEM('C-100')}.querySelector('[data-item-delete]').click()`);
+  await b.waitFor(`!${PC_ITEM('C-100')}`, 'sofort ausgeblendet');
+  if (await b.evaluate(`document.querySelector('#confirm-dialog')?.open`)) throw new Error('Sicherheitsabfrage beim Löschen');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`${PC_ITEM('C-100')}?.offsetParent`, 'wieder eingeblendet');
+  await b.setViewport();
+  ok('PC: Warenkorb – Zeile bearbeiten (Enter), Löschen ohne Rückfrage mit „Rückgängig“');
 
   await b.navigate(PB_URL + '/#/groups');
   await b.waitFor(`document.querySelector('[x-data=groupsView]') && [...document.querySelectorAll('#view li')].some((l) => l.innerText.includes('Gruppe B'))`, 'Gruppenliste');

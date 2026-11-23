@@ -1,19 +1,73 @@
-// Bestell-Detail: Verwaltungsschritte, Positionen, Lieferbuchungen, Storno, Kosten, Anhänge, Plugin-Slot.
+// Bestell-Detail (ARCHITECTURE.md Kap. 7): Kopf, Ablauf, Positionen (Lieferungen und Storno in der Tabelle),
+// Lieferhistorie, Anhänge, Plugin-Slot. Beträge werden nicht angezeigt (Kap. 4.1).
 import {
-  supplierLabel, statusMeta, stepMeta, groupsByCourse, INTERNAL_ORDER_NO_RE, EDITABLE_STATUSES, DELIVERY_STATUSES, VAT_RATE,
+  supplierLabel, statusMeta, stepMeta, groupsByCourse, INTERNAL_ORDER_NO_RE, DELIVERY_STATUSES,
 } from '../core/config.js';
 import {
   getOrder, listOrderItems, listDeliveries, listOrderSteps, updateOrder, deleteOrder, updateItem, deleteItem,
-  bookDelivery, uploadAttachments, removeAttachment, fileUrl, backlogOf, orderTotals,
+  bookDelivery, cancelDelivery, uploadAttachments, removeAttachment, fileUrl, backlogOf,
   subscribe, errorMessage, addLateItem, listGroups,
 } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
-import { fmt, toast, confirmAction, numberOrNull } from '../core/ui.js';
+import { fmt, toast, confirmAction, deferredAction } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
-import { orderStepsSection } from './order-steps.js';
+import { orderStepsSection, CHECK } from './order-steps.js';
 
-/** Schnellbuttons werden so lange gesammelt, bevor eine gemeinsame Lieferbuchung entsteht. */
-const QUICK_BOOK_DELAY_MS = 1500;
+/** Sammelzeit für Lieferungen aus der Tabelle: Einträge kurz hintereinander werden eine Lieferbuchung. */
+const DELIVERY_COLLECT_MS = 3000;
+/** Phasen, in denen Positionen bearbeitet werden (vor „bestellt“); danach nur noch Storno. */
+const CART_STATUSES = ['angefragt', 'freigabe'];
+
+const TRASH = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-4" aria-hidden="true"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.44c-.8.08-1.58.18-2.36.3a.75.75 0 1 0 .22 1.49l.15-.03.8 10.1A2.75 2.75 0 0 0 7.55 18.6h4.9a2.75 2.75 0 0 0 2.74-2.54l.8-10.1.15.03a.75.75 0 1 0 .22-1.49c-.78-.12-1.57-.22-2.36-.3v-.44A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.67.03 2.5.08v-.33c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.33C8.33 4.03 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg>';
+const CHEVRON = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-5 shrink-0 text-slate-400 transition-transform" :class="openRow === it.id && \'rotate-180\'" aria-hidden="true"><path fill-rule="evenodd" d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>';
+
+/** Bestellte Menge mit Storno („10 −2“); ab „bestellt“ öffnet ein Klick das Feld „storniert“. */
+const ORDERED_CELL = /* html */ `
+<span class="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+  <template x-if="cancelId !== it.id">
+    <button type="button" class="rounded px-1 tabular-nums" data-ordered :disabled="!canCancel()"
+            :class="canCancel() ? 'cursor-pointer decoration-dotted hover:bg-slate-100 hover:underline' : 'cursor-default'"
+            @click.stop="startCancel(it)">
+      <span x-text="it.qty_ordered"></span><span x-show="it.qty_cancelled" class="ml-1 text-red-700" x-text="'−' + it.qty_cancelled"></span>
+    </button>
+  </template>
+  <template x-if="cancelId === it.id">
+    <label class="flex items-center gap-1 text-xs text-slate-500" @click.stop>storniert
+      <input type="number" min="0" step="1" inputmode="numeric" class="input w-16 py-1 text-right" data-cancel-qty
+             :max="maxCancel(it)" x-model.number="cancelQty" x-init="$nextTick(() => { $el.focus(); $el.select(); })"
+             @keydown.enter.prevent="saveCancel(it)" @keydown.escape.prevent.stop="cancelId = null" @blur="saveCancel(it)">
+    </label>
+  </template>
+</span>`;
+
+/** Menge dieser Lieferung (Zahl vom Lieferschein); wird gesammelt und gemeinsam gebucht. */
+const DELIVER_INPUT = /* html */ `
+<input type="number" min="1" step="1" inputmode="numeric" class="input w-24 py-1 text-right" placeholder="Menge" data-deliver-qty
+       :class="!backlogOf(it) && 'invisible'" :max="backlogOf(it)" :value="pending[it.id] || ''"
+       :aria-label="'Gelieferte Menge ' + it.part_number" @click.stop
+       @change="setPending(it, $event.target)" @focus="holdPending()" @blur="releasePending()"
+       @keydown.enter.prevent="$event.target.blur()">`;
+
+/** Kästchen „Rest geliefert“: grün = vollständig geliefert, blau = vorgemerkt, beim Überfahren graues Häkchen. */
+const REST_BOX = /* html */ `
+<button type="button" class="flex size-5 shrink-0 items-center justify-center rounded border" data-deliver-rest
+        :class="!backlogOf(it) ? 'cursor-default border-emerald-600 bg-emerald-600 text-white'
+          : pending[it.id] === backlogOf(it) ? 'cursor-pointer border-blue-600 bg-blue-600 text-white'
+          : 'group/rest cursor-pointer border-slate-400 bg-white'"
+        :disabled="!backlogOf(it)" :aria-pressed="pending[it.id] === backlogOf(it)"
+        :aria-label="'Rest von ' + it.part_number + ' geliefert'" @click.stop="toggleRest(it)">
+  <span x-show="!backlogOf(it) || pending[it.id] === backlogOf(it)">${CHECK}</span>
+  <span x-show="backlogOf(it) && pending[it.id] !== backlogOf(it)" class="text-slate-400 opacity-0 group-hover/rest:opacity-100">${CHECK}</span>
+</button>`;
+
+/** Bezeichnung (wird kaum genutzt: schmal, gekürzt, voll im Tooltip) und Kennzeichen „nachgetragen“. */
+const NAME_TEXT = /* html */ `
+<span class="flex min-w-0 items-center gap-1.5">
+  <span class="truncate" :class="it.name ? 'text-slate-600' : 'italic text-slate-400'" x-text="it.name || 'ohne Bezeichnung'" x-tip="it.name"></span>
+  <span x-show="it.added_later_at" class="badge shrink-0 border-violet-200 bg-violet-50 text-violet-800" x-tip="lateLabel(it)">nachgetragen</span>
+</span>`;
+
+const EDIT_KEYS = '@click.stop @keydown.enter.prevent="saveEdit(it)" @keydown.escape.prevent.stop="cancelEdit()"';
 
 const template = /* html */ `
 <div x-data="orderDetailView" @order-steps-changed.window="$event.detail.orderId === orderId && reload()">
@@ -77,142 +131,164 @@ const template = /* html */ `
 
       ${orderStepsSection}
 
-      <!-- Positionen -->
-      <section>
+      <!-- Positionen: am PC eine Tabelle mit einer Zeile je Gruppe (gleiche Artikelnummer zusammengefasst),
+           auf Smartphone/Tablet eine kompakte Liste zum Aufklappen -->
+      <section data-items>
         <div class="mb-2 flex flex-wrap items-center gap-2">
           <h2 class="mr-auto text-lg font-semibold">
-            Positionen <span class="text-sm font-normal text-slate-500" x-text="'(' + items.length + ')'"></span>
+            Positionen <span class="text-sm font-normal text-slate-500" x-text="'(' + visibleItems().length + ')'"></span>
           </h2>
+          <span x-show="pendingCount()" class="text-sm text-blue-700" data-pending-note>
+            <span x-text="pendingCount() === 1 ? '1 Position' : pendingCount() + ' Positionen'"></span> für die Lieferung vorgemerkt …
+            <button type="button" class="ml-1 font-medium underline" @click="flushPending()">Jetzt buchen</button>
+          </span>
           <template x-if="canDeliver()">
             <button type="button" class="btn btn-secondary" @click="openLateForm()">Position nachtragen</button>
           </template>
           <template x-if="canDeliver()">
-            <button type="button" class="btn btn-success" @click="openDeliveryForm()">Lieferung erfassen</button>
+            <button type="button" class="btn btn-secondary" @click="openDeliveryForm()">Lieferung mit Beleg</button>
           </template>
-          <template x-if="order.status === 'angefragt'">
+          <template x-if="isCart()">
             <button type="button" class="btn btn-primary" @click="showItemForm = true">+ Position</button>
           </template>
         </div>
 
-        <ul class="space-y-2">
-          <template x-for="it in items" :key="it.id">
-            <li class="card p-3">
-              <!-- Ansicht -->
-              <div x-show="editId !== it.id">
-                <div class="flex items-start gap-2">
-                  <div class="min-w-0 flex-1">
-                    <div class="font-mono text-sm font-semibold break-all" x-text="it.part_number"></div>
-                    <div class="text-sm" :class="it.name ? 'text-slate-700' : 'italic text-slate-400'" x-text="it.name || 'ohne Bezeichnung'"></div>
-                    <a x-show="it.url" :href="it.url" target="_blank" rel="noopener" class="text-xs text-blue-700 hover:underline">Zum Artikel ↗</a>
-                    <div x-show="it.added_later_at" class="mt-1 text-xs text-violet-800">
-                      <span class="badge bg-violet-50 text-violet-800 border-violet-200">nachgetragen</span>
-                      <span x-text="lateLabel(it)"></span>
-                    </div>
-                    <div x-show="it.group_allocation_note" class="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900" x-text="it.group_allocation_note"></div>
-                  </div>
-                  <template x-if="canEditItems()">
-                    <button type="button" class="btn btn-ghost btn-sm" @click="startEdit(it)">Bearbeiten</button>
+        <!-- PC -->
+        <div class="card hidden overflow-x-auto lg:block" x-show="visibleItems().length">
+          <table class="w-full text-sm" data-items-table>
+            <thead class="text-xs text-slate-500">
+              <tr>
+                <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Art.-Nr.</th>
+                <th class="w-full px-3 py-2 text-left font-semibold">Bezeichnung</th>
+                <th class="px-3 py-2 text-left font-semibold">Gruppe</th>
+                <th class="px-3 py-2 text-right font-semibold">Menge</th>
+                <th class="px-3 py-2 text-right font-semibold" x-text="isCart() ? 'Gesamt' : 'Bestellt'"></th>
+                <template x-if="!isCart()"><th class="px-3 py-2 text-right font-semibold">Geliefert</th></template>
+                <template x-if="canDeliver()"><th class="px-3 py-2 text-left font-semibold">Lieferung</th></template>
+                <template x-if="!isCart()"><th class="px-3 py-2 text-right font-semibold">Offen</th></template>
+                <template x-if="isCart()"><th class="w-px"><span class="sr-only">Aktionen</span></th></template>
+              </tr>
+            </thead>
+            <template x-for="it in visibleItems()" :key="it.id">
+              <tbody class="border-t border-slate-200" data-item :data-part="it.part_number"
+                     :class="isCart() && editId !== it.id && 'cursor-pointer hover:bg-slate-50'"
+                     @click="isCart() && editId !== it.id && startEdit(it)">
+                <template x-for="(g, gi) in groupRows(it)" :key="gi">
+                  <tr>
+                    <template x-if="gi === 0">
+                      <td class="px-3 py-1.5 align-middle font-mono font-semibold whitespace-nowrap" :rowspan="groupRows(it).length">
+                        <span x-show="editId !== it.id" x-text="it.part_number"></span>
+                        <input x-show="editId === it.id" class="input w-48 py-1 font-mono" x-model="edit.part_number" maxlength="100"
+                               autocapitalize="characters" spellcheck="false" aria-label="Bestellnummer des Shops" data-edit-part ${EDIT_KEYS}>
+                      </td>
+                    </template>
+                    <template x-if="gi === 0">
+                      <td class="max-w-0 px-3 py-1.5 align-middle" :rowspan="groupRows(it).length">
+                        <div x-show="editId !== it.id">${NAME_TEXT}</div>
+                        <input x-show="editId === it.id" class="input py-1" x-model="edit.name" maxlength="300" placeholder="Bezeichnung"
+                               aria-label="Bezeichnung" ${EDIT_KEYS}>
+                      </td>
+                    </template>
+                    <td class="px-3 py-1.5 align-middle whitespace-nowrap" :class="g.none ? 'italic text-slate-400' : 'text-slate-700'"
+                        x-text="g.name || '–'" data-group></td>
+                    <td class="px-3 py-1.5 text-right align-middle tabular-nums" x-text="g.qty"></td>
+                    <template x-if="gi === 0">
+                      <td class="px-3 py-1.5 text-right align-middle tabular-nums" :rowspan="groupRows(it).length">
+                        <template x-if="isCart()">
+                          <div>
+                            <span x-show="editId !== it.id" x-text="it.qty_ordered"></span>
+                            <input x-show="editId === it.id" type="number" min="1" step="1" class="input w-20 py-1 text-right"
+                                   x-model.number="edit.qty_ordered" aria-label="Gesamtmenge" data-edit-qty ${EDIT_KEYS}>
+                            <p x-show="editId === it.id && allocationSum(it) && allocationSum(it) !== edit.qty_ordered"
+                               class="hint whitespace-nowrap" x-text="'Gruppen ergeben ' + allocationSum(it)"></p>
+                          </div>
+                        </template>
+                        <template x-if="!isCart()">${ORDERED_CELL}</template>
+                      </td>
+                    </template>
+                    <template x-if="gi === 0 && !isCart()">
+                      <td class="px-3 py-1.5 text-right align-middle tabular-nums whitespace-nowrap" :rowspan="groupRows(it).length" data-delivered>
+                        <span x-text="it.qty_delivered"></span><span x-show="pending[it.id]" class="ml-1 text-blue-700" x-text="'+' + pending[it.id]"></span>
+                      </td>
+                    </template>
+                    <template x-if="gi === 0 && canDeliver()">
+                      <td class="px-3 py-1 align-middle" :rowspan="groupRows(it).length">
+                        <div class="flex items-center gap-2">${DELIVER_INPUT}${REST_BOX}</div>
+                      </td>
+                    </template>
+                    <template x-if="gi === 0 && !isCart()">
+                      <td class="px-3 py-1.5 text-right align-middle tabular-nums" :rowspan="groupRows(it).length" data-open>
+                        <span :class="backlogOf(it) ? 'rounded bg-amber-100 px-1.5 font-semibold text-amber-900' : 'text-slate-400'"
+                              x-text="backlogOf(it) || '–'"></span>
+                      </td>
+                    </template>
+                    <template x-if="gi === 0 && isCart()">
+                      <td class="px-2 py-1 align-middle whitespace-nowrap" :rowspan="groupRows(it).length" @click.stop>
+                        <div x-show="editId === it.id" class="flex gap-1">
+                          <button type="button" class="btn btn-primary btn-sm" :disabled="busy" @click="saveEdit(it)" data-edit-save>Speichern</button>
+                          <button type="button" class="btn btn-ghost btn-sm" @click="cancelEdit()">Abbrechen</button>
+                        </div>
+                        <button x-show="editId !== it.id" type="button" class="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                @click="removeItem(it)" :aria-label="'Position ' + it.part_number + ' löschen'" x-tip="'Position löschen'"
+                                data-item-delete>${TRASH}</button>
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </template>
+          </table>
+        </div>
+
+        <!-- Smartphone/Tablet: kompakt, Antippen klappt auf -->
+        <ul class="card divide-y divide-slate-100 lg:hidden" x-show="visibleItems().length" data-items-list>
+          <template x-for="it in visibleItems()" :key="it.id">
+            <li data-item :data-part="it.part_number">
+              <div class="flex items-center gap-3 px-3 py-2">
+                <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="toggleRow(it)" :aria-expanded="openRow === it.id">
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-mono text-sm font-semibold" x-text="it.part_number"></span>
+                    <span class="block truncate text-xs" :class="it.name ? 'text-slate-500' : 'italic text-slate-400'" x-text="it.name || 'ohne Bezeichnung'"></span>
+                  </span>
+                  <span class="text-sm whitespace-nowrap tabular-nums" data-item-summary
+                        x-text="isCart() ? it.qty_ordered + ' Stk.' : (it.qty_delivered + (pending[it.id] || 0)) + ' / ' + (it.qty_ordered - (it.qty_cancelled || 0))"></span>
+                  ${CHEVRON}
+                </button>
+                <template x-if="canDeliver()">${REST_BOX}</template>
+              </div>
+              <div x-show="openRow === it.id" class="space-y-3 bg-slate-50 px-3 py-3 text-sm" data-item-details>
+                <ul class="space-y-0.5">
+                  <template x-for="(g, gi) in groupRows(it)" :key="gi">
+                    <li class="flex justify-between gap-2"><span :class="g.none && 'italic text-slate-400'" x-text="g.name || 'ohne Gruppe'"></span><span class="tabular-nums" x-text="g.qty"></span></li>
                   </template>
-                </div>
-
-                <dl class="mt-2 grid grid-cols-4 gap-1 text-center text-xs">
-                  <div class="rounded bg-slate-50 p-1.5"><dt class="text-slate-500">Bestellt</dt><dd class="text-base font-semibold" x-text="it.qty_ordered"></dd></div>
-                  <div class="rounded bg-slate-50 p-1.5"><dt class="text-slate-500">Geliefert</dt><dd class="text-base font-semibold" x-text="it.qty_delivered"></dd></div>
-                  <div class="rounded bg-slate-50 p-1.5"><dt class="text-slate-500">Storniert</dt><dd class="text-base font-semibold" x-text="it.qty_cancelled || 0"></dd></div>
-                  <div class="rounded p-1.5" :class="backlogOf(it) ? 'bg-amber-100' : 'bg-emerald-50'">
-                    <dt class="text-slate-500">Rückstand</dt><dd class="text-base font-semibold" x-text="backlogOf(it)"></dd>
-                  </div>
-                </dl>
-
-                <div class="mt-1 text-right text-xs text-slate-500" x-show="it.price_unit"
-                     x-text="fmt.eur(it.price_unit) + ' / Stk. · ' + fmt.eur(it.price_unit * Math.max(0, it.qty_ordered - (it.qty_cancelled || 0)))"></div>
-
-                <!-- Schnellbuchung (Smartphone) -->
-                <template x-if="canDeliver()">
-                  <div class="mt-2 flex items-center gap-2">
-                    <button type="button" class="btn btn-secondary flex-1 py-3" @click="quickAdd(it, 1)">+1</button>
-                    <button type="button" class="btn btn-success flex-1 py-3" :disabled="backlogOf(it) - (pending[it.id] || 0) <= 0"
-                            @click="quickAdd(it, backlogOf(it) - (pending[it.id] || 0))">Rest komplett</button>
-                    <span x-show="pending[it.id]" class="w-16 text-center text-xs text-blue-700" x-text="'+' + pending[it.id] + ' …'"></span>
+                </ul>
+                <p x-show="it.added_later_at" class="text-xs text-violet-800" x-text="'nachgetragen ' + lateLabel(it)"></p>
+                <template x-if="!isCart()">
+                  <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span class="flex items-center gap-1">Bestellt ${ORDERED_CELL}</span>
+                    <span>Offen <span class="font-semibold" x-text="backlogOf(it)"></span></span>
+                    <template x-if="canDeliver() && backlogOf(it)">
+                      <span class="flex items-center gap-2">Lieferung ${DELIVER_INPUT}</span>
+                    </template>
                   </div>
                 </template>
+                <template x-if="isCart() && editId === it.id">
+                  <form class="space-y-2" @submit.prevent="saveEdit(it)">
+                    <input class="input font-mono" x-model="edit.part_number" maxlength="100" aria-label="Bestellnummer des Shops"
+                           autocapitalize="characters" spellcheck="false">
+                    <input class="input" x-model="edit.name" maxlength="300" placeholder="Bezeichnung" aria-label="Bezeichnung">
+                    <input class="input w-28" type="number" min="1" step="1" x-model.number="edit.qty_ordered" aria-label="Gesamtmenge">
+                    <div class="flex gap-2">
+                      <button type="submit" class="btn btn-primary" :disabled="busy">Speichern</button>
+                      <button type="button" class="btn btn-danger ml-auto" @click="removeItem(it)">Löschen</button>
+                    </div>
+                  </form>
+                </template>
               </div>
-
-              <!-- Bearbeiten -->
-              <template x-if="editId === it.id">
-                <form @submit.prevent="saveEdit(it)" class="space-y-3">
-                  <div class="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label class="label">Bestellnummer des Shops</label>
-                      <input class="input font-mono" x-model="edit.part_number" required maxlength="100">
-                    </div>
-                    <div>
-                      <label class="label">Bezeichnung <span class="font-normal text-slate-500">(empfohlen)</span></label>
-                      <input class="input" x-model="edit.name" maxlength="300">
-                    </div>
-                    <div class="sm:col-span-2">
-                      <label class="label">Link</label>
-                      <input class="input" type="url" x-model="edit.url">
-                    </div>
-                    <div>
-                      <label class="label">Bestellte Menge</label>
-                      <input class="input" type="number" min="1" step="1" x-model.number="edit.qty_ordered" required>
-                      <p class="hint" x-show="allocationSum(it) && allocationSum(it) !== edit.qty_ordered"
-                         x-text="'Hinweis: Gruppenanteile ergeben ' + allocationSum(it) + ' Stück.'"></p>
-                    </div>
-                    <div>
-                      <label class="label">Stückpreis netto</label>
-                      <input class="input" type="text" inputmode="decimal" x-model="edit.price_unit">
-                    </div>
-                    <template x-if="order.status !== 'angefragt'">
-                      <div>
-                        <label class="label">Stornierte Menge</label>
-                        <input class="input" type="number" min="0" step="1" x-model.number="edit.qty_cancelled"
-                               :max="Math.max(0, edit.qty_ordered - it.qty_delivered)">
-                        <p class="hint">Vom Shop storniert oder nicht lieferbar.</p>
-                      </div>
-                    </template>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <button type="submit" class="btn btn-primary" :disabled="busy">Speichern</button>
-                    <button type="button" class="btn btn-secondary" @click="editId = null">Abbrechen</button>
-                    <template x-if="order.status === 'angefragt'">
-                      <button type="button" class="btn btn-danger ml-auto" @click="removeItem(it)">Position löschen</button>
-                    </template>
-                  </div>
-                </form>
-              </template>
             </li>
           </template>
         </ul>
-        <p x-show="!items.length" class="card p-6 text-center text-sm text-slate-500">Keine Positionen.</p>
-      </section>
-
-      <!-- Kosten -->
-      <section class="card p-4">
-        <h2 class="mb-3 text-lg font-semibold">Kosten</h2>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label class="label">Versandkosten netto</label>
-            <input class="input" type="text" inputmode="decimal" x-model="orderForm.shipping_cost" @change="saveOrder('shipping_cost')" placeholder="0,00">
-          </div>
-          <div>
-            <label class="label">Rechnungsbetrag brutto (laut Rechnung)</label>
-            <input class="input" type="text" inputmode="decimal" x-model="orderForm.invoice_total" @change="saveOrder('invoice_total')" placeholder="bei Abrechnung eintragen">
-          </div>
-        </div>
-        <dl class="mt-4 space-y-1 text-sm">
-          <div class="flex justify-between"><dt>Positionen netto</dt><dd x-text="fmt.eur(totals().itemsNet)"></dd></div>
-          <div class="flex justify-between"><dt>Versand netto</dt><dd x-text="fmt.eur(totals().shipping)"></dd></div>
-          <div class="flex justify-between border-t border-slate-200 pt-1 font-medium"><dt>Summe netto</dt><dd x-text="fmt.eur(totals().net)"></dd></div>
-          <div class="flex justify-between text-slate-600"><dt x-text="'MwSt. ' + Math.round(vatRate * 100) + ' %'"></dt><dd x-text="fmt.eur(totals().vat)"></dd></div>
-          <div class="flex justify-between font-semibold"><dt>Summe brutto</dt><dd x-text="fmt.eur(totals().gross)"></dd></div>
-          <div x-show="order.invoice_total" class="flex justify-between text-slate-600">
-            <dt>Abweichung zur Rechnung</dt><dd x-text="fmt.eur(order.invoice_total - totals().gross)"></dd>
-          </div>
-        </dl>
-        <p x-show="totals().missingPrices" class="hint mt-2"
-           x-text="totals().missingPrices + ' Position(en) ohne Stückpreis – Summe unvollständig.'"></p>
+        <p x-show="!visibleItems().length" class="card p-6 text-center text-sm text-slate-500">Keine Positionen.</p>
       </section>
 
       <!-- Lieferhistorie -->
@@ -229,7 +305,7 @@ const template = /* html */ `
               <div x-show="d.note" class="text-xs text-slate-600" x-text="d.note"></div>
               <ul class="mt-1 flex flex-wrap gap-1">
                 <template x-for="line in (d.expand?.delivery_items_via_delivery ?? [])" :key="line.id">
-                  <li class="rounded px-1.5 py-0.5 font-mono text-xs"
+                  <li class="rounded px-1.5 py-0.5 font-mono text-xs" data-delivery-line
                       :class="line.qty < 0 ? 'bg-red-50 text-red-700' : 'bg-slate-100'"
                       x-text="partNumberOf(line.order_item) + ': ' + (line.qty > 0 ? '+' : '') + line.qty"></li>
                 </template>
@@ -360,7 +436,6 @@ const template = /* html */ `
 function component() {
   return {
     supplierLabel, statusMeta, stepMeta, backlogOf, fileUrl, fmt,
-    vatRate: VAT_RATE,
     order: null,
     items: [],
     deliveries: [],
@@ -371,8 +446,15 @@ function component() {
     editId: null,
     edit: {},
     showItemForm: false,
+    /** Vorgemerkte Liefermengen je Position (werden nach DELIVERY_COLLECT_MS gemeinsam gebucht). */
     pending: {},
     pendingTimer: null,
+    holding: false,
+    cancelId: null,
+    cancelQty: 0,
+    openRow: null,
+    /** Positionen, deren Löschen läuft (ausgeblendet bis „Rückgängig“ oder Ablauf). */
+    hiddenItems: {},
     delivery: { open: false, qty: {}, note: '', receipt: null },
     late: { open: false, part_number: '', name: '', qty: 1, group: '', delivered: false, courses: [] },
     unsubscribe: null,
@@ -392,7 +474,7 @@ function component() {
 
     destroy() {
       this.unsubscribe?.();
-      if (this.pendingTimer) this.flushPending();
+      if (this.pendingCount()) this.flushPending();
     },
 
     async reload() {
@@ -409,8 +491,6 @@ function component() {
           subject: order.subject || '',
           supplier_order_no: order.supplier_order_no || '',
           notes: order.notes || '',
-          shipping_cost: order.shipping_cost ? String(order.shipping_cost).replace('.', ',') : '',
-          invoice_total: order.invoice_total ? String(order.invoice_total).replace('.', ',') : '',
         };
         this.error = '';
       } catch (err) {
@@ -433,9 +513,29 @@ function component() {
     },
 
     // ---- Zustände ----------------------------------------------------------
-    canEditItems() { return EDITABLE_STATUSES.includes(this.order?.status); },
+    /** Warenkorb bzw. Freigabe: Positionen bearbeitbar; danach nur Storno und Lieferungen. */
+    isCart() { return CART_STATUSES.includes(this.order?.status); },
     canDeliver() { return DELIVERY_STATUSES.includes(this.order?.status); },
-    totals() { return orderTotals(this.order, this.items); },
+    canCancel() { return DELIVERY_STATUSES.includes(this.order?.status); },
+    visibleItems() { return this.items.filter((i) => !this.hiddenItems[i.id]); },
+    /** Eine Zeile je Gruppe; ohne Aufteilung eine Zeile, nicht aufgeteilter Rest als „ohne Gruppe“. */
+    groupRows(it) {
+      const rows = (it.group_allocations || []).filter((a) => a.qty > 0).map((a) => ({ name: a.groupName || '', qty: a.qty }));
+      if (!rows.length) return [{ name: '', qty: it.qty_ordered }];
+      const rest = it.qty_ordered - rows.reduce((sum, r) => sum + r.qty, 0);
+      if (rest > 0) rows.push({ name: 'ohne Gruppe', qty: rest, none: true });
+      return rows;
+    },
+    maxCancel(it) { return Math.max(0, it.qty_ordered - (it.qty_delivered || 0)); },
+    toggleRow(it) {
+      if (this.openRow === it.id) {
+        this.openRow = null;
+        if (this.editId === it.id) this.cancelEdit();
+      } else {
+        this.openRow = it.id;
+        if (this.isCart()) this.startEdit(it);
+      }
+    },
     allocationSum(it) { return (it.group_allocations || []).reduce((s, a) => s + (a.qty || 0), 0); },
     partNumberOf(itemId) { return this.items.find((i) => i.id === itemId)?.part_number || '(gelöscht)'; },
 
@@ -486,14 +586,6 @@ function component() {
           return;
         }
       }
-      if (field === 'shipping_cost' || field === 'invoice_total') {
-        value = numberOrNull(value);
-        if (this.orderForm[field] !== '' && value === null) {
-          toast.error('Bitte eine gültige Zahl eingeben.');
-          return;
-        }
-        value = value ?? 0;
-      }
       try {
         this.order = { ...this.order, ...(await updateOrder(this.order.id, { [field]: value })) };
         toast.success('Gespeichert.');
@@ -513,31 +605,31 @@ function component() {
       }
     },
 
-    // ---- Positionen bearbeiten ---------------------------------------------
-    startEdit(it) {
+    // ---- Positionen bearbeiten (Warenkorb): Zeile wird zur Eingabezeile ------------
+    async startEdit(it) {
+      if (this.editId && this.editId !== it.id) {
+        const current = this.items.find((i) => i.id === this.editId);
+        if (current) await this.saveEdit(current);
+      }
       this.editId = it.id;
-      this.edit = {
-        part_number: it.part_number,
-        name: it.name,
-        url: it.url || '',
-        qty_ordered: it.qty_ordered,
-        qty_cancelled: it.qty_cancelled || 0,
-        price_unit: it.price_unit ? String(it.price_unit).replace('.', ',') : '',
-      };
+      this.edit = { part_number: it.part_number, name: it.name || '', qty_ordered: it.qty_ordered };
+      this.$nextTick(() => [...document.querySelectorAll('[data-edit-part]')].find((e) => e.offsetParent)?.focus());
+    },
+
+    cancelEdit() {
+      this.editId = null;
     },
 
     async saveEdit(it) {
-      const price = numberOrNull(this.edit.price_unit);
-      if (this.edit.price_unit !== '' && price === null) {
-        toast.error('Der Stückpreis ist keine gültige Zahl.');
-        return;
-      }
-      const data = { ...this.edit, price_unit: price ?? 0 };
-      if (this.order.status === 'angefragt') delete data.qty_cancelled;
+      if (this.editId !== it.id) return;
+      const data = { part_number: String(this.edit.part_number || '').trim(), name: String(this.edit.name || '').trim(), qty_ordered: Number(this.edit.qty_ordered) };
+      if (!data.part_number) { toast.error('Die Bestellnummer des Shops fehlt.'); return; }
+      if (!Number.isInteger(data.qty_ordered) || data.qty_ordered < 1) { toast.error('Die Menge muss eine ganze Zahl ab 1 sein.'); return; }
+      this.editId = null;
+      if (data.part_number === it.part_number && data.name === (it.name || '') && data.qty_ordered === it.qty_ordered) return;
       this.busy = true;
       try {
         await updateItem(it.id, data);
-        this.editId = null;
         await this.reload();
         toast.success('Position gespeichert.');
       } catch (err) {
@@ -547,24 +639,100 @@ function component() {
       }
     },
 
+    /** Sofort ausblenden, nach Ablauf des Toasts löschen; „Rückgängig“ blendet wieder ein. */
     async removeItem(it) {
-      if (!(await confirmAction(`Position ${it.part_number} löschen?`, { confirmLabel: 'Löschen', danger: true }))) return;
+      this.editId = null;
+      this.hiddenItems = { ...this.hiddenItems, [it.id]: true };
+      const show = () => { const { [it.id]: _, ...rest } = this.hiddenItems; this.hiddenItems = rest; };
       try {
-        await deleteItem(it.id);
-        this.editId = null;
-        await this.reload();
+        if (await deferredAction({ message: `Position ${it.part_number} gelöscht.`, run: () => deleteItem(it.id), undo: show })) {
+          await this.reload();
+          show();
+        }
       } catch (err) {
         toast.error(errorMessage(err));
       }
     },
 
-    // ---- Lieferungen -------------------------------------------------------
-    /** Schnellbuttons sammeln und nach kurzer Pause gemeinsam buchen. */
-    quickAdd(it, qty) {
-      if (qty <= 0) return;
-      this.pending = { ...this.pending, [it.id]: (this.pending[it.id] || 0) + qty };
+    // ---- Storno (ab „bestellt“): Klick auf die bestellte Menge ---------------------
+    startCancel(it) {
+      if (!this.canCancel()) return;
+      this.cancelId = it.id;
+      this.cancelQty = it.qty_cancelled || 0;
+    },
+
+    async saveCancel(it) {
+      if (this.cancelId !== it.id) return; // Enter und anschließendes blur
+      this.cancelId = null;
+      const qty = Number(this.cancelQty);
+      const old = it.qty_cancelled || 0;
+      if (!Number.isInteger(qty) || qty < 0 || qty > this.maxCancel(it)) {
+        toast.error(`Stornierte Menge von ${it.part_number}: 0 bis ${this.maxCancel(it)}.`);
+        return;
+      }
+      if (qty === old) return;
+      try {
+        await updateItem(it.id, { qty_cancelled: qty });
+        await this.reload();
+        toast.done(qty ? `${it.part_number}: ${qty} storniert.` : `${it.part_number}: Storno aufgehoben.`, [{
+          label: 'Rückgängig',
+          icon: 'undo',
+          run: async () => {
+            try {
+              await updateItem(it.id, { qty_cancelled: old });
+            } catch (err) {
+              toast.error(errorMessage(err));
+            }
+            await this.reload();
+          },
+        }]);
+      } catch (err) {
+        toast.error(errorMessage(err));
+      }
+    },
+
+    // ---- Lieferungen aus der Tabelle: Menge eintragen oder Kästchen „Rest“ ------------
+    pendingCount() { return Object.keys(this.pending).length; },
+
+    setPending(it, input) {
+      const raw = String(input.value).trim();
+      const { [it.id]: _, ...rest } = this.pending;
+      if (raw === '') {
+        this.pending = rest;
+        this.schedulePending();
+        return;
+      }
+      const qty = Number(raw);
+      const max = backlogOf(it);
+      if (!Number.isInteger(qty) || qty < 1 || qty > max) {
+        toast.error(`Liefermenge von ${it.part_number}: 1 bis ${max}.`);
+        input.value = this.pending[it.id] || '';
+        return;
+      }
+      this.pending = { ...rest, [it.id]: qty };
+      this.schedulePending();
+    },
+
+    toggleRest(it) {
+      const max = backlogOf(it);
+      if (!max) return;
+      const { [it.id]: _, ...rest } = this.pending;
+      this.pending = this.pending[it.id] === max ? rest : { ...rest, [it.id]: max };
+      this.schedulePending();
+    },
+
+    /** Solange ein Mengenfeld den Fokus hat, wird nicht gebucht. */
+    holdPending() {
+      this.holding = true;
       clearTimeout(this.pendingTimer);
-      this.pendingTimer = setTimeout(() => this.flushPending(), QUICK_BOOK_DELAY_MS);
+    },
+    releasePending() {
+      this.holding = false;
+      this.schedulePending();
+    },
+    schedulePending() {
+      clearTimeout(this.pendingTimer);
+      if (!this.holding && this.pendingCount()) this.pendingTimer = setTimeout(() => this.flushPending(), DELIVERY_COLLECT_MS);
     },
 
     async flushPending() {
@@ -574,11 +742,23 @@ function component() {
       this.pending = {};
       if (!lines.length) return;
       try {
-        await bookDelivery(this.order.id, lines);
+        const result = await bookDelivery(this.order.id, lines);
         await this.reload();
-        toast.success('Lieferung gebucht.');
+        toast.done(lines.length === 1 ? 'Lieferung gebucht.' : `Lieferung mit ${lines.length} Positionen gebucht.`, [{
+          label: 'Rückgängig',
+          icon: 'undo',
+          run: async () => {
+            try {
+              await cancelDelivery(result.delivery.id);
+            } catch (err) {
+              toast.error(errorMessage(err));
+            }
+            await this.reload();
+          },
+        }]);
       } catch (err) {
         toast.error(errorMessage(err));
+        await this.reload();
       }
     },
 
