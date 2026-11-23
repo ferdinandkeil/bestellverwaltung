@@ -189,9 +189,6 @@ const template = /* html */ `
           <template x-if="canDeliver()">
             <button type="button" class="btn btn-secondary" @click="openLateForm()">Position nachtragen</button>
           </template>
-          <template x-if="canDeliver()">
-            <button type="button" class="btn btn-secondary" @click="openDeliveryForm()">Lieferung mit Beleg</button>
-          </template>
           <template x-if="isCart()">
             <button type="button" class="btn btn-primary" @click="showItemForm = true">+ Position</button>
           </template>
@@ -317,7 +314,7 @@ const template = /* html */ `
       <section class="card p-4" data-attachments>
         <div class="flex items-center gap-2">
           <!-- Standardmäßig eingeklappt; Vorschauen (auch PDF, erste Seite) werden erst beim Aufklappen geladen -->
-          <button type="button" class="mr-auto flex items-center gap-1 text-left" @click="toggleAttachments()"
+          <button type="button" class="flex flex-1 cursor-pointer items-center gap-1 self-stretch text-left" @click="toggleAttachments()"
                   :aria-expanded="attachmentsOpen" data-attachments-toggle>
             <h2 class="text-lg font-semibold">Anhänge <span class="text-sm font-normal text-slate-500" x-text="'(' + attachmentEntries().length + ')'"></span></h2>
             <svg viewBox="0 0 20 20" fill="currentColor" class="size-5 shrink-0 text-slate-400 transition-transform" :class="attachmentsOpen && 'rotate-180'" aria-hidden="true"><path fill-rule="evenodd" d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
@@ -401,40 +398,6 @@ const template = /* html */ `
           </div>
         </form>
       </div>
-
-      <!-- Modal: Lieferung erfassen -->
-      <div x-show="delivery.open" x-transition.opacity class="modal-backdrop" @click.self="delivery.open = false"
-           @keydown.escape.window="delivery.open = false">
-        <form class="modal-panel space-y-3" @submit.prevent="submitDelivery()">
-          <h2 class="text-lg font-semibold">Lieferung erfassen</h2>
-          <p class="text-xs text-slate-500">Gelieferte Mengen eintragen. Negative Werte korrigieren frühere Buchungen.</p>
-          <ul class="divide-y divide-slate-100">
-            <template x-for="it in items" :key="it.id">
-              <li class="flex items-center gap-2 py-2">
-                <div class="min-w-0 flex-1">
-                  <div class="truncate font-mono text-xs font-semibold" x-text="it.part_number"></div>
-                  <div x-show="it.name" class="truncate text-xs text-slate-500" x-text="it.name"></div>
-                  <div class="text-xs text-slate-500" x-text="'Rückstand ' + backlogOf(it)"></div>
-                </div>
-                <button type="button" class="btn btn-ghost btn-sm" @click="delivery.qty[it.id] = backlogOf(it)" :disabled="!backlogOf(it)">Rest</button>
-                <input class="input w-20 text-right" type="number" step="1" inputmode="numeric" x-model.number="delivery.qty[it.id]">
-              </li>
-            </template>
-          </ul>
-          <div>
-            <label class="label">Notiz (optional)</label>
-            <input class="input" x-model="delivery.note" maxlength="500" placeholder="z. B. Paket 1 von 2">
-          </div>
-          <div>
-            <label class="label">Lieferschein / Beleg (optional)</label>
-            <input class="input" type="file" accept="image/*,application/pdf" capture="environment" @change="delivery.receipt = $event.target.files[0] || null">
-          </div>
-          <div class="flex justify-end gap-2">
-            <button type="button" class="btn btn-secondary" @click="delivery.open = false">Abbrechen</button>
-            <button type="submit" class="btn btn-success" :disabled="busy">Buchen</button>
-          </div>
-        </form>
-      </div>
     </div>
   </template>
 </div>`;
@@ -462,7 +425,6 @@ function component() {
     attachmentsOpen: false,
     /** Vorschaubilder der PDFs (Object-URLs) je Eintrag; fehlt eins, bleibt die Kachel „PDF“. */
     pdfThumbs: {},
-    delivery: { open: false, qty: {}, note: '', receipt: null },
     late: { open: false, part_number: '', name: '', qty: 1, group: '', delivered: false, courses: [] },
     unsubscribe: null,
 
@@ -749,31 +711,6 @@ function component() {
         }]);
       } catch (err) {
         toast.error(errorMessage(err));
-      }
-    },
-
-    openDeliveryForm() {
-      this.delivery = { open: true, qty: Object.fromEntries(this.items.map((i) => [i.id, 0])), note: '', receipt: null };
-    },
-
-    async submitDelivery() {
-      const lines = Object.entries(this.delivery.qty)
-        .map(([item, qty]) => ({ item, qty: Number(qty) || 0 }))
-        .filter((l) => l.qty !== 0);
-      if (!lines.length) {
-        toast.error('Bitte mindestens eine Menge eintragen.');
-        return;
-      }
-      this.busy = true;
-      try {
-        await bookDelivery(this.order.id, lines, { note: this.delivery.note, receipt: this.delivery.receipt });
-        this.delivery.open = false;
-        await this.reload();
-        toast.success('Lieferung gebucht.');
-      } catch (err) {
-        toast.error(errorMessage(err));
-      } finally {
-        this.busy = false;
       }
     },
 
