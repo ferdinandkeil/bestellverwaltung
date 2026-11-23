@@ -12,7 +12,7 @@ import {
 import { setOrderStep, bookRestDelivered, cancelDelivery, errorMessage } from '../core/api.js';
 import { fmt, toast, TOOLTIP_DELAY_MS, TOOLTIP_WARM_MS } from '../core/ui.js';
 
-export const CHECK = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-3.5" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>';
+const CHECK = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-3.5" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>';
 
 /**
  * Quadratische Checkbox eines Schritts `s` (aus stepView). Als Inhalt eines <button> bzw. <span> verwenden.

@@ -11,10 +11,8 @@ import {
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast, deferredAction } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
-import { orderStepsSection, CHECK } from './order-steps.js';
+import { orderStepsSection } from './order-steps.js';
 
-/** Sammelzeit für Lieferungen aus der Tabelle: Einträge kurz hintereinander werden eine Lieferbuchung. */
-const DELIVERY_COLLECT_MS = 3000;
 /** Phasen, in denen Positionen bearbeitet werden (vor „bestellt“); danach nur noch Storno. */
 const CART_STATUSES = ['angefragt', 'freigabe'];
 
@@ -34,23 +32,23 @@ const FRAMED_INPUT_CLASS = 'min-w-0 border-0 bg-transparent p-0 text-right text-
  * Ganze Tabellenzelle klickbar: öffnet die Bearbeitung des Feldes (field = JS-Ausdruck), Hover über die Zelle.
  */
 function cellClick(field) {
-  return `@click="startCell(it, ${field})" :class="canEditCell(${field}) && !isEditing(it, ${field}) && 'cursor-text hover:bg-slate-50'"`;
+  return `@click="startCell(it, ${field})" :class="canEditCell(${field}, it) && !isEditing(it, ${field}) && 'cursor-text hover:bg-slate-50'"`;
 }
 
-function cellEdit(field, display, { input = '', align = 'left', prefix = '' } = {}) {
+function cellEdit(field, display, { input = '', align = 'left', prefix = '', suffix = '' } = {}) {
   // Ein umschließendes Element: der Baustein steht auch als einziger Inhalt eines x-if-Templates.
   return /* html */ `
 <span class="${align === 'left' ? 'block' : 'inline-flex justify-end'}" data-cell-wrap>
 <template x-if="!isEditing(it, '${field}')">
-  <button type="button" class="max-w-full text-${align} ${align === 'left' ? 'block' : ''}" data-cell="${field}" :disabled="!canEditCell('${field}')"
-          :class="canEditCell('${field}') ? 'cursor-text' : 'cursor-default'" @click.stop="startCell(it, '${field}')">${display}</button>
+  <button type="button" class="max-w-full text-${align} ${align === 'left' ? 'block' : ''}" data-cell="${field}" :disabled="!canEditCell('${field}', it)"
+          :class="canEditCell('${field}', it) ? 'cursor-text' : 'cursor-default'" @click.stop="startCell(it, '${field}')">${display}</button>
 </template>
 <template x-if="isEditing(it, '${field}')">
-  <!-- Mit prefix umfasst ein gemeinsamer Rahmen Vorspann und Feld (z. B. „10 − [2]“). -->
+  <!-- Mit prefix umfasst ein gemeinsamer Rahmen Vorspann, Feld und ggf. suffix (z. B. „10 − [2]“, „30 + [5] ✓✓“). -->
   <label class="${prefix ? FRAME_CLASS : 'flex items-center gap-1'}" @click.stop>${prefix}
     <input class="${prefix ? FRAMED_INPUT_CLASS : 'input py-1 text-sm text-slate-900'} ${input}" x-model="cellValue" data-cell-input="${field}"
            x-init="$nextTick(() => { $el.focus(); $el.select(); })"
-           @keydown.enter.prevent="saveCell(it)" @keydown.escape.prevent.stop="cancelCell()" @blur="saveCell(it)">
+           @keydown.enter.prevent="saveCell(it)" @keydown.escape.prevent.stop="cancelCell()" @blur="saveCell(it)">${suffix}
   </label>
 </template>
 </span>`;
@@ -67,25 +65,24 @@ const ORDERED_CELL = cellEdit('qty_cancelled',
       + '<svg viewBox="0 0 20 20" fill="currentColor" class="size-4 shrink-0 text-red-600" aria-hidden="true"><path fill-rule="evenodd" d="M4 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 10Z" clip-rule="evenodd"/></svg>',
   });
 
-/** Menge dieser Lieferung (Zahl vom Lieferschein); wird gesammelt und gemeinsam gebucht. */
-const DELIVER_INPUT = /* html */ `
-<input type="number" min="1" step="1" inputmode="numeric" class="input w-24 py-1 text-right" placeholder="Menge" data-deliver-qty
-       :class="!backlogOf(it) && 'invisible'" :max="backlogOf(it)" :value="pending[it.id] || ''"
-       :aria-label="'Gelieferte Menge ' + it.part_number" @click.stop
-       @change="setPending(it, $event.target)" @focus="holdPending()" @blur="releasePending()"
-       @keydown.enter.prevent="$event.target.blur()">`;
+const PLUS = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-4 shrink-0 text-emerald-600" aria-hidden="true"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>';
+/** Doppelhäkchen „alles geliefert“ (wie „alles erledigt“). */
+const DONE_ALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true"><path d="M2.5 12.5l4.5 4.5 8.5-9"/><path d="M11 16.5l.5.5 10-10"/></svg>';
 
-/** Kästchen „Rest geliefert“: grün = vollständig geliefert, blau = vorgemerkt, beim Überfahren graues Häkchen. */
-const REST_BOX = /* html */ `
-<button type="button" class="flex size-5 shrink-0 items-center justify-center rounded border" data-deliver-rest
-        :class="!backlogOf(it) ? 'cursor-default border-emerald-600 bg-emerald-600 text-white'
-          : pending[it.id] === backlogOf(it) ? 'cursor-pointer border-blue-600 bg-blue-600 text-white'
-          : 'group/rest cursor-pointer border-slate-400 bg-white'"
-        :disabled="!backlogOf(it)" :aria-pressed="pending[it.id] === backlogOf(it)"
-        :aria-label="'Rest von ' + it.part_number + ' geliefert'" @click.stop="toggleRest(it)">
-  <span x-show="!backlogOf(it) || pending[it.id] === backlogOf(it)">${CHECK}</span>
-  <span x-show="backlogOf(it) && pending[it.id] !== backlogOf(it)" class="text-slate-400 opacity-0 group-hover/rest:opacity-100">${CHECK}</span>
-</button>`;
+/**
+ * Geliefert: Klick öffnet „Gesamtstand + [Menge dieser Lieferung] ✓✓“; Enter bucht sofort (Toast mit „Rückgängig“),
+ * das Doppelhäkchen bucht den ganzen Rest. mousedown.prevent: das Feld behält den Fokus, sonst schlösse blur den Rahmen.
+ */
+const DELIVERED_CELL = cellEdit('delivered',
+  `<span class="tabular-nums whitespace-nowrap" x-text="it.qty_delivered"></span>`,
+  {
+    align: 'right',
+    input: 'w-12" type="number" min="1" step="1" inputmode="numeric" :max="backlogOf(it)" placeholder="0" aria-label="Gelieferte Menge',
+    prefix: `<span class="tabular-nums" x-text="it.qty_delivered"></span>${PLUS}`,
+    suffix: `<button type="button" class="-my-0.5 -mr-1 rounded p-0.5 text-emerald-600 hover:bg-emerald-50" data-deliver-all
+                     @mousedown.prevent @click.stop="deliverAll(it)" :aria-label="'Alles von ' + it.part_number + ' geliefert'"
+                     x-tip="'Alles geliefert'">${DONE_ALL}</button>`,
+  });
 
 /** Bezeichnung (wird kaum genutzt: schmal, gekürzt, voll im Tooltip) und Kennzeichen „nachgetragen“. */
 const NAME_TEXT = /* html */ `
@@ -181,10 +178,6 @@ const template = /* html */ `
           <h2 class="mr-auto text-lg font-semibold">
             Positionen <span class="text-sm font-normal text-slate-500" x-text="'(' + visibleItems().length + ')'"></span>
           </h2>
-          <span x-show="pendingCount()" class="text-sm text-blue-700" data-pending-note>
-            <span x-text="pendingCount() === 1 ? '1 Position' : pendingCount() + ' Positionen'"></span> für die Lieferung vorgemerkt …
-            <button type="button" class="ml-1 font-medium underline" @click="flushPending()">Jetzt buchen</button>
-          </span>
           <template x-if="canDeliver()">
             <button type="button" class="btn btn-secondary" @click="openLateForm()">Position nachtragen</button>
           </template>
@@ -207,7 +200,6 @@ const template = /* html */ `
                 <th class="px-3 py-2 text-right font-semibold">Menge</th>
                 <th class="px-3 py-2 text-right font-semibold" x-text="isCart() ? 'Gesamt' : 'Bestellt'"></th>
                 <template x-if="!isCart()"><th class="px-3 py-2 text-right font-semibold">Geliefert</th></template>
-                <template x-if="canDeliver()"><th class="px-3 py-2 text-left font-semibold">Lieferung</th></template>
                 <template x-if="!isCart()"><th class="px-3 py-2 text-right font-semibold">Offen</th></template>
                 <template x-if="isCart()"><th class="w-px"><span class="sr-only">Aktionen</span></th></template>
               </tr>
@@ -243,14 +235,8 @@ const template = /* html */ `
                       </td>
                     </template>
                     <template x-if="gi === 0 && !isCart()">
-                      <td class="px-3 py-1.5 text-right align-middle tabular-nums whitespace-nowrap" :rowspan="groupRows(it).length" data-delivered>
-                        <span x-text="it.qty_delivered"></span><span x-show="pending[it.id]" class="ml-1 text-blue-700" x-text="'+' + pending[it.id]"></span>
-                      </td>
-                    </template>
-                    <template x-if="gi === 0 && canDeliver()">
-                      <td class="px-3 py-1 align-middle" :rowspan="groupRows(it).length">
-                        <div class="flex items-center gap-2">${DELIVER_INPUT}${REST_BOX}</div>
-                      </td>
+                      <td class="px-3 py-1.5 text-right align-middle whitespace-nowrap" :rowspan="groupRows(it).length"
+                          ${cellClick("'delivered'")} data-delivered>${DELIVERED_CELL}</td>
                     </template>
                     <template x-if="gi === 0 && !isCart()">
                       <td class="px-3 py-1.5 text-right align-middle tabular-nums" :rowspan="groupRows(it).length" data-open>
@@ -283,10 +269,9 @@ const template = /* html */ `
                     <span class="block truncate text-xs" :class="it.name ? 'text-slate-500' : 'italic text-slate-400'" x-text="it.name || 'ohne Bezeichnung'"></span>
                   </span>
                   <span class="text-sm whitespace-nowrap tabular-nums" data-item-summary
-                        x-text="isCart() ? it.qty_ordered + ' Stk.' : (it.qty_delivered + (pending[it.id] || 0)) + ' / ' + (it.qty_ordered - (it.qty_cancelled || 0))"></span>
+                        x-text="isCart() ? it.qty_ordered + ' Stk.' : it.qty_delivered + ' / ' + (it.qty_ordered - (it.qty_cancelled || 0))"></span>
                   ${CHEVRON}
                 </button>
-                <template x-if="canDeliver()">${REST_BOX}</template>
               </div>
               <div x-show="openRow === it.id" class="space-y-3 bg-slate-50 px-3 py-3 text-sm" data-item-details>
                 <ul class="space-y-0.5">
@@ -299,9 +284,7 @@ const template = /* html */ `
                   <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <span class="flex items-center gap-1">Bestellt ${ORDERED_CELL}</span>
                     <span>Offen <span class="font-semibold" x-text="backlogOf(it)"></span></span>
-                    <template x-if="canDeliver() && backlogOf(it)">
-                      <span class="flex items-center gap-2">Lieferung ${DELIVER_INPUT}</span>
-                    </template>
+                    <span class="flex items-center gap-1">Geliefert ${DELIVERED_CELL}</span>
                   </div>
                 </template>
                 <template x-if="isCart()">
@@ -482,10 +465,6 @@ function component() {
     editCell: null,
     cellValue: '',
     showItemForm: false,
-    /** Vorgemerkte Liefermengen je Position (werden nach DELIVERY_COLLECT_MS gemeinsam gebucht). */
-    pending: {},
-    pendingTimer: null,
-    holding: false,
     openRow: null,
     /** Positionen, deren Löschen läuft (ausgeblendet bis „Rückgängig“ oder Ablauf). */
     hiddenItems: {},
@@ -509,7 +488,6 @@ function component() {
 
     destroy() {
       this.unsubscribe?.();
-      if (this.pendingCount()) this.flushPending();
     },
 
     async reload() {
@@ -667,16 +645,17 @@ function component() {
     },
 
     // ---- Positionen: eine Zelle bearbeiten (Warenkorb: Art.-Nr., Bezeichnung, Menge; ab „bestellt“: Storno) ----
-    canEditCell(field) {
+    canEditCell(field, it) {
+      if (field === 'delivered') return this.canDeliver() && backlogOf(it) > 0;
       return field === 'qty_cancelled' ? this.canCancel() : this.isCart();
     },
     isEditing(it, field) {
       return this.editCell?.id === it.id && this.editCell.field === field;
     },
     startCell(it, field) {
-      if (!this.canEditCell(field)) return;
+      if (!this.canEditCell(field, it)) return;
       this.editCell = { id: it.id, field };
-      this.cellValue = field === 'qty_cancelled' ? (it.qty_cancelled || 0) : (it[field] ?? '');
+      this.cellValue = field === 'delivered' ? '' : field === 'qty_cancelled' ? (it.qty_cancelled || 0) : (it[field] ?? '');
     },
     cancelCell() {
       this.editCell = null;
@@ -688,6 +667,7 @@ function component() {
       const { field } = this.editCell;
       this.editCell = null;
       const raw = String(this.cellValue ?? '').trim();
+      if (field === 'delivered') return this.saveDelivered(it, raw);
       const old = field === 'qty_cancelled' ? (it.qty_cancelled || 0) : (it[field] ?? '');
       let value = raw;
       if (field === 'part_number' && !raw) { toast.error('Die Bestellnummer des Shops darf nicht leer sein.'); return; }
@@ -739,60 +719,30 @@ function component() {
       }
     },
 
-    // ---- Lieferungen aus der Tabelle: Menge eintragen oder Kästchen „Rest“ ------------
-    pendingCount() { return Object.keys(this.pending).length; },
-
-    setPending(it, input) {
-      const raw = String(input.value).trim();
-      const { [it.id]: _, ...rest } = this.pending;
-      if (raw === '') {
-        this.pending = rest;
-        this.schedulePending();
-        return;
-      }
+    // ---- Lieferung in der Zelle „Geliefert“: sofort buchen, „Rückgängig“ nimmt die Buchung zurück ----------
+    async saveDelivered(it, raw) {
+      if (raw === '') return;
       const qty = Number(raw);
       const max = backlogOf(it);
       if (!Number.isInteger(qty) || qty < 1 || qty > max) {
         toast.error(`Liefermenge von ${it.part_number}: 1 bis ${max}.`);
-        input.value = this.pending[it.id] || '';
         return;
       }
-      this.pending = { ...rest, [it.id]: qty };
-      this.schedulePending();
+      await this.bookLine(it, qty);
     },
 
-    toggleRest(it) {
+    /** Doppelhäkchen: den ganzen Rest der Position buchen. */
+    async deliverAll(it) {
+      this.editCell = null;
       const max = backlogOf(it);
-      if (!max) return;
-      const { [it.id]: _, ...rest } = this.pending;
-      this.pending = this.pending[it.id] === max ? rest : { ...rest, [it.id]: max };
-      this.schedulePending();
+      if (max > 0) await this.bookLine(it, max);
     },
 
-    /** Solange ein Mengenfeld den Fokus hat, wird nicht gebucht. */
-    holdPending() {
-      this.holding = true;
-      clearTimeout(this.pendingTimer);
-    },
-    releasePending() {
-      this.holding = false;
-      this.schedulePending();
-    },
-    schedulePending() {
-      clearTimeout(this.pendingTimer);
-      if (!this.holding && this.pendingCount()) this.pendingTimer = setTimeout(() => this.flushPending(), DELIVERY_COLLECT_MS);
-    },
-
-    async flushPending() {
-      clearTimeout(this.pendingTimer);
-      this.pendingTimer = null;
-      const lines = Object.entries(this.pending).map(([item, qty]) => ({ item, qty }));
-      this.pending = {};
-      if (!lines.length) return;
+    async bookLine(it, qty) {
       try {
-        const result = await bookDelivery(this.order.id, lines);
+        const result = await bookDelivery(this.order.id, [{ item: it.id, qty }]);
         await this.reload();
-        toast.done(lines.length === 1 ? 'Lieferung gebucht.' : `Lieferung mit ${lines.length} Positionen gebucht.`, [{
+        toast.done(`Lieferung gebucht: ${it.part_number} +${qty}.`, [{
           label: 'Rückgängig',
           icon: 'undo',
           run: async () => {
@@ -806,7 +756,6 @@ function component() {
         }]);
       } catch (err) {
         toast.error(errorMessage(err));
-        await this.reload();
       }
     },
 

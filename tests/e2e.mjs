@@ -130,20 +130,23 @@ try {
   ok('Zeile aufgeklappt (Schritte), Detail Reichelt (teilgeliefert) über „Positionen & Details“');
   await b.screenshot('04-detail');
 
-  // Lieferung in der Positionsliste: Menge dieser Lieferung eintragen → nach kurzer Pause eine Buchung (mit „Rückgängig“)
+  // Lieferung in der Zelle „Geliefert“ (aufgeklappte Zeile): Menge dieser Lieferung → sofort gebucht, mit „Rückgängig“
   const ITEM = (pn) => `[...document.querySelectorAll('[data-items-list] [data-item]')].find((r) => r.dataset.part === ${JSON.stringify(pn)})`;
   await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('button').click()`);
-  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-qty]')?.offsetParent`, 'Zeile aufgeklappt mit Mengenfeld');
-  await b.evaluate(`(() => { const i = ${ITEM('NE 555 DIP')}.querySelector('[data-deliver-qty]'); i.focus(); i.value = '3'; i.dispatchEvent(new Event('change')); i.blur(); })()`);
-  await b.waitFor(`document.querySelector('[data-pending-note]')?.offsetParent && ${ITEM('NE 555 DIP')}.querySelector('[data-item-summary]').innerText.trim() === '7 / 10'`, 'vorgemerkt');
-  await b.waitFor(`${TOASTS}.includes('Lieferung gebucht.') && !document.querySelector('[data-pending-note]').offsetParent`, 'gebucht', 8000);
+  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-cell=delivered]')?.offsetParent`, 'Zeile aufgeklappt');
+  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-cell=delivered]').click()`);
+  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-cell-input=delivered]')?.offsetParent`, 'Liefermenge editierbar');
+  await b.evaluate(`(() => { const i = ${ITEM('NE 555 DIP')}.querySelector('[data-cell-input=delivered]'); i.value = '3'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+  await b.waitFor(`${TOASTS}.includes('Lieferung gebucht: NE 555 DIP +3') && ${ITEM('NE 555 DIP')}.querySelector('[data-item-summary]').innerText.trim() === '7 / 10'`, 'gebucht, geliefert 7');
   const lines = await b.evaluate(`document.querySelectorAll('#view [data-delivery-line]').length`);
   if (lines !== 2) throw new Error(`Lieferhistorie: ${lines} statt 2 Buchungen`);
-  ok('Liefermenge eingetragen → nach kurzer Pause eine Buchung, geliefert 7');
+  ok('Liefermenge in „Geliefert“ eingetragen → sofort gebucht, geliefert 7');
 
-  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-rest]').click()`);
-  await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert', 8000);
-  ok('Kästchen „Rest geliefert“ → automatisch Geliefert');
+  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-cell=delivered]').click()`);
+  await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]')?.offsetParent`, 'Doppelhäkchen');
+  await b.evaluate(`${ITEM('NE 555 DIP')}.querySelector('[data-deliver-all]').click()`);
+  await b.waitFor(`${BADGE} === 'Geliefert'`, 'Status geliefert');
+  ok('Doppelhäkchen „alles geliefert“ → automatisch Geliefert');
 
   // Verwaltungsschritte ohne Rückfrage: Klick hakt sofort ab, Toast mit „Datum ändern“/„Rückgängig“
   const STEP = (v) => `document.querySelector('#view [data-step=${v}]')`;
