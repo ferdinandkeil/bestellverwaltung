@@ -288,6 +288,10 @@ try {
   const order = (await listRecords('orders', `id = "${orderId}"`))[0];
   if (order.status !== 'teilgeliefert') throw new Error('Status sollte teilgeliefert sein: ' + order.status);
   ok(`PDF-Beleg angehängt (${(readFileSync(pdfPath).length / 1024).toFixed(0)} KB, qpdf ok), Status teilgeliefert`);
+  // Der Beleg erscheint in der Bestellung unter „Anhänge“ (als „Lieferschein <Datum>“, nicht löschbar)
+  await b.navigate(PB_URL + '/#/orders/' + orderId);
+  await b.waitFor(`[...document.querySelectorAll('[data-attachments] [data-attachment=receipt]')].some((a) => a.innerText.includes('Lieferschein ') && !a.querySelector('[data-attachment-delete]')?.offsetParent)`, 'Beleg unter Anhänge');
+  ok('Beleg in der Bestellung unter „Anhänge“');
 
   // ---- Lieferschein ohne Bestellung im System → Bestellung daraus anlegen ----------------
   const scanFromDashboard = async (file) => {

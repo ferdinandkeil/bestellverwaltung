@@ -1,5 +1,5 @@
 // Bestell-Detail (ARCHITECTURE.md Kap. 7): Kopf, Ablauf, Positionen (Lieferungen und Storno in der Tabelle),
-// Lieferhistorie, Anhänge, Plugin-Slot. Beträge werden nicht angezeigt (Kap. 4.1).
+// Anhänge (inkl. Lieferschein-Belege), Plugin-Slot. Beträge werden nicht angezeigt (Kap. 4.1).
 import {
   supplierLabel, statusMeta, stepMeta, groupsByCourse, INTERNAL_ORDER_NO_RE, DELIVERY_STATUSES,
 } from '../core/config.js';
@@ -80,7 +80,7 @@ const DELIVER_ALL = /* html */ `
 
 /** Geliefert: Klick in die Zelle öffnet „Gesamtstand + [Menge dieser Lieferung] ✓“; Enter bucht sofort (Toast mit „Rückgängig“). */
 const DELIVERED_CELL = cellEdit('delivered',
-  `<span class="tabular-nums whitespace-nowrap" x-text="it.qty_delivered"></span>`,
+  `<span class="tabular-nums whitespace-nowrap" x-text="it.qty_delivered" x-tip="deliveryTip(it)"></span>`,
   {
     align: 'right',
     input: 'w-12" type="number" min="1" step="1" inputmode="numeric" :max="backlogOf(it)" placeholder="0" aria-label="Gelieferte Menge',
@@ -311,34 +311,9 @@ const template = /* html */ `
         <p x-show="!visibleItems().length" class="card p-6 text-center text-sm text-slate-500">Keine Positionen.</p>
       </section>
 
-      <!-- Lieferhistorie und Anhänge: am PC nebeneinander, sonst untereinander -->
-      <div class="grid items-start gap-4 lg:grid-cols-2">
-      <!-- Lieferhistorie -->
-      <section class="card p-4" x-show="deliveries.length" data-deliveries>
-        <h2 class="mb-3 text-lg font-semibold">Lieferhistorie</h2>
-        <ul class="divide-y divide-slate-100">
-          <template x-for="d in deliveries" :key="d.id">
-            <li class="py-2 text-sm">
-              <div class="flex flex-wrap items-baseline gap-x-2">
-                <span class="font-medium" x-text="fmt.dateTime(d.created)"></span>
-                <span class="text-xs text-slate-500" x-text="d.expand?.booked_by?.name || d.expand?.booked_by?.email || ''"></span>
-                <a x-show="d.receipt" :href="fileUrl(d, d.receipt)" target="_blank" rel="noopener" class="text-xs text-blue-700 hover:underline">Beleg ↗</a>
-              </div>
-              <div x-show="d.note" class="text-xs text-slate-600" x-text="d.note"></div>
-              <ul class="mt-1 flex flex-wrap gap-1">
-                <template x-for="line in (d.expand?.delivery_items_via_delivery ?? [])" :key="line.id">
-                  <li class="rounded px-1.5 py-0.5 font-mono text-xs" data-delivery-line
-                      :class="line.qty < 0 ? 'bg-red-50 text-red-700' : 'bg-slate-100'"
-                      x-text="partNumberOf(line.order_item) + ': ' + (line.qty > 0 ? '+' : '') + line.qty"></li>
-                </template>
-              </ul>
-            </li>
-          </template>
-        </ul>
-      </section>
-
-      <!-- Anhänge -->
-      <section class="card p-4" :class="!deliveries.length && 'lg:col-span-2'" data-attachments>
+      <!-- Anhänge: eigene Dateien der Bestellung und die Lieferschein-Belege der Lieferbuchungen (gespeichert an der
+           Buchung, hier nur angezeigt, nicht löschbar). Eine eigene Lieferhistorie gibt es nicht (Tooltip an „Geliefert“). -->
+      <section class="card p-4" data-attachments>
         <div class="mb-3 flex items-center gap-2">
           <h2 class="mr-auto text-lg font-semibold">Anhänge</h2>
           <label class="btn btn-secondary btn-sm cursor-pointer" x-show="!isClosed()">
@@ -346,26 +321,25 @@ const template = /* html */ `
             <input type="file" class="hidden" multiple accept="image/jpeg,image/png,image/webp,application/pdf" @change="upload($event)">
           </label>
         </div>
-        <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4" x-show="visibleAttachments().length">
-          <template x-for="f in visibleAttachments()" :key="f">
-            <li class="relative overflow-hidden rounded-lg border border-slate-200">
-              <a :href="fileUrl(order, f)" target="_blank" rel="noopener" class="block">
-                <template x-if="!f.toLowerCase().endsWith('.pdf')">
-                  <img :src="fileUrl(order, f, '200x200')" :alt="f" class="aspect-square w-full object-cover" loading="lazy">
+        <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6" x-show="attachmentEntries().length">
+          <template x-for="a in attachmentEntries()" :key="a.key">
+            <li class="relative overflow-hidden rounded-lg border border-slate-200" :data-attachment="a.kind">
+              <a :href="a.url" target="_blank" rel="noopener" class="block">
+                <template x-if="!a.pdf">
+                  <img :src="a.thumb" :alt="a.label" class="aspect-square w-full object-cover" loading="lazy">
                 </template>
-                <template x-if="f.toLowerCase().endsWith('.pdf')">
+                <template x-if="a.pdf">
                   <div class="flex aspect-square items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500">PDF</div>
                 </template>
-                <div class="truncate px-2 py-1 text-xs" x-text="f"></div>
+                <div class="truncate px-2 py-1 text-xs" x-text="a.label" x-tip="a.title"></div>
               </a>
-              <button type="button" class="absolute right-1 top-1 rounded bg-white/90 px-1.5 text-xs text-red-700 shadow" x-show="!isClosed()"
-                      @click="removeFile(f)" aria-label="Anhang löschen" data-attachment-delete>✕</button>
+              <button type="button" class="absolute right-1 top-1 rounded bg-white/90 px-1.5 text-xs text-red-700 shadow" x-show="a.file && !isClosed()"
+                      @click="removeFile(a.file)" aria-label="Anhang löschen" data-attachment-delete>✕</button>
             </li>
           </template>
         </ul>
-        <p x-show="!visibleAttachments().length" class="text-sm text-slate-500">Noch keine Anhänge.</p>
+        <p x-show="!attachmentEntries().length" class="text-sm text-slate-500">Noch keine Anhänge.</p>
       </section>
-      </div>
 
       <!-- Modal: Position hinzufügen -->
       <div x-show="showItemForm" x-transition.opacity class="modal-backdrop" @click.self="showItemForm = false"
@@ -557,7 +531,6 @@ function component() {
       }
     },
     allocationSum(it) { return (it.group_allocations || []).reduce((s, a) => s + (a.qty || 0), 0); },
-    partNumberOf(itemId) { return this.items.find((i) => i.id === itemId)?.part_number || '(gelöscht)'; },
 
     // ---- Position nachtragen ----------------------------------------------
     lateLabel(it) {
@@ -806,6 +779,34 @@ function component() {
     },
 
     visibleAttachments() { return (this.order?.attachments || []).filter((f) => !this.hiddenFiles[f]); },
+
+    /** Lieferschein-Belege (an den Buchungen) und eigene Anhänge der Bestellung in einer Liste. */
+    attachmentEntries() {
+      const isPdf = (f) => f.toLowerCase().endsWith('.pdf');
+      const receipts = this.deliveries.filter((d) => d.receipt).map((d) => ({
+        key: 'r-' + d.id, kind: 'receipt', file: null, pdf: isPdf(d.receipt),
+        url: fileUrl(d, d.receipt), thumb: fileUrl(d, d.receipt, '200x200'),
+        label: 'Lieferschein ' + fmt.date(d.created), title: d.note || '',
+      }));
+      const own = this.visibleAttachments().map((f) => ({
+        key: 'a-' + f, kind: 'file', file: f, pdf: isPdf(f),
+        url: fileUrl(this.order, f), thumb: fileUrl(this.order, f, '200x200'), label: f, title: '',
+      }));
+      return [...receipts, ...own];
+    },
+
+    /** Tooltip an „Geliefert“: Datum und Menge je Buchung, z. B. „23.11. +30 · 25.11. +20“. */
+    deliveryTip(it) {
+      const parts = [];
+      for (const d of [...this.deliveries].sort((x, y) => x.created.localeCompare(y.created))) {
+        for (const line of d.expand?.delivery_items_via_delivery ?? []) {
+          if (line.order_item !== it.id) continue;
+          const day = new Date(d.created.replace(' ', 'T')).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+          parts.push(`${day} ${line.qty > 0 ? '+' : ''}${line.qty}`);
+        }
+      }
+      return parts.join(' · ');
+    },
 
     /** Anhang sofort ausblenden, nach Ablauf des Toasts löschen; „Rückgängig“ blendet wieder ein. */
     async removeFile(name) {

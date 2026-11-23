@@ -125,7 +125,7 @@ try {
   await b.waitFor(`[...document.querySelectorAll('[data-row-details]')].some((d) => d.offsetParent && d.querySelector('[data-step=ordered]')?.dataset.state === 'done')`, 'Zeile aufgeklappt');
   await b.screenshot('03b-aufgeklappt');
   await b.evaluate(`[...document.querySelectorAll('[data-order-details]')].find((a) => a.offsetParent).click()`);
-  await b.waitFor(`document.querySelector('[x-data=orderDetailView]') && document.body.innerText.includes('Lieferhistorie')`, 'Detail');
+  await b.waitFor(`document.querySelector('[x-data=orderDetailView]') && document.querySelector('[data-items-list] [data-item]')`, 'Detail');
   if ((await b.evaluate(BADGE)) !== 'Teilgeliefert') throw new Error('Status sollte Teilgeliefert sein');
   ok('Zeile aufgeklappt (Schritte), Detail Reichelt (teilgeliefert) über „Positionen & Details“');
   await b.screenshot('04-detail');
@@ -138,8 +138,10 @@ try {
   await b.waitFor(`${ITEM('NE 555 DIP')}.querySelector('[data-cell-input=delivered]')?.offsetParent`, 'Liefermenge editierbar');
   await b.evaluate(`(() => { const i = ${ITEM('NE 555 DIP')}.querySelector('[data-cell-input=delivered]'); i.value = '3'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
   await b.waitFor(`${TOASTS}.includes('Lieferung gebucht: NE 555 DIP +3') && ${ITEM('NE 555 DIP')}.querySelector('[data-item-summary]').innerText.trim() === '7 / 10'`, 'gebucht, geliefert 7');
-  const lines = await b.evaluate(`document.querySelectorAll('#view [data-delivery-line]').length`);
-  if (lines !== 2) throw new Error(`Lieferhistorie: ${lines} statt 2 Buchungen`);
+  const lines = await b.evaluate(`Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveries.length`);
+  if (lines !== 2) throw new Error(`${lines} statt 2 Lieferbuchungen`);
+  const tip = await b.evaluate(`Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveryTip(Alpine.$data(document.querySelector('[x-data=orderDetailView]')).items[0])`);
+  if (!/^\d\d\.\d\d\. \+4 · \d\d\.\d\d\. \+3$/.test(tip)) throw new Error('Tooltip an „Geliefert“: ' + tip);
   ok('Liefermenge in „Geliefert“ eingetragen → sofort gebucht, geliefert 7');
 
   // Haken „alles geliefert“ ist immer sichtbar (ohne die Zelle zu öffnen)
@@ -230,9 +232,9 @@ try {
   const NEXT = `[...document.querySelectorAll('#view [data-step-label]')].filter((e) => e.classList.contains('font-semibold')).map((e) => e.dataset.stepLabel).join()`;
   await b.waitFor(`${NEXT} === 'delivered,invoice_received'`, 'zwei nächste Schritte');
   await b.evaluate(`${STEP('delivered')}.click()`);
-  await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('delivered')}.dataset.state === 'done' && document.body.innerText.includes('Rest vollständig geliefert')`, 'Rest geliefert gebucht');
+  await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('delivered')}.dataset.state === 'done' && Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveries.some((d) => d.note === 'Rest vollständig geliefert')`, 'Rest geliefert gebucht');
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
-  await b.waitFor(`${BADGE} === 'Bestellt' && ${STEP('delivered')}.dataset.state === 'open' && !document.body.innerText.includes('Rest vollständig geliefert')`, 'Buchung zurückgenommen');
+  await b.waitFor(`${BADGE} === 'Bestellt' && ${STEP('delivered')}.dataset.state === 'open' && !Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveries.some((d) => d.note === 'Rest vollständig geliefert')`, 'Buchung zurückgenommen');
   ok('Nach „bestellt“ zwei nächste Schritte; „Geliefert“ bucht den Rest, „Rückgängig“ nimmt die Buchung zurück');
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('04711') && !a.innerText.includes('2026IW')) && document.querySelector('[data-overview-table] th').parentElement.innerText.includes('Best.-Nr.')`, 'Kurznummer auf der Startseite (Smartphone)');
