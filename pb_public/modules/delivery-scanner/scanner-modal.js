@@ -1,5 +1,5 @@
 // Lieferschein-Erfassung: Fotos aufnehmen → Ecken prüfen/entzerren → Texterkennung → Abgleich prüfen → buchen.
-// Registriert sich in den Slots 'dashboard-actions' (Smartphone) und 'header-actions' (ab sm); die Bestellung wird
+// Registriert sich in den Slots 'bottom-bar' (Smartphone, Leiste unten) und 'header-actions' (ab sm); die Bestellung wird
 // immer nach der Erkennung zugeordnet (kein Start aus einer geöffneten Bestellung, Entscheidung 11/2026).
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
@@ -1345,11 +1345,10 @@ document.body.appendChild(host.firstElementChild);
 const openScanner = () => window.dispatchEvent(new CustomEvent('open-delivery-scanner'));
 
 registerPlugin({
-  id: 'delivery-scanner-dashboard',
-  slot: 'dashboard-actions',
+  id: 'delivery-scanner-mobile',
+  slot: 'bottom-bar', // Smartphone: Hauptaufgabe am Auspacktisch, runder Knopf unten (ab sm: Symbol in der Kopfzeile)
   label: 'Lieferschein scannen (Beta)',
   icon: 'scan',
-  prominent: true, // Smartphone: Hauptaufgabe am Auspacktisch (ab sm: Symbol in der Kopfzeile)
   onClick: () => openScanner(),
 });
 

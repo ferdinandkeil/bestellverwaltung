@@ -70,8 +70,8 @@ try {
     '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-video-capture=${video}`,
   ]);
   await loginViaUi(b, PB_URL, login.email);
-  await b.waitFor(`[...document.querySelectorAll('#view button')].some((e) => e.innerText.includes('Lieferschein scannen'))`, 'Scanner-Button im Dashboard');
-  await b.clickText('#view button', 'Lieferschein scannen');
+  await b.waitFor(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]')?.getClientRects().length`, 'Scanner-Knopf in der Leiste unten');
+  await b.evaluate(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]').click()`);
   await b.waitFor(`${scanner}.isOpen && ${scanner}.libState === 'ready'`, 'Bildverarbeitung geladen', 60000);
 
   // Kamera im Scanner statt System-Kamera; Automatik ist voreingestellt

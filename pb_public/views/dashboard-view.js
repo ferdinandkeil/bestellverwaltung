@@ -1,6 +1,6 @@
 // Startseite „Bestellungen“ (ARCHITECTURE.md Kap. 7): Bestellungen als Tabelle mit den
 // Verwaltungsschritten (PC) bzw. kompakt mit aufklappbaren Schritten (Smartphone/Tablet), Filter, Suche und
-// Plugin-Slot (Lieferschein-Scanner). Warenkörbe und „Position erfassen“: Warenkorb-Symbol (views/cart-menu.js).
+// Plugin-Slot 'dashboard-actions'. Warenkörbe und „Position erfassen“: Warenkorb-Symbol (views/cart-menu.js).
 // Schritte werden direkt in der Tabelle abgehakt (views/order-steps.js, „Handeln statt fragen“).
 import { SUPPLIERS, STATUSES, supplierLabel, statusMeta, groupsByCourse, groupLabel } from '../core/config.js';
 import { listOverviewOrders, listGroups, subscribe, errorMessage } from '../core/api.js';
@@ -17,16 +17,9 @@ const TABLE_PHASES = STATUSES.filter((s) => s.value !== 'angefragt');
 
 const template = /* html */ `
 <div x-data="dashboardView" @order-steps-changed.window="reload()">
-  <!-- Smartphone: Hauptaufgabe (Lieferschein scannen) groß oben -->
-  <template x-for="p in plugins().filter((p) => p.prominent)" :key="'m-' + p.id">
-    <button type="button" class="btn btn-primary mb-3 w-full py-3 text-base sm:hidden" data-prominent-action
-            @click="runPlugin(p)" x-text="p.label"></button>
-  </template>
-
   <div class="mb-4 flex flex-wrap items-center gap-2">
     <h1 class="mr-auto text-xl font-semibold">Bestellungen</h1>
-    <!-- prominente Module (Scanner) ab sm als Symbol in der Kopfzeile -->
-    <template x-for="p in plugins().filter((p) => !p.prominent)" :key="p.id">
+    <template x-for="p in plugins()" :key="p.id">
       <button type="button" class="btn btn-secondary" @click="runPlugin(p)" x-text="p.label"></button>
     </template>
   </div>

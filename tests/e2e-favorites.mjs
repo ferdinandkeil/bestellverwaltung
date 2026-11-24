@@ -86,7 +86,7 @@ try {
   ok('Übersicht: voreingestellt eigene und öffentliche Listen, ausgeschaltet alle; Filter wird gemerkt');
   const overflow = await b.evaluate('document.documentElement.scrollWidth - document.documentElement.clientWidth');
   if (overflow > 0) throw new Error('Seite auf dem Smartphone um ' + overflow + ' px zu breit (Kopfzeile?)');
-  ok('Kopfzeile mit drei Menüpunkten passt auf das Smartphone');
+  ok('Seite passt auf das Smartphone (keine Überbreite)');
 
   // ---- Eigene Liste bearbeiten ----
   await b.clickText('#view a', 'Grundausstattung Praktikum');

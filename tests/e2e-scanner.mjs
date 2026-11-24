@@ -176,8 +176,8 @@ try {
 
   await b.setViewport();
   await loginViaUi(b, PB_URL, login.email);
-  await b.waitFor(`[...document.querySelectorAll('#view button')].some((e) => e.innerText.includes('Lieferschein scannen'))`, 'Scanner-Button im Dashboard');
-  await b.clickText('#view button', 'Lieferschein scannen');
+  await b.waitFor(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]')?.getClientRects().length`, 'Scanner-Knopf in der Leiste unten');
+  await b.evaluate(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]').click()`);
   await b.waitFor(`${scanner}.isOpen && ${scanner}.libState === 'ready'`, 'Bildverarbeitung geladen', 60000);
   ok('Scanner geöffnet, OpenCV/jscanify geladen');
   await b.screenshot('scanner-01-start');
@@ -300,8 +300,8 @@ try {
   // ---- Lieferschein ohne Bestellung im System → Bestellung daraus anlegen ----------------
   const scanFromDashboard = async (file) => {
     await b.navigate(PB_URL + '/#/');
-    await b.waitFor(`[...document.querySelectorAll('#view button')].some((e) => e.innerText.includes('Lieferschein scannen'))`, 'Dashboard');
-    await b.clickText('#view button', 'Lieferschein scannen');
+    await b.waitFor(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]')?.getClientRects().length`, 'Dashboard');
+    await b.evaluate(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]').click()`);
     await b.waitFor(`${scanner}.isOpen && ${scanner}.libState === 'ready'`, 'Scanner bereit', 60000);
     await b.setFiles('[x-data=deliveryScanner] input[capture]', [file]);
     await b.waitFor(`${scanner}.step === 'corners'`, 'Eckenprüfung', 30000);

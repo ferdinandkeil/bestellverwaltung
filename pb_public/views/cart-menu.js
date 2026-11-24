@@ -1,6 +1,6 @@
 // Warenkorb (ARCHITECTURE.md Kap. 7): ab sm Symbol in der Kopfzeile mit Zahl der offenen Positionen, ein Klick klappt
-// die Warenkörbe auf, darunter rechts „+ Position erfassen“. Auf dem Smartphone runder Knopf unten rechts (fest),
-// der die eigene Seite #/carts öffnet; dort führt ✕ zur vorigen Ansicht zurück.
+// die Warenkörbe auf, darunter rechts „+ Position erfassen“. Auf dem Smartphone steht der Warenkorb in der Leiste unten
+// (views/navigation.js) und öffnet die eigene Seite #/carts; dort führt ✕ zur vorigen Ansicht zurück.
 // Das Formular „Position erfassen“ ist seitenweit verfügbar (Ereignis `open-item-form`).
 // Links neben dem Warenkorb: Module im Slot 'header-actions' als Symbol (z. B. Moodle-Import).
 import Alpine from '../vendor/alpinejs@3.17.5/dist/module.esm.js';
@@ -9,6 +9,7 @@ import { listOpenCarts, subscribe, errorMessage } from '../core/api.js';
 import { getPlugins } from '../core/plugin-registry.js';
 import { toast } from '../core/ui.js';
 import { itemFormFields } from './item-form.js';
+import { icon, iconPaths } from './navigation.js';
 
 /** Positionen je Korb im ausgeklappten Feld; der Rest steht hinter „+ n weitere →“. */
 const PREVIEW_ITEMS = 5;
@@ -20,11 +21,6 @@ function openCartsPage() {
   location.hash = '#/carts';
 }
 
-const CART_ICON = /* html */ `
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-6" aria-hidden="true">
-  <path d="M3 4h2l2.4 10.2a1.5 1.5 0 0 0 1.5 1.1h8.3a1.5 1.5 0 0 0 1.4-1.1L20.5 8H6.2"/>
-  <circle cx="9.5" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/>
-</svg>`;
 
 /** Liste der Warenkörbe – im Ausklappfeld (limit = PREVIEW_ITEMS) und auf der Seite (alle Positionen). */
 const CART_LIST = /* html */ `
@@ -58,13 +54,6 @@ const CART_LIST = /* html */ `
 const CART_ACTIONS = /* html */ `
 <button type="button" class="btn btn-primary ml-auto" @click="addItem()" data-add-item>+ Position erfassen</button>`;
 
-/** Symbole der Module im Slot 'header-actions' (Schlüssel = plugin.icon). */
-const HEADER_ICONS = {
-  upload: '<path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
-  // Beleg mit Scan-Ecken
-  scan: '<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M8.5 9h7M8.5 12h7M8.5 15h4"/>',
-};
-
 /** Module als Symbol links neben dem Warenkorb (ab sm; auf dem Smartphone wird nur gescannt). */
 export const headerActionsTemplate = /* html */ `
 <div x-data="headerActions" class="hidden items-center sm:flex">
@@ -83,7 +72,7 @@ export const cartMenuTemplate = /* html */ `
   <button type="button" class="relative rounded-lg p-1.5 text-slate-600 hover:bg-slate-100"
           :class="(open || $store.route.name === 'carts') && 'bg-blue-50 text-blue-700'"
           @click="toggle()" :aria-expanded="open" :aria-label="buttonLabel()" :title="buttonLabel()" data-cart-button>
-    ${CART_ICON}
+    ${icon('cart')}
     <span x-show="$store.carts.count" x-text="$store.carts.count" data-cart-count
           class="absolute -top-0.5 -right-0.5 min-w-5 rounded-full bg-blue-600 px-1 text-center text-[11px] leading-5 font-semibold text-white"></span>
   </button>
@@ -94,19 +83,6 @@ export const cartMenuTemplate = /* html */ `
     <div class="flex border-t border-slate-100 px-4 py-3">${CART_ACTIONS}</div>
   </div>
 </div>`;
-
-/**
- * Smartphone: runder Warenkorb-Knopf unten rechts (fest), mit Zahl der offenen Positionen. Nicht auf der Seite
- * Warenkörbe selbst; Dialoge (z-40) und die Auswahlleiste der Favoriten (z-20) liegen darüber.
- */
-export const cartFabTemplate = /* html */ `
-<button type="button" x-data x-show="$store.auth.user && $store.route.name !== 'carts' && $store.route.name !== 'login'"
-        class="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-900/20 active:bg-blue-700 sm:hidden"
-        @click="$store.carts.openPage()" :aria-label="$store.carts.label()" data-cart-fab>
-  ${CART_ICON.replace('size-6', 'size-7')}
-  <span x-show="$store.carts.count" x-text="$store.carts.count" data-cart-count
-        class="absolute -top-1 -right-1 min-w-6 rounded-full bg-white px-1.5 text-center text-xs leading-6 font-bold text-blue-700 ring-2 ring-blue-600"></span>
-</button>`;
 
 /** Formular „Position erfassen“ als Modal, seitenweit (index.html). */
 export const itemFormModalTemplate = /* html */ `
@@ -236,7 +212,7 @@ export function registerCartMenu() {
       return getPlugins('header-actions');
     },
     icon(p) {
-      return HEADER_ICONS[p.icon] ?? HEADER_ICONS.upload;
+      return iconPaths(p.icon);
     },
     run(p) {
       try {
