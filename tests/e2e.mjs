@@ -269,7 +269,7 @@ try {
   }
   await b.evaluate(`document.querySelector('[data-header-action=delivery-scanner]').click()`);
   await b.waitFor(`[...document.querySelectorAll('h2')].some((h) => h.offsetParent && h.innerText.includes('Lieferschein erfassen'))`, 'Scanner über das Kopfzeilen-Symbol');
-  await b.clickText('button', 'Schließen');
+  await b.evaluate(`document.querySelector('[data-scanner-close]').click()`);
   if (!(await b.evaluate(`(() => { const s = document.querySelector('[data-overview-search]').getBoundingClientRect(), g = document.querySelector('#filter-group').getBoundingClientRect(); return s.left > g.right && Math.abs(s.top - g.top) < 2; })()`))) {
     throw new Error('PC: Suche nicht rechts neben den Filtern');
   }

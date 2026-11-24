@@ -56,7 +56,10 @@ const template = /* html */ `
         <h2 class="text-base font-semibold">Lieferschein erfassen <span class="badge ml-1 bg-amber-50 text-amber-800 border-amber-300 align-middle">Beta</span></h2>
         <p class="truncate text-xs text-slate-500" x-text="orderLabel()"></p>
       </div>
-      <button type="button" class="btn btn-ghost btn-sm" @click="close()">Schließen</button>
+      <!-- ✕ wie auf der Seite Warenkörbe -->
+      <button type="button" class="-mr-2 rounded-lg p-2 text-slate-600 hover:bg-slate-100" @click="close()" aria-label="Schließen" data-scanner-close>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-6" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
     </div>
 
     <div class="flex-1 overflow-y-auto">
