@@ -67,7 +67,7 @@ try {
   await b.fill('#login-code', code);
   await b.clickText('button', 'Anmelden');
   await b.waitFor(`location.hash === '#/' && ${ORDER_LINKS}.length === 1 && ${CART_LINKS}.length === 1 && Number(document.querySelector('[data-cart-count]').innerText) === Alpine.store('carts').count && Alpine.store('carts').count > 0`, 'Startseite: 1 Bestellung, 1 Warenkorb mit Zahl am Symbol');
-  if (!(await b.evaluate(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]')?.getClientRects().length && document.querySelector('[data-bottom-nav=orders]').className.includes('text-blue-700')`))) {
+  if (!(await b.evaluate(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]')?.getClientRects().length && document.querySelector('[data-bottom-nav=orders]').getAttribute('aria-current') === 'page'`))) {
     throw new Error('Smartphone: Leiste unten ohne Scanner-Knopf oder ohne hervorgehobene Bestellübersicht');
   }
   if (await b.evaluate(`[...document.querySelectorAll('#view button')].some((e) => e.offsetParent && e.innerText.includes('Lieferschein scannen')) || !!document.querySelector('[data-footer]').offsetParent`)) {
@@ -98,7 +98,7 @@ try {
   await b.evaluate(`document.querySelector('[data-overview-search]').dispatchEvent(new FocusEvent('focusout', { bubbles: true }))`);
   await b.waitFor(`document.querySelector('[data-bottom-bar]').getClientRects().length`, 'Leiste nach dem Tippen wieder da');
   await b.evaluate(`document.querySelector('[data-bottom-nav=favorites]').click()`);
-  await b.waitFor(`location.hash === '#/favorites' && document.querySelector('[data-bottom-nav=favorites]').className.includes('text-blue-700')`, 'Favoriten über die Leiste');
+  await b.waitFor(`location.hash === '#/favorites' && document.querySelector('[data-bottom-nav=favorites]').getAttribute('aria-current') === 'page'`, 'Favoriten über die Leiste');
   await b.evaluate(`document.querySelector('[data-bottom-nav=orders]').click()`);
   await b.waitFor(`location.hash === '#/' && ${ORDER_LINKS}.length === 1`, 'Bestellungen über die Leiste');
   await b.evaluate(`document.querySelector('[data-menu-button]').click()`);
@@ -108,7 +108,7 @@ try {
   await b.waitFor(`location.hash === '#/groups' && !document.querySelector('[data-mobile-menu]').offsetParent`, 'Gruppen über das Menü, Menü geschlossen');
   // ✕ auf der Seite Warenkörbe führt zur vorigen Ansicht zurück
   await b.evaluate(`document.querySelector('[data-bottom-nav=carts]').click()`);
-  await b.waitFor(`location.hash === '#/carts' && document.querySelector('[data-bottom-nav=carts]').className.includes('text-blue-700')`, 'Seite Warenkörbe (Warenkorb hervorgehoben)');
+  await b.waitFor(`location.hash === '#/carts' && document.querySelector('[data-bottom-nav=carts]').getAttribute('aria-current') === 'page'`, 'Seite Warenkörbe (Warenkorb hervorgehoben)');
   await b.evaluate(`document.querySelector('[data-carts-close]').click()`);
   await b.waitFor(`location.hash === '#/groups'`, '✕ zurück zu Gruppen');
   await b.navigate(PB_URL + '/#/');

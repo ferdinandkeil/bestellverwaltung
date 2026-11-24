@@ -55,14 +55,18 @@ export const mobileMenuTemplate = /* html */ `
   </div>
   <p class="px-3 pt-1 pb-1 text-xs text-slate-400" x-show="$store.version.text" x-text="$store.version.text" data-menu-version></p>`;
 
-const PILL_ITEM = 'relative flex h-12 flex-1 items-center justify-center rounded-full';
-const PILL_STATE = (active) => `:class="${active} ? 'bg-blue-50 text-blue-700' : 'text-slate-600 active:bg-slate-100'"`;
+// Aktive Seite als aria-current (Screenreader); Farbe und die gleitende Markierung (.pill-marker in
+// tailwind/app.src.css) hängen daran. Beim Antippen schrumpft das Symbol kurz (Rückmeldung).
+const PILL_ITEM = 'relative z-10 flex h-12 flex-1 items-center justify-center rounded-full text-slate-600 aria-[current=page]:text-blue-700 '
+  + '[&>svg]:transition-transform [&>svg]:duration-150 active:[&>svg]:scale-85 motion-reduce:[&>svg]:transition-none';
+const PILL_STATE = (active) => `:aria-current="${active} ? 'page' : false"`;
 
 /** Untere Leiste (Smartphone). Über ihr liegen Dialoge, Scanner und die Auswahlleiste der Favoriten. */
 export const bottomBarTemplate = /* html */ `
 <nav x-data="bottomBar" x-show="visible()" aria-label="Hauptnavigation" data-bottom-bar
      class="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex items-center gap-3 px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
-  <div class="pointer-events-auto flex flex-1 items-center gap-1 rounded-full border border-slate-200 bg-white/95 p-1 shadow-lg shadow-slate-900/10 backdrop-blur">
+  <div class="pill pointer-events-auto relative flex flex-1 items-center rounded-full border border-slate-200 bg-white/95 p-1 shadow-lg shadow-slate-900/10 backdrop-blur">
+    <span class="pill-marker" aria-hidden="true"></span>
     <a href="${PAGES.orders.href}" class="${PILL_ITEM}" ${PILL_STATE(isActive('orders'))} aria-label="${PAGES.orders.label}" data-bottom-nav="orders">${icon('orders')}</a>
     <a href="${PAGES.favorites.href}" class="${PILL_ITEM}" ${PILL_STATE(isActive('favorites'))} aria-label="${PAGES.favorites.label}" data-bottom-nav="favorites">${icon('favorites')}</a>
     <button type="button" class="${PILL_ITEM}" ${PILL_STATE("$store.route.name === 'carts'")}
@@ -73,7 +77,7 @@ export const bottomBarTemplate = /* html */ `
     </button>
   </div>
   <template x-for="p in plugins()" :key="p.id">
-    <button type="button" class="pointer-events-auto flex size-14 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-900/20 active:bg-blue-700"
+    <button type="button" class="pointer-events-auto flex size-14 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-900/20 transition-transform duration-150 active:scale-90 active:bg-blue-700 motion-reduce:transition-none"
             @click="run(p)" :aria-label="p.label" :data-bottom-action="p.id">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
            class="size-7" aria-hidden="true" x-html="iconPaths(p.icon)"></svg>
