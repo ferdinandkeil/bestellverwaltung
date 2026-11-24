@@ -43,6 +43,20 @@ try {
   await b.waitFor(`document.querySelector('[data-header-action=moodle-import]')?.offsetParent`, 'Import-Symbol');
   await b.evaluate(`document.querySelector('[data-header-action=moodle-import]').click()`);
   await b.waitFor(`${imp}.isOpen && window.Papa`, 'Import geöffnet, Papa Parse geladen');
+  // unter der Kopfzeile; ✕ schließt, Navigation über die Kopfzeile ebenso
+  if (!(await b.evaluate(`document.querySelector('[data-moodle-close]').getBoundingClientRect().top >= document.getElementById('app-header').getBoundingClientRect().bottom`))) {
+    throw new Error('Moodle-Import liegt über der Kopfzeile');
+  }
+  await b.evaluate(`document.querySelector('[data-moodle-close]').click()`);
+  await b.waitFor(`!${imp}.isOpen`, 'Import mit ✕ geschlossen');
+  await b.evaluate(`document.querySelector('[data-header-action=moodle-import]').click()`);
+  await b.waitFor(`${imp}.isOpen`, 'Import erneut geöffnet');
+  await b.evaluate(`document.querySelector('[data-nav=groups]').click()`);
+  await b.waitFor(`location.hash === '#/groups' && !${imp}.isOpen`, 'Import nach Navigation geschlossen');
+  await b.navigate(PB_URL + '/#/');
+  await b.evaluate(`document.querySelector('[data-header-action=moodle-import]').click()`);
+  await b.waitFor(`${imp}.isOpen`, 'Import geöffnet');
+  ok('Import unter der Kopfzeile, schließt mit ✕ und beim Navigieren');
   await b.screenshot('moodle-01-datei');
 
   await b.setFiles('[x-data=moodleImporter] input[data-moodle-file]', [csvPath]);

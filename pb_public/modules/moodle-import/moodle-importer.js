@@ -27,13 +27,17 @@ function loadPapa() {
 
 const template = /* html */ `
 <div x-data="moodleImporter" @open-moodle-import.window="open()" x-cloak>
-  <div x-show="isOpen" class="fixed inset-0 z-40 flex flex-col bg-white" @keydown.escape.window="isOpen && close()">
+  <!-- unter der Kopfzeile (bleibt sichtbar, --header-h aus index.html), wie der Scanner -->
+  <div x-show="isOpen" class="fixed inset-x-0 top-(--header-h,0px) bottom-0 z-40 flex flex-col bg-white" @keydown.escape.window="isOpen && close()">
     <div class="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
       <div class="min-w-0 flex-1">
         <h2 class="text-base font-semibold">Moodle-Import <span class="badge ml-1 bg-amber-50 text-amber-800 border-amber-300 align-middle">Beta</span></h2>
         <p class="truncate text-xs text-slate-500" x-text="fileName || 'CSV-Export der Moodle-Datenbank'"></p>
       </div>
-      <button type="button" class="btn btn-ghost btn-sm" @click="close()">Schließen</button>
+      <!-- ✕ wie auf der Seite Warenkörbe -->
+      <button type="button" class="-mr-2 rounded-lg p-2 text-slate-600 hover:bg-slate-100" @click="close()" aria-label="Schließen" data-moodle-close>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-6" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
     </div>
 
     <div class="flex-1 overflow-y-auto">
@@ -228,7 +232,13 @@ function component() {
     parseQty,
     normalizePartNumber,
 
+    init() {
+      // Navigation über die Kopfzeile verlässt den Import (mit Rückfrage, wenn schon eine Datei gelesen ist)
+      window.addEventListener('hashchange', () => { if (this.isOpen) this.close(); });
+    },
+
     open() {
+      if (this.isOpen) return; // Symbol erneut angeklickt: laufenden Import behalten
       this.reset();
       this.isOpen = true;
       loadPapa().catch((err) => toast.error(err.message));
