@@ -21,8 +21,8 @@
   </div>
   <!-- Spalte über die ganze Höhe: die Fußzeile steht auch bei kurzen Seiten unten -->
   <div x-data x-cloak class="flex min-h-dvh flex-col">
-    <!-- Kopfzeile (nur eingeloggt) -->
-    <header x-show="$store.auth.user" class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <!-- Kopfzeile (nur eingeloggt). Liegt über Vollbild-Modulen wie dem Scanner, die unter ihr beginnen (--header-h). -->
+    <header id="app-header" x-show="$store.auth.user" class="sticky top-0 z-[45] border-b border-slate-200 bg-white/95 backdrop-blur">
       <div class="relative mx-auto flex max-w-6xl items-center gap-1 px-4 py-2" x-data="{ menu: false }"
            @keydown.escape.window="menu = false" @click.outside="menu = false" @hashchange.window="menu = false">
         <a href="#/" class="mr-auto text-base font-semibold text-blue-700 sm:mr-4">Labor-Bestellungen</a>
@@ -177,6 +177,10 @@
     document.getElementById('header-actions').innerHTML = headerActionsTemplate;
     document.getElementById('cart-menu').innerHTML = cartMenuTemplate;
     document.getElementById('item-form-modal').innerHTML = itemFormModalTemplate;
+
+    // Höhe der Kopfzeile als CSS-Variable --header-h (Vollbild-Module wie der Scanner beginnen darunter)
+    new ResizeObserver(([e]) => document.documentElement.style.setProperty('--header-h', e.target.offsetHeight + 'px'))
+      .observe(document.getElementById('app-header'));
 
     const main = document.getElementById('view');
     let mounted = null;

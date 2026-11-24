@@ -268,8 +268,20 @@ try {
     throw new Error('PC: Leiste unten sichtbar oder „Lieferschein scannen“ noch als Knopf auf der Startseite');
   }
   await b.evaluate(`document.querySelector('[data-header-action=delivery-scanner]').click()`);
-  await b.waitFor(`[...document.querySelectorAll('h2')].some((h) => h.offsetParent && h.innerText.includes('Lieferschein erfassen'))`, 'Scanner über das Kopfzeilen-Symbol');
+  const SCANNER_OPEN = `[...document.querySelectorAll('h2')].some((h) => h.offsetParent && h.innerText.includes('Lieferschein erfassen'))`;
+  await b.waitFor(SCANNER_OPEN, 'Scanner über das Kopfzeilen-Symbol');
+  // Scanner beginnt unter der Kopfzeile; Navigation über die Kopfzeile schließt ihn
+  if (!(await b.evaluate(`document.querySelector('[data-scanner-close]').getBoundingClientRect().top >= document.getElementById('app-header').getBoundingClientRect().bottom`))) {
+    throw new Error('Scanner liegt über der Kopfzeile');
+  }
+  await b.evaluate(`document.querySelector('[data-nav=favorites]').click()`);
+  await b.waitFor(`location.hash === '#/favorites' && !(${SCANNER_OPEN})`, 'Scanner nach Navigation geschlossen');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`${ORDER_LINKS}.length >= 1`, 'Startseite');
+  await b.evaluate(`document.querySelector('[data-header-action=delivery-scanner]').click()`);
+  await b.waitFor(SCANNER_OPEN, 'Scanner erneut geöffnet');
   await b.evaluate(`document.querySelector('[data-scanner-close]').click()`);
+  await b.waitFor(`!(${SCANNER_OPEN})`, 'Scanner mit ✕ geschlossen');
   if (!(await b.evaluate(`(() => { const s = document.querySelector('[data-overview-search]').getBoundingClientRect(), g = document.querySelector('#filter-group').getBoundingClientRect(); return s.left > g.right && Math.abs(s.top - g.top) < 2; })()`))) {
     throw new Error('PC: Suche nicht rechts neben den Filtern');
   }

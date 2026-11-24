@@ -49,7 +49,8 @@ const STATUS_COLORS = { sure: '#059669', check: '#d97706', none: '#dc2626' };
 
 const template = /* html */ `
 <div x-data="deliveryScanner" @open-delivery-scanner.window="open()" x-cloak>
-  <div x-show="isOpen" class="fixed inset-0 z-40 flex flex-col bg-white" @keydown.escape.window="isOpen && close()">
+  <!-- unter der Kopfzeile (bleibt sichtbar, --header-h aus index.html); nur die Kamera ist Vollbild -->
+  <div x-show="isOpen" class="fixed inset-x-0 top-(--header-h,0px) bottom-0 z-40 flex flex-col bg-white" @keydown.escape.window="isOpen && close()">
     <!-- Kopf -->
     <div class="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
       <div class="min-w-0 flex-1">
@@ -465,7 +466,13 @@ function component() {
     reported: false,
 
     // ---- Öffnen / Schließen -------------------------------------------------
+    init() {
+      // Navigation über die Kopfzeile verlässt die Erfassung (mit Rückfrage, wenn schon Seiten aufgenommen sind)
+      window.addEventListener('hashchange', () => { if (this.isOpen) this.close(); });
+    },
+
     async open() {
+      if (this.isOpen) return; // Scanner-Symbol erneut angeklickt: laufende Erfassung behalten
       this.reset();
       this.isOpen = true;
       this.libState = 'loading';
