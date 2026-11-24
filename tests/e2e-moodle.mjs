@@ -54,6 +54,8 @@ try {
   await b.evaluate(`document.querySelector('[data-nav=groups]').click()`);
   await b.waitFor(`location.hash === '#/groups' && !${imp}.isOpen`, 'Import nach Navigation geschlossen');
   await b.navigate(PB_URL + '/#/');
+  // erst wenn der Router den Wechsel verarbeitet hat – sonst schließt das späte hashchange den neu geöffneten Import
+  await b.waitFor(`Alpine.store('route').name === 'dashboard'`, 'Startseite');
   await b.evaluate(`document.querySelector('[data-header-action=moodle-import]').click()`);
   await b.waitFor(`${imp}.isOpen`, 'Import geöffnet');
   ok('Import unter der Kopfzeile, schließt mit ✕ und beim Navigieren');
