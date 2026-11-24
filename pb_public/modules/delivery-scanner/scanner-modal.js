@@ -1,5 +1,5 @@
 // Lieferschein-Erfassung: Fotos aufnehmen → Ecken prüfen/entzerren → Texterkennung → Abgleich prüfen → buchen.
-// Registriert sich in den Slots 'dashboard-actions' (Smartphone) und 'header-actions' (ab sm); die Bestellung wird
+// Registriert sich in den Slots 'bottom-bar' (Smartphone, Leiste unten) und 'header-actions' (ab sm); die Bestellung wird
 // immer nach der Erkennung zugeordnet (kein Start aus einer geöffneten Bestellung, Entscheidung 11/2026).
 import Alpine from '../../vendor/alpinejs@3.17.5/dist/module.esm.js';
 import { registerPlugin } from '../../core/plugin-registry.js';
@@ -49,14 +49,18 @@ const STATUS_COLORS = { sure: '#059669', check: '#d97706', none: '#dc2626' };
 
 const template = /* html */ `
 <div x-data="deliveryScanner" @open-delivery-scanner.window="open()" x-cloak>
-  <div x-show="isOpen" class="fixed inset-0 z-40 flex flex-col bg-white" @keydown.escape.window="isOpen && close()">
+  <!-- unter der Kopfzeile (bleibt sichtbar, --header-h aus index.html); nur die Kamera ist Vollbild -->
+  <div x-show="isOpen" class="fixed inset-x-0 top-(--header-h,0px) bottom-0 z-40 flex flex-col bg-white" @keydown.escape.window="isOpen && close()">
     <!-- Kopf -->
     <div class="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
       <div class="min-w-0 flex-1">
         <h2 class="text-base font-semibold">Lieferschein erfassen <span class="badge ml-1 bg-amber-50 text-amber-800 border-amber-300 align-middle">Beta</span></h2>
         <p class="truncate text-xs text-slate-500" x-text="orderLabel()"></p>
       </div>
-      <button type="button" class="btn btn-ghost btn-sm" @click="close()">Schließen</button>
+      <!-- ✕ wie auf der Seite Warenkörbe -->
+      <button type="button" class="-mr-2 rounded-lg p-2 text-slate-600 hover:bg-slate-100" @click="close()" aria-label="Schließen" data-scanner-close>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-6" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
     </div>
 
     <div class="flex-1 overflow-y-auto">
@@ -462,7 +466,13 @@ function component() {
     reported: false,
 
     // ---- Öffnen / Schließen -------------------------------------------------
+    init() {
+      // Navigation über die Kopfzeile verlässt die Erfassung (mit Rückfrage, wenn schon Seiten aufgenommen sind)
+      window.addEventListener('hashchange', () => { if (this.isOpen) this.close(); });
+    },
+
     async open() {
+      if (this.isOpen) return; // Scanner-Symbol erneut angeklickt: laufende Erfassung behalten
       this.reset();
       this.isOpen = true;
       this.libState = 'loading';
@@ -1345,11 +1355,10 @@ document.body.appendChild(host.firstElementChild);
 const openScanner = () => window.dispatchEvent(new CustomEvent('open-delivery-scanner'));
 
 registerPlugin({
-  id: 'delivery-scanner-dashboard',
-  slot: 'dashboard-actions',
+  id: 'delivery-scanner-mobile',
+  slot: 'bottom-bar', // Smartphone: Hauptaufgabe am Auspacktisch, runder Knopf unten (ab sm: Symbol in der Kopfzeile)
   label: 'Lieferschein scannen (Beta)',
   icon: 'scan',
-  prominent: true, // Smartphone: Hauptaufgabe am Auspacktisch (ab sm: Symbol in der Kopfzeile)
   onClick: () => openScanner(),
 });
 

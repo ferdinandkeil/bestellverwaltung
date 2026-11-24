@@ -67,10 +67,13 @@ try {
   await b.fill('#login-code', code);
   await b.clickText('button', 'Anmelden');
   await b.waitFor(`location.hash === '#/' && ${ORDER_LINKS}.length === 1 && ${CART_LINKS}.length === 1 && Number(document.querySelector('[data-cart-count]').innerText) === Alpine.store('carts').count && Alpine.store('carts').count > 0`, 'Startseite: 1 Bestellung, 1 Warenkorb mit Zahl am Symbol');
-  if (!(await b.evaluate(`document.querySelector('[data-prominent-action]')?.offsetParent && document.querySelector('[data-prominent-action]').innerText.includes('Lieferschein scannen')`))) {
-    throw new Error('Smartphone: „Lieferschein scannen“ nicht als Hauptknopf oben');
+  if (!(await b.evaluate(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]')?.getClientRects().length && document.querySelector('[data-bottom-nav=orders]').getAttribute('aria-current') === 'page'`))) {
+    throw new Error('Smartphone: Leiste unten ohne Scanner-Knopf oder ohne hervorgehobene Bestellübersicht');
   }
-  ok('Login → Startseite: Warenkorb-Symbol mit Zahl, 1 Bestellung in der kompakten Tabelle, „Lieferschein scannen“ groß oben');
+  if (await b.evaluate(`[...document.querySelectorAll('#view button')].some((e) => e.offsetParent && e.innerText.includes('Lieferschein scannen')) || !!document.querySelector('[data-footer]').offsetParent`)) {
+    throw new Error('Smartphone: „Lieferschein scannen“ noch auf der Startseite oder Fußzeile sichtbar');
+  }
+  ok('Login → Startseite: Leiste unten mit Warenkorb-Zahl und Scanner, 1 Bestellung in der kompakten Tabelle, keine Fußzeile');
   await b.screenshot('02-dashboard');
 
   if (await b.evaluate(`!!document.querySelector('#view select')?.offsetParent`)) throw new Error('Filter sollten mobil eingeklappt sein');
@@ -85,26 +88,35 @@ try {
   await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Filter zurücksetzen');
   ok('Filter mobil eingeklappt, Gruppenfilter mit Chip');
 
-  // Smartphone: Hamburger-Menü mit Navigation und Logout; Warenkorb als fester Knopf unten rechts
-  if (await b.evaluate(`!!document.querySelector('[data-cart-button]').offsetParent || !document.querySelector('[data-cart-fab]').getClientRects().length`)) {
-    throw new Error('Smartphone: Warenkorb gehört als Knopf unten rechts, nicht in die Kopfzeile');
+  // Smartphone: Leiste unten (Bestellungen, Favoriten, Warenkorb; Scanner), Hamburger-Menü mit Gruppen, Logout und Version
+  if (await b.evaluate(`!!document.querySelector('[data-cart-button]').offsetParent || !document.querySelector('[data-bottom-nav=carts]').getClientRects().length`)) {
+    throw new Error('Smartphone: Warenkorb gehört in die Leiste unten, nicht in die Kopfzeile');
   }
+  // Bildschirmtastatur: Leiste verschwindet, solange ein Textfeld fokussiert ist (Ereignisse von Hand, headless ohne Fensterfokus)
+  await b.evaluate(`document.querySelector('[data-overview-search]').dispatchEvent(new FocusEvent('focusin', { bubbles: true }))`);
+  await b.waitFor(`!document.querySelector('[data-bottom-bar]').getClientRects().length`, 'Leiste beim Tippen ausgeblendet');
+  await b.evaluate(`document.querySelector('[data-overview-search]').dispatchEvent(new FocusEvent('focusout', { bubbles: true }))`);
+  await b.waitFor(`document.querySelector('[data-bottom-bar]').getClientRects().length`, 'Leiste nach dem Tippen wieder da');
+  await b.evaluate(`document.querySelector('[data-bottom-nav=favorites]').click()`);
+  await b.waitFor(`location.hash === '#/favorites' && document.querySelector('[data-bottom-nav=favorites]').getAttribute('aria-current') === 'page'`, 'Favoriten über die Leiste');
+  await b.evaluate(`document.querySelector('[data-bottom-nav=orders]').click()`);
+  await b.waitFor(`location.hash === '#/' && ${ORDER_LINKS}.length === 1`, 'Bestellungen über die Leiste');
   await b.evaluate(`document.querySelector('[data-menu-button]').click()`);
-  await b.waitFor(`document.querySelector('[data-mobile-menu]')?.offsetParent && document.querySelector('[data-mobile-menu]').innerText.includes('Logout')`, 'Menü offen');
+  await b.waitFor(`document.querySelector('[data-mobile-menu]')?.offsetParent && document.querySelector('[data-mobile-menu]').innerText.includes('Logout') && document.querySelector('[data-menu-version]').innerText.includes('Entwicklungsstand')`, 'Menü offen mit Version');
   await b.screenshot('02c-menu');
   await b.evaluate(`[...document.querySelectorAll('[data-mobile-menu] a')].find((a) => a.innerText.includes('Gruppen')).click()`);
   await b.waitFor(`location.hash === '#/groups' && !document.querySelector('[data-mobile-menu]').offsetParent`, 'Gruppen über das Menü, Menü geschlossen');
   // ✕ auf der Seite Warenkörbe führt zur vorigen Ansicht zurück
-  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
-  await b.waitFor(`location.hash === '#/carts' && !document.querySelector('[data-cart-fab]').getClientRects().length`, 'Seite Warenkörbe (ohne Knopf)');
+  await b.evaluate(`document.querySelector('[data-bottom-nav=carts]').click()`);
+  await b.waitFor(`location.hash === '#/carts' && document.querySelector('[data-bottom-nav=carts]').getAttribute('aria-current') === 'page'`, 'Seite Warenkörbe (Warenkorb hervorgehoben)');
   await b.evaluate(`document.querySelector('[data-carts-close]').click()`);
   await b.waitFor(`location.hash === '#/groups'`, '✕ zurück zu Gruppen');
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`${ORDER_LINKS}.length === 1`, 'Startseite');
-  ok('Smartphone: Hamburger-Menü, Warenkorb-Knopf unten rechts, ✕ zurück zur vorigen Ansicht');
+  ok('Smartphone: Leiste unten (Favoriten, Bestellungen, Warenkorb; weg beim Tippen), Hamburger-Menü mit Version, ✕ zurück zur vorigen Ansicht');
 
-  // Smartphone: Warenkorb-Knopf öffnet die eigene Seite, dort „+ Position erfassen“
-  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
+  // Smartphone: Warenkorb in der Leiste öffnet die eigene Seite, dort „+ Position erfassen“
+  await b.evaluate(`document.querySelector('[data-bottom-nav=carts]').click()`);
   await b.waitFor(`location.hash === '#/carts' && document.querySelector('#view [data-cart]')?.offsetParent`, 'Seite Warenkörbe');
   await b.clickText('#view button', '+ Position erfassen');
   await b.waitFor(`document.querySelector('.modal-panel input[placeholder^="z. B. 595"]')?.offsetParent`, 'Formular');
@@ -200,7 +212,7 @@ try {
   // Offenen Mouser-Korb: Formular geschrieben (fehlende interne Bestellnummer → Dialog) → bestellt (Rest übersprungen)
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`${CART_LINKS}.length === 1`, 'Startseite');
-  await b.evaluate(`document.querySelector('[data-cart-fab]').click()`);
+  await b.evaluate(`document.querySelector('[data-bottom-nav=carts]').click()`);
   await b.waitFor(`location.hash === '#/carts'`, 'Seite Warenkörbe');
   await b.evaluate(`[...document.querySelectorAll('#view [data-cart] a')].find((a) => a.innerText.includes('Mouser')).click()`);
   await b.waitFor(`document.querySelector('[data-field=internal_order_no]')?.offsetParent && ${BADGE} === 'Warenkorb'`, 'Detail Mouser');
@@ -252,12 +264,24 @@ try {
   await b.waitFor(`!document.querySelector('[data-cart-panel]').offsetParent`, 'Warenkorb-Feld geschlossen');
   ok('PC: Warenkorb-Symbol klappt die Warenkörbe mit Aktionen auf, Escape schließt');
   // PC: Scanner als Symbol in der Kopfzeile statt als Knopf auf der Startseite; Suche in der Filterzeile
-  if (await b.evaluate(`!!document.querySelector('[data-prominent-action]')?.offsetParent || [...document.querySelectorAll('#view button')].some((e) => e.offsetParent && e.innerText.includes('Lieferschein scannen'))`)) {
-    throw new Error('PC: „Lieferschein scannen“ noch als Knopf auf der Startseite');
+  if (await b.evaluate(`!!document.querySelector('[data-bottom-bar]').getClientRects().length || [...document.querySelectorAll('#view button')].some((e) => e.offsetParent && e.innerText.includes('Lieferschein scannen'))`)) {
+    throw new Error('PC: Leiste unten sichtbar oder „Lieferschein scannen“ noch als Knopf auf der Startseite');
   }
   await b.evaluate(`document.querySelector('[data-header-action=delivery-scanner]').click()`);
-  await b.waitFor(`[...document.querySelectorAll('h2')].some((h) => h.offsetParent && h.innerText.includes('Lieferschein erfassen'))`, 'Scanner über das Kopfzeilen-Symbol');
-  await b.clickText('button', 'Schließen');
+  const SCANNER_OPEN = `[...document.querySelectorAll('h2')].some((h) => h.offsetParent && h.innerText.includes('Lieferschein erfassen'))`;
+  await b.waitFor(SCANNER_OPEN, 'Scanner über das Kopfzeilen-Symbol');
+  // Scanner beginnt unter der Kopfzeile; Navigation über die Kopfzeile schließt ihn
+  if (!(await b.evaluate(`document.querySelector('[data-scanner-close]').getBoundingClientRect().top >= document.getElementById('app-header').getBoundingClientRect().bottom`))) {
+    throw new Error('Scanner liegt über der Kopfzeile');
+  }
+  await b.evaluate(`document.querySelector('[data-nav=favorites]').click()`);
+  await b.waitFor(`location.hash === '#/favorites' && !(${SCANNER_OPEN})`, 'Scanner nach Navigation geschlossen');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`${ORDER_LINKS}.length >= 1`, 'Startseite');
+  await b.evaluate(`document.querySelector('[data-header-action=delivery-scanner]').click()`);
+  await b.waitFor(SCANNER_OPEN, 'Scanner erneut geöffnet');
+  await b.evaluate(`document.querySelector('[data-scanner-close]').click()`);
+  await b.waitFor(`!(${SCANNER_OPEN})`, 'Scanner mit ✕ geschlossen');
   if (!(await b.evaluate(`(() => { const s = document.querySelector('[data-overview-search]').getBoundingClientRect(), g = document.querySelector('#filter-group').getBoundingClientRect(); return s.left > g.right && Math.abs(s.top - g.top) < 2; })()`))) {
     throw new Error('PC: Suche nicht rechts neben den Filtern');
   }

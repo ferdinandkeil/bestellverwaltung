@@ -54,6 +54,7 @@ const RULES = [
   [/^pb_public\/views\/login-view\.js$/, { unit: [], e2e: ALL_E2E, why: 'alle Browser-Tests melden sich an' }],
   [/^pb_public\/views\/(dashboard-view|unmatched-receipts)\.js$/, { unit: [], e2e: ['e2e', 'e2e-scanner', 'e2e-camera'], why: 'Startseite (Scanner startet dort)' }],
   [/^pb_public\/views\/(order-detail-view|order-steps)\.js$/, { unit: [], e2e: ['e2e', 'e2e-scanner', 'e2e-shop-export', 'e2e-favorites'], why: 'Bestellansicht' }],
+  [/^pb_public\/views\/navigation\.js$/, { unit: [], e2e: ALL_E2E, why: 'Navigation (Leiste unten startet den Scanner)' }],
   [/^pb_public\/views\/(cart-menu|item-form)\.js$/, { unit: [], e2e: ['e2e', 'e2e-moodle', 'e2e-favorites'], why: 'Kopfzeile/Warenkorb' }],
   [/^pb_public\/views\/groups-view\.js$/, { unit: [], e2e: ['e2e'], why: 'Gruppen' }],
   [/^pb_public\/views\/favorite(s|-list)-view\.js$/, { unit: [], e2e: ['e2e-favorites'], why: 'Favoriten' }],

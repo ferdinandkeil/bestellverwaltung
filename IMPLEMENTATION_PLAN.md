@@ -137,6 +137,12 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 2. ✔ „Lieferschein scannen“ ab 640 px als Symbol in der Kopfzeile; Suche rechts in der Filterzeile; Auswahlfelder so hoch wie Eingabefelder.
 3. ✔ Nebenbei (Branch `cache-control`): Oberfläche mit `Cache-Control: no-cache` (ARCHITECTURE Kap. 9).
 
+### Smartphone-Ansicht (Branch `ui-mobil`)
+**Status:** abgenommen (24.11.2026). Entscheidungen in ARCHITECTURE Kap. 5 (Slot `bottom-bar`) und 7 (Hauptnavigation, Fußzeile).
+1. ✔ Feste Leiste unten: Pille mit Bestellungen, Favoriten, Warenkorb (nur Symbole) und runder Scanner-Knopf (Slot `bottom-bar`); ausgeblendet bei offener Tastatur. Ersetzt den Warenkorb-Knopf unten rechts und „Lieferschein scannen“ oben auf der Startseite.
+2. ✔ Hamburger-Menü nur noch mit Gruppen/Projekte, Name/Logout und Version; Fußzeile auf dem Smartphone entfällt. Symbole auch in der Kopfzeile am PC.
+3. ✔ Scanner und Moodle-Import unter der Kopfzeile, ✕ oben rechts, schließen beim Navigieren; Pille mit gleitender Markierung und Rückmeldung beim Antippen (CSS). Bestellansicht auf dem Handy so belassen.
+
 ### Folgende Branches (Reihenfolge vorläufig)
 1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
 
