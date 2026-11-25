@@ -147,7 +147,7 @@ function cancelDelivery(app, deliveryId) {
  * „Geliefert“ zurücksetzen (Haken im Ablauf entfernen): alle Lieferbuchungen der Bestellung löschen, gelieferte
  * Mengen auf 0. Belege (gescannte Lieferscheine) gehen nicht verloren, sondern in die Ablage „Lieferscheine ohne
  * Bestellung“ – von dort lassen sie sich einer anderen Bestellung zuordnen. Muss innerhalb einer Transaktion
- * aufgerufen werden. Bewusste Ausnahme von „Lieferbuchungen sind unveränderlich“ (ARCHITECTURE.md Kap. 4.4).
+ * aufgerufen werden (ARCHITECTURE.md Kap. 2 und 4.4).
  * → { status, deliveries: Anzahl gelöschter Buchungen, archived: Anzahl abgelegter Belege }
  */
 function resetDeliveries(app, orderId, userId) {
