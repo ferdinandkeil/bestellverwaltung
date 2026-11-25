@@ -180,6 +180,33 @@ try {
   await b.evaluate(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]').click()`);
   await b.waitFor(`${scanner}.isOpen && ${scanner}.libState === 'ready'`, 'Bildverarbeitung geladen', 60000);
   ok('Scanner geöffnet, OpenCV/jscanify geladen');
+
+  // Helles Blatt auf hellem, beigem Tisch (Meldung 25.11.2026): Licht von oben rechts, dort ist der Tisch so hell wie
+  // das Papier; Blatt unten im Schatten, weiche Kanten. Früher lief die helle Fläche in den Tisch über bzw. die
+  // Kantensuche nahm den Bildrahmen. Erwartet: Ecken auf ≤ 2 % der Bildbreite genau.
+  const lightTable = JSON.parse(await b.evaluate(`(async () => {
+    const v = await import('/modules/delivery-scanner/vision.js');
+    const W = 1500, H = 2000;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const t = x.createLinearGradient(W, 0, 0, H);
+    t.addColorStop(0, '#fbf1df'); t.addColorStop(1, '#bba98c');
+    x.fillStyle = t; x.fillRect(0, 0, W, H);
+    const corners = [[230, 260], [1270, 230], [1300, 1720], [200, 1750]];
+    const paper = x.createLinearGradient(0, 230, 0, 1750);
+    paper.addColorStop(0, '#f7f7f5'); paper.addColorStop(0.55, '#ededeb'); paper.addColorStop(1, '#bdbdbb');
+    x.fillStyle = paper; x.beginPath(); corners.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.closePath(); x.fill();
+    x.fillStyle = '#222'; x.font = '28px sans-serif';
+    for (let i = 0; i < 12; i++) x.fillText('Position ' + (i + 1) + '   3 Stk   ART-' + (1000 + i), 330, 450 + i * 90);
+    const soft = document.createElement('canvas'); soft.width = W; soft.height = H;
+    const sx = soft.getContext('2d'); sx.filter = 'blur(5px)'; sx.drawImage(c, 0, 0);
+    const d = v.detectCorners(soft);
+    const keys = ['topLeftCorner', 'topRightCorner', 'bottomRightCorner', 'bottomLeftCorner'];
+    const err = d.detected ? Math.max(...keys.map((k, i) => Math.hypot(d.corners[k].x - corners[i][0], d.corners[k].y - corners[i][1]))) / W : null;
+    return JSON.stringify({ err, method: d.method });
+  })()`));
+  if (lightTable.err === null || lightTable.err > 0.02) throw new Error('Blatt auf hellem Tisch falsch erkannt: ' + JSON.stringify(lightTable));
+  ok(`helles Blatt auf hellem Tisch erkannt (Abweichung ${(lightTable.err * 100).toFixed(1)} %, ${lightTable.method})`);
   await b.screenshot('scanner-01-start');
 
   await b.setFiles('[x-data=deliveryScanner] input[capture]', [photo]);
