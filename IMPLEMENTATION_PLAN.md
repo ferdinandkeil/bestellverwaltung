@@ -145,7 +145,7 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 
 ## Rückmeldungen aus dem Betrieb (11/2026, je Thema ein Branch)
 ### Scanner: Auslösen von Hand (Branch `scanner-manuell`)
-**Status:** in Arbeit. Anlass: Scanner-Meldung 25.11.2026 („Papierkanten nicht richtig erkannt“, helles Blatt auf hellem Tisch) und Bedienung auf älteren Handys. Entscheidungen in ARCHITECTURE Kap. 6 (delivery-scanner, Schritte 2 und 3).
+**Status:** abgenommen (25.11.2026; Test auf älteren Handys nach dem Deploy). Anlass: Scanner-Meldung 25.11.2026 („Papierkanten nicht richtig erkannt“, helles Blatt auf hellem Tisch) und Bedienung auf älteren Handys. Entscheidungen in ARCHITECTURE Kap. 6 (delivery-scanner, Schritte 2 und 3).
 1. ✔ Live-Eckenerkennung und automatisches Auslösen entfernt; jedes Foto geht nach „Fertig“ durch die Eckenprüfung.
 2. ✔ Eckensuche: Masken aus Helligkeit, Sättigung und beidem, Auswahl nach Überdeckung; Vierecke in den Bildecken verworfen (auch bei der Kantenkontur). Synthetischer Testfall „helles Blatt auf hellem Tisch“ in `tests/e2e-scanner.mjs`.
 
