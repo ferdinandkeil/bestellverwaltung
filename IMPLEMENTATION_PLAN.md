@@ -145,7 +145,7 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 
 ## Rückmeldungen aus dem Betrieb (11/2026, je Thema ein Branch)
 ### „Geliefert“ zurücksetzen (Branch `geliefert-zuruecksetzen`, Issue #1)
-**Status:** in Arbeit. Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
+**Status:** abgenommen (25.11.2026). Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
 1. ✔ Route `POST /api/lab/orders/{id}/deliveries/reset`: alle Buchungen löschen, Mengen 0, Belege in die Ablage „Lieferscheine ohne Bestellung“.
 2. ✔ Haken „Geliefert“ im Ablauf (und auf der Startseite) entfernen: roter Toast 12 s mit „Rückgängig“, erst danach ausgeführt.
 
