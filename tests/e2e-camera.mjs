@@ -1,6 +1,6 @@
 // Browser-Durchlauf der Kamera im Scanner: Chrome mit simulierter Kamera, die ein Standbild eines
-// Lieferscheins auf dunklem Tisch zeigt (Y4M-Datei) → automatisches Auslösen, keine Doppelaufnahme,
-// Auslösen von Hand, Schalter „Automatisch auslösen“ (gemerkt), „Fertig“ schließt die Kamera.
+// Lieferscheins auf dunklem Tisch zeigt (Y4M-Datei) → kein automatisches Auslösen, zwei Fotos von Hand,
+// „Fertig“ schließt die Kamera, danach je Foto die Eckenprüfung mit vorgeschlagenen Ecken.
 // Start über:  tests/run.sh --e2e
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -74,39 +74,40 @@ try {
   await b.evaluate(`document.querySelector('[data-bottom-action=delivery-scanner-mobile]').click()`);
   await b.waitFor(`${scanner}.isOpen && ${scanner}.libState === 'ready'`, 'Bildverarbeitung geladen', 60000);
 
-  // Kamera im Scanner statt System-Kamera; Automatik ist voreingestellt
+  // Kamera im Scanner statt System-Kamera; ohne Schalter für automatisches Auslösen
   await b.waitFor(`document.querySelector('[data-start-camera]')?.offsetParent`, 'Knopf „Foto aufnehmen“ (Kamera im Scanner)');
-  if (!(await b.evaluate(`document.querySelector('[data-auto-capture]').checked`))) throw new Error('Automatik nicht voreingestellt');
   await b.evaluate(`document.querySelector('[data-start-camera]').click()`);
   await b.waitFor(`${scanner}.step === 'camera' && ${scanner}.camera.ready`, 'Kamera bereit', 20000);
-  ok('Kamera im Scanner geöffnet, „Automatisch auslösen“ voreingestellt');
+  if (await b.evaluate(`!!document.querySelector('[data-auto-capture]')`)) throw new Error('Schalter „Automatisch auslösen“ noch vorhanden');
+  ok('Kamera im Scanner geöffnet, kein automatisches Auslösen');
 
-  await b.waitFor(`${scanner}.pages.length === 1`, 'automatisch ausgelöst', 30000);
-  await b.screenshot('kamera-01-automatisch');
-  const page = await b.evaluate(`({ blurry: ${scanner}.pages[0].blurry, msg: document.querySelector('[data-camera-message]').innerText })`);
-  if (page.blurry) throw new Error('Seite fälschlich als unscharf markiert');
-  ok(`automatisch ausgelöst, Seite übernommen (${page.msg})`);
+  // Blatt liegt im Bild → es wird trotzdem nicht ausgelöst
+  await sleep(2500);
+  if ((await b.evaluate(`${scanner}.queued + ${scanner}.pages.length`)) !== 0) throw new Error('Foto ohne Auslösen aufgenommen');
+  ok('ohne Auslöser kein Foto');
 
-  // dieselbe Seite bleibt liegen → kein zweites automatisches Foto
-  await sleep(3000);
-  const after = await b.evaluate(`({ n: ${scanner}.pages.length, msg: document.querySelector('[data-camera-message]').innerText })`);
-  if (after.n !== 1) throw new Error('Dieselbe Seite wurde mehrfach aufgenommen: ' + after.n);
-  if (!after.msg.includes('Nächste Seite')) throw new Error('Hinweis auf die nächste Seite fehlt: ' + after.msg);
-  ok('keine Doppelaufnahme derselben Seite, Hinweis „Nächste Seite hinlegen“');
-
-  // Automatik aus (gemerkt), Auslösen von Hand
-  await b.evaluate(`document.querySelector('[data-auto-capture]').click()`);
-  if ((await b.evaluate(`localStorage.getItem('deliveryScanner.autoCapture')`)) !== '0') throw new Error('Schalter nicht gespeichert');
-  await b.evaluate(`document.querySelector('[data-shutter]').click()`);
-  await b.waitFor(`${scanner}.pages.length === 2 && !${scanner}.camera.busy`, 'von Hand ausgelöst', 30000);
-  await sleep(1500);
-  if ((await b.evaluate(`${scanner}.pages.length`)) !== 2) throw new Error('Automatik löst trotz Schalter aus');
-  ok('Automatik abschaltbar (pro Gerät gemerkt), Auslösen von Hand');
+  // zwei Fotos von Hand; ausgewertet wird erst nach „Fertig“
+  for (const n of [1, 2]) {
+    await b.evaluate(`document.querySelector('[data-shutter]').click()`);
+    await b.waitFor(`${scanner}.queued === ${n} && !${scanner}.camera.busy`, `Foto ${n} aufgenommen`, 30000);
+  }
+  const count = await b.evaluate(`document.querySelector('[data-camera-count]').innerText`);
+  if (count !== '2 Fotos') throw new Error('Zähler in der Kamera: ' + count);
+  await b.screenshot('kamera-01-zwei-fotos');
+  ok('zwei Fotos von Hand ausgelöst, Zähler „2 Fotos“');
 
   await b.clickText('[data-camera] button', 'Fertig');
-  await b.waitFor(`${scanner}.step === 'pages' && !document.querySelector('[x-ref=cameraVideo]').srcObject`, 'Kamera geschlossen');
-  await b.screenshot('kamera-02-seiten');
-  ok('„Fertig“ schließt die Kamera, 2 Seiten in der Übersicht');
+  await b.waitFor(`${scanner}.step === 'corners' && !document.querySelector('[x-ref=cameraVideo]').srcObject`, 'Eckenprüfung nach „Fertig“', 30000);
+  if (!(await b.evaluate(`${scanner}.cornersDetected`))) throw new Error('Blattkanten im Foto nicht vorgeschlagen');
+  if (!(await b.evaluate(`document.querySelector('[data-queued]').innerText.includes('1 Foto')`))) throw new Error('Hinweis auf das weitere Foto fehlt');
+  await b.screenshot('kamera-02-ecken');
+  await b.clickText('[x-data=deliveryScanner] button', 'Übernehmen');
+  await b.waitFor(`${scanner}.step === 'corners' && ${scanner}.pages.length === 1 && !${scanner}.busyText`, 'Eckenprüfung Foto 2', 30000);
+  await b.clickText('[x-data=deliveryScanner] button', 'Übernehmen');
+  await b.waitFor(`${scanner}.step === 'pages' && ${scanner}.pages.length === 2`, 'zwei Seiten übernommen', 30000);
+  if (await b.evaluate(`${scanner}.pages.some((p) => p.blurry)`)) throw new Error('Seite fälschlich als unscharf markiert');
+  await b.screenshot('kamera-03-seiten');
+  ok('„Fertig“ schließt die Kamera, beide Fotos durch die Eckenprüfung (Ecken vorgeschlagen), 2 scharfe Seiten');
 
   const unexpected = b.problems.filter((p) => !/status of 4\d\d.*(auth-with-otp)/.test(p));
   if (unexpected.length) throw new Error('Fehler in der Browser-Konsole:\n  ' + unexpected.join('\n  '));
