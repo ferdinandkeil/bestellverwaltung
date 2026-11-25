@@ -154,6 +154,11 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 1. ✔ Route `POST /api/lab/orders/{id}/deliveries/reset`: alle Buchungen löschen, Mengen 0, Belege in die Ablage „Lieferscheine ohne Bestellung“.
 2. ✔ Haken „Geliefert“ im Ablauf (und auf der Startseite) entfernen: roter Toast 12 s mit „Rückgängig“, erst danach ausgeführt.
 
+### Neue Bestellung von Hand (Branch `neue-bestellung`, Issue #2)
+**Status:** abgenommen (25.11.2026). Entscheidungen in ARCHITECTURE Kap. 4.8.
+1. ✔ Route `POST /api/lab/orders/manual` mit wählbarem Stand, Herkunft `manuell` (neuer Wert in `pb_schema.json`, keine Datenmigration); Prüfung gemeinsam mit „Bestellung aus Lieferschein“ (`lib/new-orders.js`).
+2. ✔ Knopf „+ Neue Bestellung“ rechts unter der Tabelle der Startseite (PC), Maske mit Positionstabelle; Testdaten in `dev-seed.mjs`.
+
 ### Folgende Branches (Reihenfolge vorläufig)
 1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
 

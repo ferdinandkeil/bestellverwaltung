@@ -76,6 +76,7 @@ try {
   ok('Login → Startseite: Leiste unten mit Warenkorb-Zahl und Scanner, 1 Bestellung in der kompakten Tabelle, keine Fußzeile');
   await b.screenshot('02-dashboard');
 
+  if (await b.evaluate(`!!document.querySelector('[data-new-order-button]').getClientRects().length`)) throw new Error('Smartphone: „+ Neue Bestellung“ sichtbar (dort steht die Leiste unten)');
   if (await b.evaluate(`!!document.querySelector('#view select')?.offsetParent`)) throw new Error('Filter sollten mobil eingeklappt sein');
   await b.clickText('#view button', 'Filter');
   await b.waitFor(`document.querySelector('#view select')?.offsetParent`, 'Filter aufgeklappt');
@@ -280,6 +281,38 @@ try {
   await b.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await b.waitFor(`!document.querySelector('[data-cart-panel]').offsetParent`, 'Warenkorb-Feld geschlossen');
   ok('PC: Warenkorb-Symbol klappt die Warenkörbe mit Aktionen auf, Escape schließt');
+  // PC: „+ Neue Bestellung“ rechts unter der Tabelle – Bestellung von Hand übernehmen (Stand wählbar, mehrere Positionen)
+  const NEW = `document.querySelector('[data-new-order-form]')`;
+  await b.waitFor(`document.querySelector('[data-new-order-button]')?.getClientRects().length`, 'Knopf „+ Neue Bestellung“ unter der Tabelle');
+  const place = await b.evaluate(`(() => { const t = document.querySelector('[data-overview-table]').getBoundingClientRect();
+    const k = document.querySelector('[data-new-order-button]').getBoundingClientRect();
+    return { gap: Math.round(k.top - t.bottom), right: Math.round(Math.abs(k.right - t.right)) }; })()`);
+  if (place.gap < 0 || place.gap > 40 || place.right > 24) throw new Error('„+ Neue Bestellung“ nicht rechts unter der Tabelle: ' + JSON.stringify(place));
+  await b.evaluate(`document.querySelector('[data-new-order-button]').click()`);
+  await b.waitFor(`${NEW}?.offsetParent`, 'Maske „Neue Bestellung“');
+  await b.evaluate(`(() => { const s = document.querySelector('#new-order-supplier'); s.value = 'wuerth'; s.dispatchEvent(new Event('change')); })()`);
+  await b.waitFor(`document.querySelector('[data-new-order-without]').checked`, 'Würth: ohne Nummer vorausgewählt');
+  await b.evaluate(`(() => { const s = document.querySelector('#new-order-stage'); s.value = 'form_signed'; s.dispatchEvent(new Event('change')); })()`);
+  await b.waitFor(`!document.querySelector('[data-new-order-without]').checked && document.querySelector('[data-new-order-without]').disabled`, 'vor „Bestellt“ nur mit Nummer');
+  await b.evaluate(`(() => { const s = document.querySelector('#new-order-supplier'); s.value = 'reichelt'; s.dispatchEvent(new Event('change')); })()`);
+  await b.fill('#new-order-number', '2026iw04800');
+  const ROWINPUT = (i, n) => `document.querySelector('[data-new-order-row="' + ${i} + '"] td:nth-child(' + ${n} + ') input')`;
+  const type = (i, n, v) => b.evaluate(`(() => { const e = ${ROWINPUT(i, n)}; e.value = ${JSON.stringify(v)}; e.dispatchEvent(new Event('input')); })()`);
+  await type(0, 1, 'NE 555 DIP'); await type(0, 3, '4');
+  await b.evaluate(`${ROWINPUT(0, 3)}.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+  await b.waitFor(`document.activeElement === ${ROWINPUT(1, 1)}`, 'Enter: neue Zeile, Cursor in der Art.-Nr.');
+  await type(1, 1, 'BC 547C'); await type(1, 2, 'Transistor'); await type(1, 3, '10');
+  await b.screenshot('05-neue-bestellung');
+  await b.clickText('[data-new-order-form] button', 'Bestellung anlegen');
+  await b.waitFor(`location.hash.startsWith('#/orders/') && document.querySelector('#view [data-status-badge]')?.innerText.trim() === 'In Freigabe' && document.querySelector('[data-origin-manual]')?.offsetParent`, 'Bestellung angelegt und geöffnet');
+  const manual = await b.evaluate(`(() => { const d = Alpine.$data(document.querySelector('[x-data=orderDetailView]'));
+    return { items: d.items.map((i) => i.part_number + ':' + i.qty_ordered).sort().join(), steps: Object.keys(d.steps).sort().join(), no: d.order.internal_order_no }; })()`);
+  if (manual.items !== 'BC 547C:10,NE 555 DIP:4' || manual.steps !== 'form_signed,form_written' || manual.no !== '2026IW04800') {
+    throw new Error('Neue Bestellung: ' + JSON.stringify(manual));
+  }
+  ok('PC: „+ Neue Bestellung“ – Stand „Formular unterschrieben“, zwei Positionen per Enter, Bestellung geöffnet („von Hand angelegt“)');
+  await b.navigate(PB_URL + '/#/');
+  await b.waitFor(`document.querySelector('[data-overview-table]')?.offsetParent && ${ROW('2026IW04711')}`, 'zurück zur Tabelle');
   // PC: Scanner als Symbol in der Kopfzeile statt als Knopf auf der Startseite; Suche in der Filterzeile
   if (await b.evaluate(`!!document.querySelector('[data-bottom-bar]').getClientRects().length || [...document.querySelectorAll('#view button')].some((e) => e.offsetParent && e.innerText.includes('Lieferschein scannen'))`)) {
     throw new Error('PC: Leiste unten sichtbar oder „Lieferschein scannen“ noch als Knopf auf der Startseite');

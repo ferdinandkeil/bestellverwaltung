@@ -19,8 +19,9 @@ test('Dev-Testdaten: alle Phasen, alle Exportwege, Favoriten, feste Nutzer', asy
   const status = Object.fromEntries(orders.map((o) => [o.supplier, o.status]));
   assert.deepEqual(status, {
     mouser: 'freigabe', wuerth: 'angefragt', printus: 'angefragt', reichelt: 'teilgeliefert',
-    tme: 'geliefert', farnell: 'abgeschlossen', other: 'bestellt',
+    tme: 'geliefert', farnell: 'abgeschlossen', other: 'bestellt', voelkner: 'bestellt',
   });
+  assert.equal(orders.find((o) => o.supplier === 'voelkner').origin, 'manuell', 'von Hand übernommen');
   const users = (await listRecords('users')).map((u) => u.email);
   assert.ok(users.includes('labor@example.com') && users.includes('kollegin@example.com'));
   const merged = (await listRecords('order_items')).find((i) => i.part_number === '595-SN74HC595N');

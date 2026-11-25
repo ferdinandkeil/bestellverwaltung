@@ -125,6 +125,15 @@ await subject(coToken, conrad, 'Lötplatz');
 const litze = (await itemsOf(conrad)).find((it) => it.part_number === '7654321-62');
 await http('PATCH', `/api/collections/order_items/records/${litze.id}`, { token: coToken, json: { qty_cancelled: 2 } });
 
+// ---- Voelkner: von Hand übernommen („+ Neue Bestellung“), außerhalb des Systems bestellt ----
+await http('POST', '/api/lab/orders/manual', { token: meToken, json: {
+  supplier: 'voelkner', internal_order_no: '2026IW00987', stage: 'ordered', subject: 'Netzteile (nachgetragen)',
+  items: [
+    { part_number: 'S123456', name: 'Labornetzteil 0–30 V, 5 A', qty: 2, group: gA.id },
+    { part_number: 'S654321', name: 'Sicherheitsmessleitungen, Satz', qty: 4 },
+  ],
+} });
+
 // ---- Favoriten: eigene (öffentlich und nicht), fremde öffentliche und fremde nicht öffentliche ----
 const fromOrder = (token, body) => http('POST', '/api/lab/favorite-lists/from-order', { token, json: body });
 await fromOrder(meToken, { order: reichelt, new_list: {
@@ -142,5 +151,5 @@ for (const it of [
 await fromOrder(coToken, { order: tme, new_list: { title: 'Messtechnik: Strommessung', is_public: true } });
 await fromOrder(coToken, { order: conrad, new_list: { title: 'Werkstatt Lötplatz', is_public: false } });
 
-console.log('Testdaten angelegt: 5 Gruppen, 7 Bestellungen (Warenkorb, in Freigabe, bestellt, teilgeliefert, geliefert, abgeschlossen), 4 Favoritenlisten.');
+console.log('Testdaten angelegt: 5 Gruppen, 8 Bestellungen (Warenkorb, in Freigabe, bestellt, teilgeliefert, geliefert, abgeschlossen, von Hand übernommen), 4 Favoritenlisten.');
 console.log('Nutzer: ' + USERS.map((u) => `${u.email} (${u.name})`).join(', '));
