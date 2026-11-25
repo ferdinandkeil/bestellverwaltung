@@ -147,7 +147,7 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 ### Neue Bestellung von Hand (Branch `neue-bestellung`, Issue #2)
 **Status:** in Arbeit. Entscheidungen in ARCHITECTURE Kap. 4.8.
 1. ✔ Route `POST /api/lab/orders/manual` mit wählbarem Stand, Herkunft `manuell` (neuer Wert in `pb_schema.json`, keine Datenmigration); Prüfung gemeinsam mit „Bestellung aus Lieferschein“ (`lib/new-orders.js`).
-2. ✔ Knopf „+ Neue Bestellung“ unten rechts auf der Startseite (PC), Maske mit Positionstabelle; Testdaten in `dev-seed.mjs`.
+2. ✔ Knopf „+ Neue Bestellung“ rechts unter der Tabelle der Startseite (PC), Maske mit Positionstabelle; Testdaten in `dev-seed.mjs`.
 
 ### Folgende Branches (Reihenfolge vorläufig)
 1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.

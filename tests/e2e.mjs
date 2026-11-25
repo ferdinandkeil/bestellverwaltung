@@ -264,9 +264,13 @@ try {
   await b.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await b.waitFor(`!document.querySelector('[data-cart-panel]').offsetParent`, 'Warenkorb-Feld geschlossen');
   ok('PC: Warenkorb-Symbol klappt die Warenkörbe mit Aktionen auf, Escape schließt');
-  // PC: „+ Neue Bestellung“ unten rechts – Bestellung von Hand übernehmen (Stand wählbar, mehrere Positionen)
+  // PC: „+ Neue Bestellung“ rechts unter der Tabelle – Bestellung von Hand übernehmen (Stand wählbar, mehrere Positionen)
   const NEW = `document.querySelector('[data-new-order-form]')`;
-  await b.waitFor(`document.querySelector('[data-new-order-button]')?.getClientRects().length`, 'Knopf „+ Neue Bestellung“ (fest positioniert, daher ohne offsetParent)');
+  await b.waitFor(`document.querySelector('[data-new-order-button]')?.getClientRects().length`, 'Knopf „+ Neue Bestellung“ unter der Tabelle');
+  const place = await b.evaluate(`(() => { const t = document.querySelector('[data-overview-table]').getBoundingClientRect();
+    const k = document.querySelector('[data-new-order-button]').getBoundingClientRect();
+    return { gap: Math.round(k.top - t.bottom), right: Math.round(Math.abs(k.right - t.right)) }; })()`);
+  if (place.gap < 0 || place.gap > 40 || place.right > 24) throw new Error('„+ Neue Bestellung“ nicht rechts unter der Tabelle: ' + JSON.stringify(place));
   await b.evaluate(`document.querySelector('[data-new-order-button]').click()`);
   await b.waitFor(`${NEW}?.offsetParent`, 'Maske „Neue Bestellung“');
   await b.evaluate(`(() => { const s = document.querySelector('#new-order-supplier'); s.value = 'wuerth'; s.dispatchEvent(new Event('change')); })()`);

@@ -1,5 +1,5 @@
 // „+ Neue Bestellung“ (ARCHITECTURE.md Kap. 4.8): Bestellung von Hand übernehmen, z. B. außerhalb des
-// Systems bestellt. Knopf unten rechts auf der Startseite (PC; auf dem Smartphone steht dort die Leiste unten),
+// Systems bestellt. Knopf rechts unter der Tabelle der Startseite (ab 640 px; auf dem Smartphone wird nur gescannt),
 // Maske mit Lieferant, Stand, interner Bestellnummer und Positionen → Route POST /api/lab/orders/manual.
 import { SUPPLIERS, INTERNAL_ORDER_NO_RE, groupsByCourse } from '../core/config.js';
 import { createManualOrder, listGroups, errorMessage } from '../core/api.js';
@@ -21,9 +21,9 @@ const isEmpty = (r) => !r.part_number.trim() && !r.name.trim();
 
 export const newOrderSection = /* html */ `
 <div x-data="newOrder" data-new-order>
-  <button type="button" class="btn btn-primary fixed right-6 bottom-6 z-30 hidden shadow-lg sm:inline-flex" @click="open()" data-new-order-button>
-    + Neue Bestellung
-  </button>
+  <div class="mt-3 hidden justify-end sm:flex">
+    <button type="button" class="btn btn-primary" @click="open()" data-new-order-button>+ Neue Bestellung</button>
+  </div>
 
   <div x-show="isOpen" x-cloak x-transition.opacity class="modal-backdrop" @click.self="close()" @keydown.escape.window="isOpen && close()">
     <form class="modal-panel space-y-4 sm:max-w-3xl" @submit.prevent="submit()" novalidate data-new-order-form>

@@ -187,7 +187,7 @@ const template = /* html */ `
     </table>
   </div>
 
-  <!-- „+ Neue Bestellung“ (fester Knopf unten rechts, PC) mit Maske -->
+  <!-- „+ Neue Bestellung“ rechts unter der Tabelle (ab 640 px) mit Maske -->
   ${newOrderSection}
 </div>`;
 
