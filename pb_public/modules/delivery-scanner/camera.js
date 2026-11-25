@@ -1,6 +1,6 @@
-// Kamera im Scanner: Kamerabild (getUserMedia), Foto in voller Auflösung (ImageCapture.takePhoto),
-// Taschenlampe und die Logik für das automatische Auslösen (AutoTrigger, ohne DOM – getestet in
-// tests/scanner-camera.test.mjs). Erprobt 11/2026 mit der Test-Seite kamera-test.html (inzwischen entfernt).
+// Kamera im Scanner: Kamerabild (getUserMedia), Foto in voller Auflösung (ImageCapture.takePhoto) und
+// Taschenlampe. Ausgelöst wird nur von Hand; das automatische Auslösen mit Live-Eckenerkennung wurde 11/2026
+// entfernt, weil es ältere Handys überlastete. Erprobt 11/2026 mit der Test-Seite kamera-test.html (inzwischen entfernt).
 
 /**
  * Kamera im Browser nutzbar? takePhoto() ist nötig, weil nur es die volle Sensorauflösung liefert
@@ -81,89 +81,4 @@ export async function setTorch(cam, on) {
 export function closeCamera(cam, video) {
   cam?.track?.stop();
   if (video) video.srcObject = null;
-}
-
-// ---------------------------------------------------------------------------
-// Automatisches Auslösen
-// ---------------------------------------------------------------------------
-const KEYS = ['topLeftCorner', 'topRightCorner', 'bottomRightCorner', 'bottomLeftCorner'];
-
-function quadArea(c) {
-  const p = KEYS.map((k) => c[k]);
-  let s = 0;
-  for (let i = 0; i < 4; i++) s += p[i].x * p[(i + 1) % 4].y - p[(i + 1) % 4].x * p[i].y;
-  return Math.abs(s) / 2;
-}
-
-function maxMove(a, b) {
-  return Math.max(...KEYS.map((k) => Math.hypot(a[k].x - b[k].x, a[k].y - b[k].y)));
-}
-
-/**
- * Werte aus dem Kamera-Test (11/2026, Android, Hauptkamera): Auslösen nach 0,4 s Ruhe funktioniert aus
- * freier Hand; das Blatt sollte mindestens 60 % des Bildes füllen, sonst wird es für 6,5-pt-Ziffern zu klein.
- */
-export const AUTO_DEFAULTS = {
-  stableMs: 400, // so lange muss das Blatt ruhig im Bild liegen
-  tolerance: 0.03, // erlaubte Bewegung der Ecken zwischen zwei Bildern (Anteil der Bildbreite)
-  minArea: 0.6, // Mindestanteil des Blatts an der Bildfläche
-  graceMs: 400, // einzelne Aussetzer der Erkennung setzen die Ruhezeit nicht zurück
-  cooldownMs: 1500, // Mindestabstand zwischen zwei automatischen Fotos
-  rearmMove: 0.1, // nach einem Foto erst wieder auslösen, wenn das Blatt weg war oder sich so weit bewegt hat
-};
-
-/**
- * Entscheidet anhand der Live-Eckenerkennung, wann ausgelöst wird.
- * update(corners | null, width, height, now) → { corners, area, hold (0..1), state }
- *   state: 'search' (kein Blatt), 'closer' (Blatt zu klein), 'hold' (ruhig halten), 'ready' (jetzt auslösen),
- *          'next' (Seite schon fotografiert – nächste Seite hinlegen)
- * Nach dem Auslösen shot(now) aufrufen: Abklingzeit; dieselbe Seite wird nicht noch einmal fotografiert –
- * erst wenn das Blatt aus dem Bild war oder deutlich verschoben wurde (Seitenwechsel), löst es wieder aus.
- */
-export class AutoTrigger {
-  constructor(options = {}) {
-    this.o = { ...AUTO_DEFAULTS, ...options };
-    this.reset(-Infinity);
-  }
-
-  reset(now) {
-    this.corners = null;
-    this.lastSeen = -Infinity;
-    this.stableSince = now;
-    this.lastShot = -Infinity;
-    this.shotCorners = null; // Ecken beim letzten Foto, solange dieselbe Seite noch im Bild liegt
-  }
-
-  shot(now) {
-    this.lastShot = now;
-    this.stableSince = now;
-    this.shotCorners = this.corners;
-  }
-
-  update(detected, width, height, now) {
-    const o = this.o;
-    let corners = null;
-    if (detected) {
-      const moved = this.corners ? maxMove(detected, this.corners) / width : Infinity;
-      if (moved > o.tolerance) this.stableSince = now;
-      corners = detected;
-      this.lastSeen = now;
-    } else if (this.corners && now - this.lastSeen < o.graceMs) {
-      corners = this.corners; // kurzer Aussetzer: letzten Rahmen weiterverwenden
-    } else {
-      this.stableSince = now;
-    }
-    this.corners = corners;
-    if (this.shotCorners && (!corners || maxMove(corners, this.shotCorners) / width > o.rearmMove)) this.shotCorners = null;
-    const area = corners ? quadArea(corners) / (width * height) : 0;
-    if (!corners) return { corners, area, hold: 0, state: 'search' };
-    if (area < o.minArea) {
-      this.stableSince = now;
-      return { corners, area, hold: 0, state: 'closer' };
-    }
-    if (this.shotCorners) return { corners, area, hold: 0, state: 'next' };
-    const hold = o.stableMs ? Math.min(1, (now - this.stableSince) / o.stableMs) : 1;
-    const ready = hold >= 1 && now - this.lastShot >= o.cooldownMs;
-    return { corners, area, hold, state: ready ? 'ready' : 'hold' };
-  }
 }

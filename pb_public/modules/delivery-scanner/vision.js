@@ -108,6 +108,19 @@ export function defaultCorners(width, height, inset = 0.04) {
 /** Mindestanteil des Bildes, den ein erkanntes Blatt einnehmen muss. */
 const MIN_PAPER_SHARE = 0.2;
 
+/**
+ * Liegt das Viereck verdächtig am Bildrand? Mehr als zwei Ecken am Rand oder eine Ecke in einer Bildecke heißt:
+ * Untergrund bzw. Bildrahmen mit erfasst (ein Blatt, das über das Bild hinausragt, hat seine Ecken auf den Kanten,
+ * nicht in den Bildecken).
+ */
+function hugsBorder(quad, W, H) {
+  const margin = 0.015 * Math.max(W, H);
+  const nearX = (p) => p.x < margin || p.x > W - margin;
+  const nearY = (p) => p.y < margin || p.y > H - margin;
+  const corners = Object.values(quad);
+  return corners.filter((p) => nearX(p) || nearY(p)).length > 2 || corners.some((p) => nearX(p) && nearY(p));
+}
+
 /** Blattkontur über jscanify (Kanten). → Ecken im kleinen Bild oder null */
 function contourQuad(small) {
   const scanner = new window.jscanify();
@@ -118,7 +131,8 @@ function contourQuad(small) {
     if (!contour) return null;
     const c = scanner.getCornerPoints(contour, mat);
     const complete = c.topLeftCorner && c.topRightCorner && c.bottomLeftCorner && c.bottomRightCorner;
-    return complete && quadArea(c) > MIN_PAPER_SHARE * small.width * small.height ? c : null;
+    if (!complete || hugsBorder(c, small.width, small.height)) return null;
+    return quadArea(c) > MIN_PAPER_SHARE * small.width * small.height ? c : null;
   } finally {
     mat.delete();
     contour?.delete?.();
@@ -126,27 +140,24 @@ function contourQuad(small) {
 }
 
 /**
- * Blatt als hellste große Fläche (Otsu-Schwelle), auf ein Viereck vereinfacht. Greift, wo die Kantensuche
- * scheitert (helles Blatt auf hellem Tisch) oder nur einen Teil erfasst (Knick im gefalteten Blatt).
- * Verworfen, wenn die Fläche praktisch das ganze Bild ist oder mehr als zwei Ecken am Bildrand liegen
- * (dann ist der Untergrund mit erfasst). → Ecken im kleinen Bild oder null
+ * Blatt als große Fläche in einer Schwarz-Weiß-Maske (Otsu-Schwelle), auf ein Viereck vereinfacht. Greift, wo die
+ * Kantensuche scheitert (helles Blatt auf hellem Tisch) oder nur einen Teil erfasst (Knick im gefalteten Blatt).
+ * Verworfen, wenn die Fläche praktisch das ganze Bild ist, mehr als zwei Ecken am Bildrand liegen oder eine Ecke
+ * in einer Bildecke klebt (dann ist der Untergrund mit erfasst). → { quad, fit } im kleinen Bild oder null
+ *   fit = Überdeckung von Fläche und Viereck (Schnitt / Vereinigung, 1 = deckungsgleich)
  */
-function brightQuad(small) {
+function maskQuad(mask, W, H) {
   const cv = window.cv;
-  const W = small.width;
-  const H = small.height;
-  const src = cv.imread(small);
-  const gray = new cv.Mat();
-  const bin = new cv.Mat();
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
   const hull = new cv.Mat();
   const approx = new cv.Mat();
+  const filled = cv.Mat.zeros(H, W, cv.CV_8U);
+  const quadMask = cv.Mat.zeros(H, W, cv.CV_8U);
+  const both = new cv.Mat();
+  let quadPts = null;
   try {
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
-    cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-    cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
     let best = -1;
     let bestArea = 0;
     for (let i = 0; i < contours.size(); i++) {
@@ -171,13 +182,65 @@ function brightQuad(small) {
       topRightCorner: pick((p) => p.y - p.x),
       bottomLeftCorner: pick((p) => p.x - p.y),
     };
-    // Das Viereck muss die helle Fläche im Wesentlichen abdecken und darf nicht am Bildrand kleben
-    if (quadArea(quad) < 0.85 * bestArea) return null;
-    const margin = 0.015 * Math.max(W, H);
-    const atBorder = Object.values(quad).filter((p) => p.x < margin || p.y < margin || p.x > W - margin || p.y > H - margin).length;
-    return atBorder > 2 ? null : quad;
+    // Das Viereck muss die Fläche im Wesentlichen abdecken und darf nicht am Bildrand kleben
+    const area = quadArea(quad);
+    if (area < 0.85 * bestArea) return null;
+    if (hugsBorder(quad, W, H)) return null;
+    // Überdeckung: Fläche und Viereck gerastert vergleichen
+    const white = new cv.Scalar(255);
+    cv.drawContours(filled, contours, best, white, cv.FILLED);
+    quadPts = new cv.MatVector();
+    const q = [quad.topLeftCorner, quad.topRightCorner, quad.bottomRightCorner, quad.bottomLeftCorner];
+    quadPts.push_back(cv.matFromArray(4, 1, cv.CV_32SC2, q.flatMap((p) => [p.x, p.y])));
+    cv.fillPoly(quadMask, quadPts, white);
+    cv.bitwise_and(filled, quadMask, both);
+    const inter = cv.countNonZero(both);
+    cv.bitwise_or(filled, quadMask, both);
+    return { quad, fit: inter / cv.countNonZero(both) };
   } finally {
-    [src, gray, bin, contours, hierarchy, hull, approx].forEach((m) => m.delete());
+    [contours, hierarchy, hull, approx, filled, quadMask, both].forEach((m) => m.delete());
+    if (quadPts) { quadPts.get(0).delete(); quadPts.delete(); }
+  }
+}
+
+/**
+ * Blatt über Masken suchen: hell (Helligkeit), farblos (wenig Sättigung – weißes Papier auf beigem oder
+ * holzfarbenem Tisch, auch im Schatten) und beides zusammen (Helligkeit − Sättigung). Jede Maske mit eigener
+ * Otsu-Schwelle; genommen wird das Viereck, das mit seiner Fläche am besten übereinstimmt (Fehlgriffe ziehen
+ * Teile des Tisches mit und sind unregelmäßig). Bis 11/2026 nur die Helligkeit – auf hellem Tisch lief die Fläche in den
+ * Untergrund über. → Ecken im kleinen Bild oder null
+ */
+function brightQuad(small) {
+  const cv = window.cv;
+  const W = small.width;
+  const H = small.height;
+  const src = cv.imread(small);
+  const rgb = new cv.Mat();
+  const hsv = new cv.Mat();
+  const channels = new cv.MatVector();
+  const gray = new cv.Mat();
+  const whiteness = new cv.Mat();
+  const bin = new cv.Mat();
+  let sat = null;
+  try {
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    cv.cvtColor(src, rgb, cv.COLOR_RGBA2RGB);
+    cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+    cv.split(hsv, channels);
+    sat = channels.get(1);
+    cv.subtract(gray, sat, whiteness);
+    const blur = (m) => cv.GaussianBlur(m, m, new cv.Size(5, 5), 0);
+    [gray, sat, whiteness].forEach(blur);
+    let best = null;
+    for (const [m, type] of [[gray, cv.THRESH_BINARY], [sat, cv.THRESH_BINARY_INV], [whiteness, cv.THRESH_BINARY]]) {
+      cv.threshold(m, bin, 0, 255, type + cv.THRESH_OTSU);
+      const r = maskQuad(bin, W, H);
+      if (r && (!best || r.fit > best.fit)) best = r;
+    }
+    return best?.quad ?? null;
+  } finally {
+    [src, rgb, hsv, channels, gray, whiteness, bin].forEach((m) => m.delete());
+    sat?.delete();
   }
 }
 

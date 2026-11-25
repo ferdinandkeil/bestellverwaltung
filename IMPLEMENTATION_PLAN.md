@@ -143,6 +143,15 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 2. ✔ Hamburger-Menü nur noch mit Gruppen/Projekte, Name/Logout und Version; Fußzeile auf dem Smartphone entfällt. Symbole auch in der Kopfzeile am PC.
 3. ✔ Scanner und Moodle-Import unter der Kopfzeile, ✕ oben rechts, schließen beim Navigieren; Pille mit gleitender Markierung und Rückmeldung beim Antippen (CSS). Bestellansicht auf dem Handy so belassen.
 
+## Rückmeldungen aus dem Betrieb (11/2026, je Thema ein Branch)
+### Scanner: Auslösen von Hand (Branch `scanner-manuell`)
+**Status:** abgenommen (25.11.2026; Test auf älteren Handys nach dem Deploy). Anlass: Scanner-Meldung 25.11.2026 („Papierkanten nicht richtig erkannt“, helles Blatt auf hellem Tisch) und Bedienung auf älteren Handys. Entscheidungen in ARCHITECTURE Kap. 6 (delivery-scanner, Schritte 2 und 3).
+1. ✔ Live-Eckenerkennung und automatisches Auslösen entfernt; jedes Foto geht nach „Fertig“ durch die Eckenprüfung.
+2. ✔ Eckensuche: Masken aus Helligkeit, Sättigung und beidem, Auswahl nach Überdeckung; Vierecke in den Bildecken verworfen (auch bei der Kantenkontur). Synthetischer Testfall „helles Blatt auf hellem Tisch“ in `tests/e2e-scanner.mjs`.
+
+### Geliefert zurücksetzen (Branch `geliefert-zuruecksetzen`, Issue #1) · Neue Bestellung von Hand (Branch `neue-bestellung`, Issue #2)
+**Status:** geplant.
+
 ### Folgende Branches (Reihenfolge vorläufig)
 1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
 
