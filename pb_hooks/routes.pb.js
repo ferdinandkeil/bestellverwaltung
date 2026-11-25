@@ -146,6 +146,23 @@ routerAdd("POST", "/api/lab/orders/{id}/items", (e) => {
 }, $apis.requireAuth("users"));
 
 /**
+ * POST /api/lab/orders/manual   – Bestellung von Hand übernehmen (Herkunft „manuell“, „+ Neue Bestellung“)
+ * Body: { supplier, supplier_custom_name?, internal_order_no? | without_internal_order_no: true, supplier_order_no?,
+ *         subject?, stage: form_written|form_signed|form_submitted|approval|ordered|delivered,
+ *         items: [{ part_number, name?, qty, group? }] }
+ * Antwort: { order, status }
+ */
+routerAdd("POST", "/api/lab/orders/manual", (e) => {
+  const { createManualOrder } = require(`${__hooks}/lib/new-orders.js`);
+  const body = e.requestInfo().body || {};
+  let result;
+  $app.runInTransaction((txApp) => {
+    result = createManualOrder(txApp, body, e.auth.id);
+  });
+  return e.json(200, result);
+}, $apis.requireAuth("users"));
+
+/**
  * POST /api/lab/orders/from-delivery-note   – Bestellung aus einem Lieferschein anlegen (Herkunft „lieferschein“)
  * Body (JSON oder multipart/form-data):
  *   supplier, supplier_custom_name?, internal_order_no? | without_internal_order_no: true,

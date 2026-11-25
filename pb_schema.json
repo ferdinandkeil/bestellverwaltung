@@ -414,7 +414,8 @@
         "maxSelect": 1,
         "values": [
           "warenkorb",
-          "lieferschein"
+          "lieferschein",
+          "manuell"
         ]
       },
       {
