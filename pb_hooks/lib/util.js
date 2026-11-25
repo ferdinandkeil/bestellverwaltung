@@ -1,6 +1,18 @@
 // Gemeinsame Hilfsfunktionen für die Hooks (CommonJS, wird per require() geladen).
 
 const SUPPLIERS = ["mouser", "farnell", "reichelt", "voelkner", "tme", "wuerth", "printus", "other"];
+/** Anzeigenamen der Lieferanten (wie SUPPLIERS in pb_public/core/config.js). */
+const SUPPLIER_LABELS = {
+  mouser: "Mouser", farnell: "Farnell", reichelt: "Reichelt", voelkner: "Voelkner", tme: "TME",
+  wuerth: "Würth Elektronik", printus: "Printus", other: "Sonstiger Lieferant",
+};
+
+/** Lieferant einer Bestellung als Text: bei „sonstige“ der Shop-Name. */
+function supplierName(order) {
+  const supplier = order.getString("supplier");
+  if (supplier === "other" && order.getString("supplier_custom_name")) return order.getString("supplier_custom_name");
+  return SUPPLIER_LABELS[supplier] || supplier;
+}
 /** Phasen einer Bestellung (abgeleitet aus den Verwaltungsschritten, ARCHITECTURE.md Kap. 4.3). */
 const STATUSES = ["angefragt", "freigabe", "bestellt", "teilgeliefert", "geliefert", "abgeschlossen"];
 /** Phasen, in denen Lieferungen gebucht und Positionen nachgetragen werden dürfen. */
@@ -65,6 +77,7 @@ function nonZeroInt(value, label) {
 
 module.exports = {
   SUPPLIERS,
+  supplierName,
   STATUSES,
   DELIVERY_STATUSES,
   normalizePartNumber,

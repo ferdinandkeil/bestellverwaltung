@@ -143,6 +143,12 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 2. ✔ Hamburger-Menü nur noch mit Gruppen/Projekte, Name/Logout und Version; Fußzeile auf dem Smartphone entfällt. Symbole auch in der Kopfzeile am PC.
 3. ✔ Scanner und Moodle-Import unter der Kopfzeile, ✕ oben rechts, schließen beim Navigieren; Pille mit gleitender Markierung und Rückmeldung beim Antippen (CSS). Bestellansicht auf dem Handy so belassen.
 
+## Rückmeldungen aus dem Betrieb (11/2026, je Thema ein Branch)
+### „Geliefert“ zurücksetzen (Branch `geliefert-zuruecksetzen`, Issue #1)
+**Status:** in Arbeit. Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
+1. ✔ Route `POST /api/lab/orders/{id}/deliveries/reset`: alle Buchungen löschen, Mengen 0, Belege in die Ablage „Lieferscheine ohne Bestellung“.
+2. ✔ Haken „Geliefert“ im Ablauf (und auf der Startseite) entfernen: roter Toast 12 s mit „Rückgängig“, erst danach ausgeführt.
+
 ### Folgende Branches (Reihenfolge vorläufig)
 1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.
 

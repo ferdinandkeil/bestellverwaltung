@@ -114,6 +114,20 @@ routerAdd("POST", "/api/lab/orders/{id}/deliveries/rest", (e) => {
 }, $apis.requireAuth("users"));
 
 /**
+ * POST /api/lab/orders/{id}/deliveries/reset – „Geliefert“ zurücksetzen: alle Lieferbuchungen löschen, Mengen auf 0,
+ * Belege in die Ablage „Lieferscheine ohne Bestellung“. Antwort: { status, deliveries, archived }
+ */
+routerAdd("POST", "/api/lab/orders/{id}/deliveries/reset", (e) => {
+  const { resetDeliveries } = require(`${__hooks}/lib/deliveries.js`);
+  const id = e.request.pathValue("id");
+  let result;
+  $app.runInTransaction((txApp) => {
+    result = resetDeliveries(txApp, id, e.auth.id);
+  });
+  return e.json(200, result);
+}, $apis.requireAuth("users"));
+
+/**
  * DELETE /api/lab/deliveries/{id} – letzte Lieferbuchung zurücknehmen („Rückgängig“), nur ohne Beleg.
  * Antwort: { status }
  */

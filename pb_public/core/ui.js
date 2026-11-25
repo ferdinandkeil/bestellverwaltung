@@ -138,16 +138,21 @@ export const toast = {
   done: (msg, actions) => Alpine.store('toasts').push(msg, 'success', ACTION_TOAST_MS, actions),
 };
 
+/** Standzeit für Aktionen, die viel auf einmal löschen (roter Toast als Warnung, mehr Zeit für „Rückgängig“). */
+export const DANGER_TOAST_MS = 12000;
+
 /**
  * Aktion verzögert ausführen (z. B. Löschen): sofort Toast mit „Rückgängig“, ausgeführt wird erst nach
  * ACTION_TOAST_MS. Der Aufrufer blendet das Element vorher aus und stellt es in undo() wieder her.
  * Wird der Browser-Tab vorher geschlossen, unterbleibt die Aktion (sichere Seite).
+ * danger: roter Toast und DANGER_TOAST_MS – für Aktionen mit großer Wirkung (z. B. alle Lieferungen zurücksetzen).
  * @returns {Promise<boolean>} true = ausgeführt, false = rückgängig gemacht; Fehler von run() werden weitergereicht
  */
-export function deferredAction({ message, run, undo }) {
+export function deferredAction({ message, run, undo, danger = false }) {
+  const delay = danger ? DANGER_TOAST_MS : ACTION_TOAST_MS;
   return new Promise((resolve, reject) => {
     let cancelled = false;
-    Alpine.store('toasts').push(message, 'info', ACTION_TOAST_MS, [{
+    Alpine.store('toasts').push(message, danger ? 'error' : 'info', delay, [{
       label: 'Rückgängig',
       icon: 'undo',
       run: () => { cancelled = true; undo?.(); resolve(false); },
@@ -161,7 +166,7 @@ export function deferredAction({ message, run, undo }) {
         undo?.();
         reject(err);
       }
-    }, ACTION_TOAST_MS);
+    }, delay);
   });
 }
 

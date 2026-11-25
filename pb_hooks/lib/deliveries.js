@@ -1,6 +1,6 @@
 // Lieferbuchungen (ARCHITECTURE.md Kap. 4.4).
 
-const { DELIVERY_STATUSES, nonZeroInt } = require(`${__hooks}/lib/util.js`);
+const { DELIVERY_STATUSES, nonZeroInt, supplierName } = require(`${__hooks}/lib/util.js`);
 const { recalculateOrderStatus } = require(`${__hooks}/lib/status.js`);
 
 /** Summe aller gebuchten Mengen einer Position. */
@@ -143,4 +143,58 @@ function cancelDelivery(app, deliveryId) {
   return { status: recalculateOrderStatus(app, orderId) };
 }
 
-module.exports = { bookDelivery, bookRest, cancelDelivery, sumDelivered };
+/**
+ * „Geliefert“ zurücksetzen (Haken im Ablauf entfernen): alle Lieferbuchungen der Bestellung löschen, gelieferte
+ * Mengen auf 0. Belege (gescannte Lieferscheine) gehen nicht verloren, sondern in die Ablage „Lieferscheine ohne
+ * Bestellung“ – von dort lassen sie sich einer anderen Bestellung zuordnen. Muss innerhalb einer Transaktion
+ * aufgerufen werden. Bewusste Ausnahme von „Lieferbuchungen sind unveränderlich“ (ARCHITECTURE.md Kap. 4.4).
+ * → { status, deliveries: Anzahl gelöschter Buchungen, archived: Anzahl abgelegter Belege }
+ */
+function resetDeliveries(app, orderId, userId) {
+  let order;
+  try {
+    order = app.findRecordById("orders", orderId);
+  } catch (_) {
+    throw new NotFoundError("Bestellung nicht gefunden.");
+  }
+  if (DELIVERY_STATUSES.indexOf(order.getString("status")) === -1) {
+    throw new BadRequestError(order.getString("status") === "abgeschlossen"
+      ? "Die Bestellung ist abgeschlossen – Lieferungen lassen sich nicht mehr zurücksetzen."
+      : "Die Bestellung hat keine Lieferungen.");
+  }
+  const deliveries = app.findRecordsByFilter("deliveries", "order = {:id}", "created", 0, 0, { id: orderId });
+  if (!deliveries.length) throw new BadRequestError("Die Bestellung hat keine Lieferbuchungen.");
+
+  const number = order.getString("internal_order_no");
+  const archiveCol = app.findCollectionByNameOrId("unmatched_receipts");
+  let archived = 0;
+  const fsys = app.newFilesystem();
+  try {
+    for (const delivery of deliveries) {
+      const name = delivery.getString("receipt");
+      if (!name) continue;
+      const entry = new Record(archiveCol);
+      entry.set("supplier_name", supplierName(order));
+      entry.set("internal_order_no", number);
+      entry.set("note", "Lieferung von " + (number || "Bestellung ohne interne Nummer") + " zurückgesetzt" +
+        (delivery.getString("note") ? " – " + delivery.getString("note") : ""));
+      entry.set("receipt", fsys.getReuploadableFile(delivery.baseFilesPath() + "/" + name, true));
+      if (userId) entry.set("uploaded_by", userId);
+      app.save(entry);
+      archived++;
+    }
+  } finally {
+    fsys.close();
+  }
+
+  for (const delivery of deliveries) app.delete(delivery); // Zeilen hängen per cascadeDelete daran
+  const items = app.findRecordsByFilter("order_items", "order = {:id}", "", 0, 0, { id: orderId });
+  for (const item of items) {
+    if (item.getInt("qty_delivered") === 0) continue;
+    item.set("qty_delivered", 0);
+    app.save(item);
+  }
+  return { status: recalculateOrderStatus(app, orderId), deliveries: deliveries.length, archived: archived };
+}
+
+module.exports = { bookDelivery, bookRest, cancelDelivery, resetDeliveries, sumDelivered };
