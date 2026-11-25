@@ -149,8 +149,10 @@ Vorgehen: **Ansicht für Ansicht, jede in einem eigenen Branch**, nach jedem Bra
 1. ✔ Live-Eckenerkennung und automatisches Auslösen entfernt; jedes Foto geht nach „Fertig“ durch die Eckenprüfung.
 2. ✔ Eckensuche: Masken aus Helligkeit, Sättigung und beidem, Auswahl nach Überdeckung; Vierecke in den Bildecken verworfen (auch bei der Kantenkontur). Synthetischer Testfall „helles Blatt auf hellem Tisch“ in `tests/e2e-scanner.mjs`.
 
-### Geliefert zurücksetzen (Branch `geliefert-zuruecksetzen`, Issue #1) · Neue Bestellung von Hand (Branch `neue-bestellung`, Issue #2)
-**Status:** geplant.
+### „Geliefert“ zurücksetzen (Branch `geliefert-zuruecksetzen`, Issue #1)
+**Status:** abgenommen (25.11.2026). Entscheidungen in ARCHITECTURE Kap. 4.4 und 7.
+1. ✔ Route `POST /api/lab/orders/{id}/deliveries/reset`: alle Buchungen löschen, Mengen 0, Belege in die Ablage „Lieferscheine ohne Bestellung“.
+2. ✔ Haken „Geliefert“ im Ablauf (und auf der Startseite) entfernen: roter Toast 12 s mit „Rückgängig“, erst danach ausgeführt.
 
 ### Folgende Branches (Reihenfolge vorläufig)
 1. Danach Scanner (mehrere gesammelte Lieferscheine nacheinander), Favoriten (Preise entfernen), Gruppen – jeweils mit „Handeln statt fragen“.

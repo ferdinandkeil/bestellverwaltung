@@ -248,6 +248,23 @@ try {
   await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
   await b.waitFor(`${BADGE} === 'Bestellt' && ${STEP('delivered')}.dataset.state === 'open' && !Alpine.$data(document.querySelector('[x-data=orderDetailView]')).deliveries.some((d) => d.note === 'Rest vollständig geliefert')`, 'Buchung zurückgenommen');
   ok('Nach „bestellt“ zwei nächste Schritte; „Geliefert“ bucht den Rest, „Rückgängig“ nimmt die Buchung zurück');
+  // Haken „Geliefert“ entfernen: setzt alle Lieferungen zurück – roter Toast, ausgeführt erst nach 12 s
+  const DETAIL = `Alpine.$data(document.querySelector('[x-data=orderDetailView]'))`;
+  await b.evaluate(`${STEP('delivered')}.click()`);
+  await b.waitFor(`${BADGE} === 'Geliefert' && ${STEP('delivered')}.dataset.state === 'done'`, 'wieder geliefert');
+  await sleep(300);
+  await b.evaluate(`${STEP('delivered')}.click()`);
+  await b.waitFor(`${STEP('delivered')}.dataset.state === 'open' && ${TOAST_ACTION('Rückgängig')}?.closest('[data-toast]').className.includes('bg-red-700')`, 'Haken sofort weg, roter Toast');
+  if (!(await b.evaluate(`${TOASTS}.includes('Ablage „Lieferscheine ohne Bestellung“')`))) throw new Error('Toast ohne Hinweis auf die Ablage: ' + await b.evaluate(TOASTS));
+  await b.screenshot('05-geliefert-zuruecksetzen');
+  await b.evaluate(`${TOAST_ACTION('Rückgängig')}.click()`);
+  await b.waitFor(`${STEP('delivered')}.dataset.state === 'done'`, 'Rückgängig: Haken wieder da');
+  await sleep(12500);
+  if ((await b.evaluate(BADGE)) !== 'Geliefert' || !(await b.evaluate(`${DETAIL}.deliveries.length`))) throw new Error('Trotz „Rückgängig“ zurückgesetzt');
+  await b.evaluate(`${STEP('delivered')}.click()`);
+  await b.waitFor(`${STEP('delivered')}.dataset.state === 'open'`, 'erneut entfernt');
+  await b.waitFor(`${BADGE} === 'Bestellt' && ${DETAIL}.deliveries.length === 0 && document.body.innerText.includes('Lieferungen zurückgesetzt')`, 'nach 12 s zurückgesetzt', 20000);
+  ok('Haken „Geliefert“ entfernen: roter Toast, „Rückgängig“ bricht ab, sonst nach 12 s alle Lieferungen zurückgesetzt');
   await b.navigate(PB_URL + '/#/');
   await b.waitFor(`[...${ORDER_LINKS}].some((a) => a.innerText.includes('04711') && !a.innerText.includes('2026IW')) && document.querySelector('[data-overview-table] th').parentElement.innerText.includes('Best.-Nr.')`, 'Kurznummer auf der Startseite (Smartphone)');
   ok('Formular geschrieben (Nummer per Dialog, normalisiert), bestellt mit übersprungenen Schritten im Toast');

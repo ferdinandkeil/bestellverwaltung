@@ -93,6 +93,14 @@ export function bookRestDelivered(orderId) {
   return pb.send(`/api/lab/orders/${orderId}/deliveries/rest`, { method: 'POST' });
 }
 
+/**
+ * „Geliefert“ zurücksetzen: alle Lieferbuchungen löschen, Mengen auf 0, Belege in die Ablage.
+ * → { status, deliveries, archived }
+ */
+export function resetDeliveries(orderId) {
+  return pb.send(`/api/lab/orders/${orderId}/deliveries/reset`, { method: 'POST' });
+}
+
 /** Letzte Lieferbuchung zurücknehmen („Rückgängig“, nur ohne Beleg). → { status } */
 export function cancelDelivery(deliveryId) {
   return pb.send(`/api/lab/deliveries/${deliveryId}`, { method: 'DELETE' });

@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setup, resetData, createUser, addItem, markOrdered, bookDelivery, getRecord, listRecords,
+  setup, resetData, createUser, addItem, markOrdered, setStep, bookDelivery, getRecord, listRecords,
   http, expectHttpError,
 } from './helpers.mjs';
 
@@ -131,4 +131,49 @@ test('Rückgängig nicht für Buchungen mit Beleg', async () => {
   form.append('receipt', new Blob(['%PDF-1.4 synthetisch'], { type: 'application/pdf' }), 'lieferschein.pdf');
   const r = await http('POST', `/api/lab/orders/${orderId}/deliveries`, { token: u.token, form });
   await expectHttpError(cancelDelivery(u.token, r.delivery.id), 400);
+});
+
+// „Geliefert“ zurücksetzen (Haken im Ablauf entfernen, ARCHITECTURE Kap. 4.4/7)
+const resetDeliveries = (token, id) => http('POST', `/api/lab/orders/${id}/deliveries/reset`, { token });
+
+test('Zurücksetzen: alle Buchungen gelöscht, Mengen 0, Belege in der Ablage', async () => {
+  await markOrdered(u.token, orderId, { internal_order_no: '2026IW07001' });
+  const form = new FormData();
+  form.append('lines', JSON.stringify([{ item: ids.A, qty: 1 }]));
+  form.append('note', 'Scanner');
+  form.append('receipt', new Blob(['%PDF-1.4 synthetisch'], { type: 'application/pdf' }), 'lieferschein.pdf');
+  await http('POST', `/api/lab/orders/${orderId}/deliveries`, { token: u.token, form });
+  await bookRest(u.token, orderId);
+  assert.equal((await getRecord('orders', orderId)).status, 'geliefert');
+
+  const r = await resetDeliveries(u.token, orderId);
+  assert.deepEqual(r, { status: 'bestellt', deliveries: 2, archived: 1 });
+  assert.equal((await getRecord('order_items', ids.A)).qty_delivered, 0);
+  assert.equal((await getRecord('order_items', ids.B)).qty_delivered, 0);
+  const order = await getRecord('orders', orderId);
+  assert.equal(order.status, 'bestellt');
+  assert.equal(order.delivered_at, '');
+  assert.equal((await listRecords('deliveries')).length, 0);
+  assert.equal((await listRecords('delivery_items')).length, 0);
+
+  const [entry] = await listRecords('unmatched_receipts');
+  assert.equal(entry.supplier_name, 'Farnell');
+  assert.equal(entry.internal_order_no, '2026IW07001');
+  assert.equal(entry.uploaded_by, u.user.id);
+  assert.match(entry.note, /2026IW07001 zurückgesetzt – Scanner/);
+  assert.match(entry.receipt, /^lieferschein.*\.pdf$/);
+  const file = await fetch(`${process.env.PB_URL}/api/files/unmatched_receipts/${entry.id}/${entry.receipt}`);
+  assert.equal(await file.text(), '%PDF-1.4 synthetisch', 'Beleg kopiert');
+});
+
+test('Zurücksetzen nur mit Buchungen, nicht abgeschlossen, nur angemeldet', async () => {
+  await expectHttpError(resetDeliveries(u.token, orderId), 400); // Warenkorb
+  await markOrdered(u.token, orderId);
+  await expectHttpError(resetDeliveries(u.token, orderId), 400); // keine Buchung
+  await bookRest(u.token, orderId);
+  await expectHttpError(resetDeliveries(undefined, orderId), 401);
+  await setStep(u.token, orderId, 'closed');
+  assert.equal((await getRecord('orders', orderId)).status, 'abgeschlossen');
+  await expectHttpError(resetDeliveries(u.token, orderId), 400);
+  assert.equal((await listRecords('deliveries')).length, 1, 'nichts geändert');
 });

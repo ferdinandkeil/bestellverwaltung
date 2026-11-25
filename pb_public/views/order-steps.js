@@ -9,8 +9,12 @@
 import {
   STEP_TRACKS, WARE_STEPS, trackStates, stepMeta, supplierLabel, INTERNAL_ORDER_NO_RE, defaultWithoutInternalOrderNo,
 } from '../core/config.js';
-import { setOrderStep, bookRestDelivered, cancelDelivery, errorMessage } from '../core/api.js';
-import { fmt, toast, TOOLTIP_DELAY_MS, TOOLTIP_WARM_MS } from '../core/ui.js';
+import Alpine from '../vendor/alpinejs@3.17.5/dist/module.esm.js';
+import { setOrderStep, bookRestDelivered, cancelDelivery, resetDeliveries, errorMessage } from '../core/api.js';
+import { fmt, toast, deferredAction, TOOLTIP_DELAY_MS, TOOLTIP_WARM_MS } from '../core/ui.js';
+
+/** Bestellungen, deren Lieferungen gerade zurückgesetzt werden (Toast läuft noch): „Ware“ erscheint schon offen. */
+const pendingResets = Alpine.reactive(new Set());
 
 const CHECK = '<svg viewBox="0 0 20 20" fill="currentColor" class="size-3.5" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>';
 
@@ -123,24 +127,29 @@ export function stepView(order, steps, deliveries = []) {
   });
 
   // Ware: aus den Lieferbuchungen
-  const sorted = [...(deliveries || [])].sort((a, b) => a.created.localeCompare(b.created));
-  const partial = order.status === 'teilgeliefert' || (delivered && sorted.length > 1);
+  const resetting = pendingResets.has(order.id);
+  const sorted = resetting ? [] : [...(deliveries || [])].sort((a, b) => a.created.localeCompare(b.created));
+  const wareDelivered = delivered && !resetting;
+  const partial = !resetting && (order.status === 'teilgeliefert' || (delivered && sorted.length > 1));
   const ware = WARE_STEPS.map((w) => {
     let state = 'open';
     let detail = '';
     if (w.value === 'partial') {
-      state = partial ? 'done' : delivered ? 'skipped' : 'open';
-      detail = partial && sorted.length ? fmt.date(sorted[0].created) : delivered ? 'übersprungen' : '';
-    } else if (delivered) {
+      state = partial ? 'done' : wareDelivered ? 'skipped' : 'open';
+      detail = partial && sorted.length ? fmt.date(sorted[0].created) : wareDelivered ? 'übersprungen' : '';
+    } else if (wareDelivered) {
       state = 'done';
       detail = fmt.date(order.delivered_at);
     }
-    // „Geliefert“ abhaken bucht den Rest aller Positionen (deliverRest); „Teilgeliefert“ ergibt sich nur aus Buchungen.
-    const canDeliverRest = w.value === 'delivered' && state === 'open' && ['bestellt', 'teilgeliefert'].includes(order.status);
-    const disabledReason = canDeliverRest ? '' : 'Ergibt sich aus den Lieferbuchungen.';
+    // „Geliefert“ abhaken bucht den Rest aller Positionen (deliverRest); den Haken entfernen setzt alle Lieferungen
+    // zurück (resetDelivered, nur mit Buchungen und nicht abgeschlossen). „Teilgeliefert“ ergibt sich nur aus Buchungen.
+    const canDeliverRest = w.value === 'delivered' && state === 'open' && !resetting && ['bestellt', 'teilgeliefert'].includes(order.status);
+    const canReset = w.value === 'delivered' && state === 'done' && order.status === 'geliefert' && sorted.length > 0;
+    const clickable = canDeliverRest || canReset;
+    const disabledReason = clickable ? '' : 'Ergibt sich aus den Lieferbuchungen.';
     const tip = state === 'done' ? detail || NO_DATE : '';
     return { ...w, state, detail, tip, tipLong: tip, ariaLabel: `${w.label}: ${tip || (state === 'skipped' ? 'übersprungen' : 'offen')}`,
-      record: null, next: next.includes(w.value), clickable: canDeliverRest, disabledReason };
+      record: null, next: !resetting && next.includes(w.value), clickable, disabledReason };
   });
 
   const [orderTrack, invoiceTrack] = STEP_TRACKS;
@@ -186,7 +195,7 @@ export async function changeStepDate(order, value, current = '') {
  * steps: { step: record } der Bestellung (Stand vor dem Klick).
  */
 export async function toggleStep(order, steps, value) {
-  if (value === 'delivered') return deliverRest(order);
+  if (value === 'delivered') return order.status === 'geliefert' ? resetDelivered(order) : deliverRest(order);
   const meta = stepMeta(value);
   const name = orderName(order);
   const record = steps[value];
@@ -259,6 +268,38 @@ async function deliverRest(order) {
       notifyChanged(order);
     },
   }]);
+}
+
+/**
+ * „Geliefert“-Haken entfernen: alle Lieferbuchungen zurücksetzen (Mengen auf 0, gescannte Lieferscheine in die
+ * Ablage „Lieferscheine ohne Bestellung“). Wirkt groß und lässt sich danach nicht wiederherstellen – deshalb
+ * roter Toast und erst nach dessen Ablauf ausgeführt; „Rückgängig“ bricht ab, ein geschlossener Tab ebenso.
+ */
+async function resetDelivered(order) {
+  if (pendingResets.has(order.id)) return;
+  const name = orderName(order);
+  pendingResets.add(order.id);
+  notifyChanged(order);
+  let result;
+  try {
+    const done = await deferredAction({
+      danger: true,
+      message: `„Geliefert“ wird zurückgesetzt (${name}): Alle Lieferbuchungen werden gelöscht, die gelieferten Mengen `
+        + 'auf 0 gesetzt. Gescannte Lieferscheine kommen in die Ablage „Lieferscheine ohne Bestellung“.',
+      run: async () => { result = await resetDeliveries(order.id); },
+      undo: () => { pendingResets.delete(order.id); notifyChanged(order); },
+    });
+    if (!done) return;
+  } catch (err) {
+    toast.error(errorMessage(err));
+    return;
+  }
+  pendingResets.delete(order.id);
+  notifyChanged(order);
+  const n = result.deliveries;
+  let message = `Lieferungen zurückgesetzt (${name}): ${n === 1 ? '1 Buchung' : n + ' Buchungen'} gelöscht.`;
+  if (result.archived) message += ` ${result.archived === 1 ? '1 Lieferschein liegt' : result.archived + ' Lieferscheine liegen'} jetzt in der Ablage auf der Startseite.`;
+  toast.success(message);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,8 +431,8 @@ export const orderStepsSection = /* html */ `
                       </button>
                     </template>
                     <template x-if="!s.record">
-                      <span class="text-sm" x-text="s.label" :data-step-label="s.value"
-                            :class="s.state === 'done' ? 'text-slate-700' : 'text-slate-400'"></span>
+                      <span class="text-sm" x-text="s.label" :data-step-label="s.value" @click="s.clickable && toggleStep(order, steps, s.value)"
+                            :class="[s.state === 'done' ? 'text-slate-700' : 'text-slate-400', s.clickable && 'cursor-pointer']"></span>
                     </template>
                     <!-- Smartphone: Lupe → Details (Datum, Person) mit „Datum ändern“ -->
                     <template x-if="s.state === 'done'">
