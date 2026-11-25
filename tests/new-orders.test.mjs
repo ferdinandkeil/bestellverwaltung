@@ -1,4 +1,4 @@
-// Bestellung von Hand übernehmen („+ Neue Bestellung“, Route POST /api/lab/orders/manual, ARCHITECTURE Kap. 4.7).
+// Bestellung von Hand übernehmen („+ Neue Bestellung“, Route POST /api/lab/orders/manual, ARCHITECTURE Kap. 4.8).
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {

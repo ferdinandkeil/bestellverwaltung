@@ -7,6 +7,7 @@ import { listOverviewOrders, listGroups, subscribe, errorMessage } from '../core
 import { getPlugins } from '../core/plugin-registry.js';
 import { fmt, toast } from '../core/ui.js';
 import { unmatchedReceiptsSection } from './unmatched-receipts.js';
+import { newOrderSection } from './new-order.js';
 import { STEP_BOX, stepView, toggleStep } from './order-steps.js';
 
 const FILTER_KEY = 'overview-filters';
@@ -186,6 +187,8 @@ const template = /* html */ `
     </table>
   </div>
 
+  <!-- „+ Neue Bestellung“ (fester Knopf unten rechts, PC) mit Maske -->
+  ${newOrderSection}
 </div>`;
 
 function defaultFilters() {

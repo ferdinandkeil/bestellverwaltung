@@ -129,6 +129,7 @@
     import favoriteListView from './views/favorite-list-view.js';
     import { registerItemForm } from './views/item-form.js';
     import { registerUnmatchedReceipts } from './views/unmatched-receipts.js';
+    import { registerNewOrder } from './views/new-order.js';
     import { registerOrderSteps } from './views/order-steps.js';
     import cartsView, { registerCartMenu, cartMenuTemplate, headerActionsTemplate, itemFormModalTemplate } from './views/cart-menu.js';
     import { registerNavigation, headerNavTemplate, mobileMenuTemplate, bottomBarTemplate } from './views/navigation.js';
@@ -168,6 +169,7 @@
     for (const v of ROUTES.map((r) => r.view)) Alpine.data(v.dataName, v.component);
     registerItemForm(Alpine);
     registerUnmatchedReceipts(Alpine);
+    registerNewOrder(Alpine);
     registerOrderSteps(Alpine);
     registerCartMenu();
     registerNavigation();

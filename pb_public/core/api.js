@@ -282,6 +282,15 @@ export function listItemsForGroup(groupId) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Bestellung von Hand übernehmen (Herkunft „manuell“, „+ Neue Bestellung“).
+ * data: { supplier, supplier_custom_name?, internal_order_no? | without_internal_order_no, supplier_order_no?, subject?,
+ *         stage, items: [{ part_number, name?, qty, group? }] } → { order, status }
+ */
+export function createManualOrder(data) {
+  return pb.send('/api/lab/orders/manual', { method: 'POST', body: data });
+}
+
+/**
  * Bestellung aus einem Lieferschein anlegen (Herkunft „lieferschein“, sofort geliefert).
  * data: { supplier, supplier_custom_name?, internal_order_no? | without_internal_order_no, supplier_order_no?,
  *         note?, items: [{ part_number, name?, qty, group? }] }, receipt: PDF

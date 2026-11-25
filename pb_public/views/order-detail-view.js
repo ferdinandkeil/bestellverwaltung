@@ -148,6 +148,7 @@ const template = /* html */ `
               <h1 class="text-xl font-semibold" x-text="supplierLabel(order)"></h1>
               <span class="badge text-sm" data-status-badge :class="statusMeta(order.status).badge" x-text="statusMeta(order.status).label"></span>
               <span x-show="order.origin === 'lieferschein'" class="badge border-violet-200 bg-violet-50 text-violet-800">aus Lieferschein angelegt</span>
+              <span x-show="order.origin === 'manuell'" class="badge border-violet-200 bg-violet-50 text-violet-800" data-origin-manual>von Hand angelegt</span>
             </div>
             <p class="mt-1.5 text-xs text-slate-500">
               Angelegt <span x-text="fmt.dateTime(order.created)"></span>

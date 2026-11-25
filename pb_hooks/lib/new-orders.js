@@ -1,4 +1,4 @@
-// Bestellungen direkt anlegen, ohne Sammel-Warenkorb (ARCHITECTURE.md Kap. 4.6 und 4.7):
+// Bestellungen direkt anlegen, ohne Sammel-Warenkorb (ARCHITECTURE.md Kap. 4.6 und 4.8):
 //   – aus einem Lieferschein (delivery-notes.js, Herkunft „lieferschein“)
 //   – von Hand übernommen (createManualOrder, Herkunft „manuell“, „+ Neue Bestellung“ auf der Startseite)
 // Gemeinsam: Lieferant, interne Bestellnummer und Positionen prüfen, Bestellung und Positionen anlegen.
